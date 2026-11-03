@@ -1,0 +1,22 @@
+# Normalize line endings to LF for every text file, on every OS.
+# Windows checkouts otherwise get CRLF, which breaks scripts inside Linux containers.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.pt binary
+*.onnx binary
+*.tif binary
+*.tiff binary
+*.mp4 binary

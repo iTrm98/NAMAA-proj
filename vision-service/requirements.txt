@@ -1,0 +1,23 @@
+# Core (always installed)
+fastapi~=0.162
+uvicorn[standard]~=0.54
+pydantic~=2.14
+python-multipart
+httpx~=0.28
+numpy~=2.5
+
+# Enable each block when its feature starts (bigger image, slower build).
+# Versions are the latest on PyPI as of 2026-11-03; re-check when enabling.
+
+# --- Satellite / NDVI ---------------------------------------------------------
+# pystac-client~=0.9      # search the public Sentinel-2 catalogue
+# rasterio~=1.5           # read imagery, windowed reads per park
+# shapely~=2.2            # park polygons
+# pyproj~=3.8             # coordinate transforms
+# pandas~=3.1             # NDVI history / trends
+
+# --- Waste detection (YOLO) ---------------------------------------------------
+# For a CPU-only build, install torch first (add to the Dockerfile before this file):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# ultralytics~=8.4        # YOLO26 family; pulls in PyTorch
+# opencv-python-headless  # if pip conflicts with ultralytics, pin to 4.x

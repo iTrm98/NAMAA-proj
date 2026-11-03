@@ -1,0 +1,37 @@
+# Secrets: real config files never enter Git. Templates (*.example) do.
+.env
+.env.*
+!.env.example
+firmware/**/secrets.h
+
+# Back (Laravel)
+backend/vendor/
+backend/node_modules/
+backend/storage/*.key
+backend/storage/logs/
+backend/public/storage
+backend/public/hot
+
+# Front (React)
+frontend/node_modules/
+frontend/dist/
+
+# Python (AI service, camera tool)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Large files: keep outside the repo, share a link instead
+vision-service/models/*.pt
+vision-service/models/*.onnx
+data/recorded/*.mp4
+data/recorded/*.tif
+data/recorded/*.tiff
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

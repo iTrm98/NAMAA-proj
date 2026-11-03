@@ -57,7 +57,7 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:?Copy .env.example to .env and set DB_PASSWORD}
     ports:
       # Local access only (DB client). Containers use mysql:3306 internally.
-      - "127.0.0.1:${MYSQL_HOST_PORT:-3008}:3306"
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3308}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:

@@ -2,7 +2,7 @@
 
 First draft, to be agreed by the team before building starts. Any change is written here first and announced.
 
-## 1) Ingest a reading from a node
+## 1) Ingest a reading from a sensor node
 
 ```
 POST /api/readings
@@ -11,16 +11,29 @@ Content-Type: application/json
 
 {
   "node_id": 1,
-  "moisture": 412,
+  "moisture": 2850,
   "flow": 0.8,
-  "recorded_at": "2026-11-05T10:00:00Z"
+  "temperature": 31.0,
+  "humidity": 22.0,
+  "pump_on": false,
+  "water_level": 1900
 }
 ```
 
-- `moisture`: raw sensor value (calibration happens on the server).
-- `flow`: litres per minute. Send `null` if there is no reading.
-- Responses: `201` on success, `401` for a bad token, `422` for missing or invalid data.
-- Local base URL: `http://<machine-IP>:<BACKEND_HOST_PORT>` (default port 8000, see `.env`).
+| Field | Type | Meaning |
+|---|---|---|
+| `node_id` | int | Must match the token's node. |
+| `moisture` | int | Raw capacitive soil reading (0-4095). Calibration to % happens on the server. |
+| `flow` | float or null | Litres per minute from the YF-S401 (pulses / 5,880 per litre). `null` on Model B. |
+| `temperature` | float or null | DHT11, degrees C. `null` if the read failed (NaN). |
+| `humidity` | float or null | DHT11, % relative humidity. |
+| `pump_on` | bool or null | The relay state the board actually has. `null` on Model B. |
+| `water_level` | int or null | Raw HW-038 tank reading (optional). |
+
+- The board has no clock: the server stamps `recorded_at` on arrival.
+- Response `201`: `{ "pump": true | false }`. The board switches the relay (GPIO18) to match. The server decides; the board never turns the pump on by itself.
+- Errors: `401` bad token, `422` missing or invalid data.
+- Local base URL: `http://<laptop-IP>:<BACKEND_HOST_PORT>` (default port 8000, see `.env`).
 
 ## 2) Latest status of every park
 
@@ -53,30 +66,27 @@ PATCH /api/tasks/{id}            { "status": "in_progress" | "done", "note": "..
 - Statuses: `open` -> `in_progress` -> `done`. Closing a task stores `closed_at`.
 - Once a task is `done`, the server checks whether readings returned to normal and sets `verified` (true/false) plus `time_to_resolve_minutes`. This is the step-7 proof of value.
 
-## 6) Photos from camera nodes, and waste detections
+## 6) Camera photos and waste detections
 
-The camera node (ESP32-S3-CAM) only takes and sends photos. Detection runs on the server.
+The camera node (GOOUUU ESP32-S3-CAM, OV3660) runs the stock **CameraWebServer** example. It does not call the server; Laravel fetches photos from it.
 
 ```
-POST /api/images
-Authorization: Bearer <node-token>
-Content-Type: multipart/form-data
-
-image        JPEG file (VGA or SVGA is enough)
-node_id      2
-captured_at  2026-11-08T09:30:00Z
+Laravel scheduler (every 5 min)
+  -> GET  {CAMERA_URL}/capture              JPEG from the camera, over Wi-Fi
+  -> save the photo in storage
+  -> POST http://vision:8001/waste          multipart image
+  <- { "count": 4, "boxes": [[x,y,w,h,conf], ...] }
+  -> save a detection; raise an alert if litter is found in 2 photos in a row
 ```
 
-- Responses: `202` accepted (detection runs in the background), `401` bad token, `422` missing or invalid data.
-- Laravel stores the image, then a queued job calls the AI service (`POST /waste`), saves the detection, and raises an alert when waste is found.
+- `CAMERA_URL` comes from the root `.env`. Empty means the camera is off.
+- If the camera does not answer, the job logs it and tries again next cycle.
 
 ```
 GET /api/detections?park_id=...&from=...&to=...
 ```
 
-Returns `{ "id", "park_id", "node_id", "count", "boxes": [[x,y,w,h,conf], ...], "image_url", "captured_at" }`.
-
-Nodes have a `type`: `sensor` or `camera`. Each node belongs to one park.
+Returns `{ "id", "park_id", "count", "boxes": [[x,y,w,h,conf], ...], "image_url", "captured_at" }`.
 
 ## 7) NDVI (vegetation health)
 

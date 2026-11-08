@@ -15,9 +15,9 @@ Parks in Makkah are drying out, irrigation runs on fixed schedules whether the s
 
 NAMAA connects the parks to one live dashboard so problems are caught early:
 
-- **Soil and water sensors** (ESP32) report soil moisture and water flow.
+- **Soil and water sensors** (ESP32-S3) report soil moisture, water flow, temperature and humidity, and switch a small irrigation pump.
 - **Satellite imagery** (Sentinel-2, NDVI) tracks how green each park is over time.
-- **A camera node** (ESP32-S3-CAM) sends park photos; computer vision (YOLO) on the server detects waste.
+- **A camera** (ESP32-S3-CAM) watches a park corner; the server fetches its photos and computer vision (YOLO) detects waste.
 - **A rules engine** turns those signals into alerts and a recommended action.
 - **A map dashboard** shows every park's status, open alerts and maintenance tasks, and checks afterwards that each fix worked.
 
@@ -29,21 +29,21 @@ Goal: less wasted water, fewer dead plants, faster response, decisions based on 
 |---|---|---|---|---|
 | **Database** | (Docker volume) | MySQL 8.4 | Docker | `127.0.0.1:3308` |
 | **Back** | `backend/` | PHP 8.5, Laravel 13, Reverb (live updates) | Docker | http://localhost:8000 |
-| **Front** | `frontend/` | TypeScript, React 19, Vite | Node on your machine | http://localhost:5173 |
+| **Front** | `frontend/` | TypeScript, React 19, Vite · Arabic and English (RTL) | Node on your machine | http://localhost:5173 |
 | **AI** | `vision-service/` | Python 3.12, FastAPI (NDVI + waste detection) | Docker | http://localhost:8001 |
-| **Sensor node** | `firmware/node-sensor/` | C++ (Arduino) on ESP32 + soil and flow sensors | ESP32 board | |
-| **Camera node** | `firmware/node-cam/` | C++ (Arduino) on ESP32-S3-CAM | ESP32-S3-CAM board | |
+| **Sensor nodes** | `firmware/node-sensor/` | C++ (Arduino) on ESP32-S3-DevKitC-1 | Model A, Model B | |
+| **Camera** | `firmware/node-cam/` | Stock CameraWebServer on ESP32-S3-CAM | Camera board | `http://<camera-IP>` |
 
 Also: `docs/` (API contract `api.md`, team workspace) and `data/` (seed and recorded data for the offline demo).
 
 ```
-Sensor node (ESP32) ──readings──► Back (Laravel API) ──► Database (MySQL)
-Camera node (ESP32-S3-CAM) ─photos─►   │
-                                       ├──► AI: waste detection (YOLO), NDVI (Sentinel-2)
-                                       └──► Front (map dashboard, live updates)
+Sensor nodes (ESP32-S3) ──POST readings──► Back (Laravel API) ──► Database (MySQL)
+Camera (ESP32-S3-CAM) ◄──GET /capture────┤
+                                         ├──► AI: waste detection (YOLO), NDVI (Sentinel-2)
+                                         └──► Front (map dashboard, live updates)
 ```
 
-Every device talks only to the Back. The Back calls the AI service and stores the results.
+The Back is the centre: sensor nodes post to it, it fetches camera photos, calls the AI service, stores everything and pushes updates to the dashboard.
 
 ## Ports
 
@@ -187,38 +187,54 @@ docker compose build vision   # rebuild with the new libraries
 docker compose up -d vision   # restart the AI service
 ```
 
-## 2.6 Hardware (sensor node and camera node)
+## 2.6 Hardware
 
-Both nodes are flashed from the Arduino IDE and post to the Back on port 8000. They share one settings template.
+| Node | Board | What is wired | Code |
+|---|---|---|---|
+| **Model A** (irrigated park) | ESP32-S3-DevKitC-1 #1 | soil, DHT11, YF-S401 flow, relay + pump, water level (optional), LCD (optional) | `firmware/node-sensor/` |
+| **Model B** (monitoring park) | ESP32-S3-DevKitC-1 #2 | soil, DHT11 | same sketch, different `NODE_ID` |
+| Spare | ESP32-S3-DevKitC-1 #3 | nothing; pre-flashed with Model A | same sketch |
+| **Camera** | GOOUUU ESP32-S3-CAM v1.5 (OV3660) | built-in camera | stock CameraWebServer |
 
 **Once:**
 
-1. Install the Arduino IDE and the ESP32 board package ("esp32 by Espressif").
-2. Allow port 8000 in the Windows firewall.
-3. Put the computer and the nodes on the same network (a phone hotspot or small router works best; public Wi-Fi often blocks devices). Test by opening `http://<your-IP>:8000` from a phone on that network.
+1. Install the Arduino IDE and the board package **esp32 by Espressif Systems**.
+2. Libraries: **DHT sensor library**, **Adafruit Unified Sensor**, **ArduinoJson**, **LiquidCrystal_I2C** (WiFi and HTTPClient come with the board package).
+3. Allow port 8000 in the Windows firewall.
+4. Put the laptop and all boards on one **2.4 GHz** network (a phone hotspot; the ESP32-S3 has no 5 GHz). Test by opening `http://<laptop-IP>:8000` from a phone on that network.
 
-**For each node** (repeat with different `NODE_ID` and `NODE_TOKEN`):
+### Sensor nodes (Model A and B)
+
+Arduino IDE settings: board **ESP32S3 Dev Module**, Flash Size **16MB**, PSRAM **OPI PSRAM**, **USB CDC On Boot: Enabled**. Upload through the port marked COM.
+
+| Pin | Part |
+|---|---|
+| GPIO4 | Soil moisture (analog) |
+| GPIO5 | HW-038 water level (analog, optional) |
+| GPIO16 | DHT11 data |
+| GPIO17 | YF-S401 flow pulses, through a 10K + 20K voltage divider (5 V to 3.3 V) |
+| GPIO18 | HW-482 relay (pump) |
+| GPIO8 / GPIO9 | LCD1602 I2C SDA / SCL (optional) |
+
+Analog reads only on GPIO1 to GPIO10 (ADC1); ADC2 does not work with Wi-Fi on. Avoid GPIO0, 3, 45, 46 (boot), 19, 20 (USB), 35 to 37 (PSRAM), 43, 44 (serial), 38 and 48 (RGB LED). The pump runs from its own battery pack through the relay, never from the board.
 
 ```bash
 cp firmware/secrets.h.example firmware/secrets.h   # never committed
 ```
 
-In `firmware/secrets.h` set: Wi-Fi name and password, `SERVER_HOST` (your computer's local IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID`, `NODE_TOKEN`.
+In `secrets.h` set the Wi-Fi name and password, `SERVER_HOST` (the laptop's IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID` and `NODE_TOKEN`. Upload `firmware/node-sensor/` once per board with its own values.
 
-### Sensor node (ESP32)
+### Camera (ESP32-S3-CAM)
 
-Upload `firmware/node-sensor/`. Board: your ESP32 model. It posts a reading every `REPORT_INTERVAL_MS` to `/api/readings`.
+See `firmware/node-cam/README.md`. In short: open **File > Examples > ESP32 > Camera > CameraWebServer**, choose `CAMERA_MODEL_ESP32S3_EYE`, set the Wi-Fi, upload through the **TTL (CH340)** port, then read its IP in the Serial Monitor and put it in the root `.env`:
 
-### Camera node (ESP32-S3-CAM)
+```bash
+CAMERA_URL=http://192.168.43.50   # the IP the Serial Monitor shows
+```
 
-Upload `firmware/node-cam/`. In the Arduino IDE:
-- Board: **ESP32S3 Dev Module**
-- PSRAM: **OPI PSRAM** (most S3-CAM boards; check your board's page)
-- The camera pin map must match your board model. The **CameraWebServer** example (File > Examples > ESP32 > Camera) lists the known models.
+Run `docker compose up -d` after editing `.env`. Check by opening `http://<camera-IP>/capture` in the browser: you should see a photo.
 
-It sends a JPEG photo every `CAPTURE_INTERVAL_MS` to `/api/images`. Use a solid 5 V supply: camera plus Wi-Fi draws current peaks that reset boards on weak USB ports.
-
-The sketches in `node-sensor/` and `node-cam/` are not written yet.
+The sensor sketch in `node-sensor/` is not written yet.
 
 ---
 
@@ -298,5 +314,5 @@ When asking for help, share `docker compose ps` and `docker compose logs --tail 
 | Back + Database | |
 | Front | |
 | AI | |
-| Sensor node | |
-| Camera node | |
+| Sensor nodes | |
+| Camera | |

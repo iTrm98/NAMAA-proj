@@ -34,7 +34,7 @@ Goal: less wasted water, fewer dead plants, faster response, decisions based on 
 | **Sensor nodes** | `firmware/node-sensor/` | C++ (Arduino) on ESP32-S3-DevKitC-1 | Model A, Model B | |
 | **Camera** | `firmware/node-cam/` | Stock CameraWebServer on ESP32-S3-CAM | Camera board | `http://<camera-IP>` |
 
-Also: `docs/` (API contract `api.md`, team workspace) and `data/` (seed and recorded data for the offline demo).
+Also: `data/` (`data/seed/parks.json`: the five demo parks; `data/recorded/`: recorded data for the offline demo).
 
 ```
 Sensor nodes (ESP32-S3) ──POST readings──► Back (Laravel API) ──► Database (MySQL)
@@ -80,6 +80,13 @@ cp .env.example .env    # your own settings file (never committed)
 ```
 
 Open the root `.env` (next to `docker-compose.yml`) and set `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD`. Leave `APP_KEY` empty for now.
+
+Two demo settings live there too:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `DEMO_PASSWORD` | `password` | Password of the four demo accounts the seed creates (see 2.3). Change it before showing the demo on a shared network. |
+| `DEMO_MODE` | `false` | `true`: the boards report every 5 s instead of 30 s. The server sends the interval in every reply, so no re-flashing is needed; run `docker compose up -d` after changing it. |
 
 This root `.env` is the only settings file for the Database, Back and AI. Two others appear later: `backend/.env` (Laravel's own, overridden by the root file, ignore it) and `frontend/.env` (dashboard settings, step 2.4).
 
@@ -136,9 +143,22 @@ docker compose run --rm backend php artisan key:generate --show   # print an app
 Paste the key (starts with `base64:`) into `APP_KEY=` in the root `.env`, save, then:
 
 ```bash
-docker compose up -d                              # start Back, live updates and AI
-docker compose exec backend php artisan migrate   # create the tables
+docker compose up -d                                     # start Back, live updates and AI
+docker compose exec backend php artisan migrate --seed   # NEW machine only: create the tables and the demo data
 ```
+
+`--seed` is only for a **new machine with an empty database**. It builds the demo: one company, five Makkah parks (two real ones for the boards, three simulated ones with a week of history), alerts, tasks and NDVI values. On a machine that already has data, run `migrate` without `--seed`. To rebuild the demo from scratch: `docker compose exec backend php artisan migrate:fresh --seed` (this **deletes everything and creates new node tokens**, so every board must be re-flashed afterwards).
+
+**Demo accounts** (password: `DEMO_PASSWORD` from the root `.env`, default `password`):
+
+| Email | Role | Opens |
+|---|---|---|
+| `admin@namaa.test` | Admin (company staff) | `/admin`: map and park pages |
+| `worker1@namaa.test` | Worker (Ahmed) | `/worker` |
+| `worker2@namaa.test` | Worker (Khalid) | `/worker` |
+| `municipality@namaa.test` | Municipality (read-only, all companies) | `/municipality` |
+
+**Node tokens:** the seed prints one token per sensor node (Model A, Model B and the three simulated nodes) once in the terminal and saves the same table to `backend/storage/app/private/node-tokens.txt`. That file is ignored by Git; never copy a token into a tracked file. The tokens go into `firmware/secrets.h` (step 2.6).
 
 **Check:** http://localhost:8000 shows the Laravel page.
 
@@ -167,12 +187,16 @@ Commit the new `frontend/` files so nobody has to do A again.
 
 ```bash
 cd frontend
-cp .env.example .env    # dashboard settings (API address, live-update key)
+cp .env.example .env    # dashboard settings (API address, live-update key, map key)
 npm install             # install the libraries
 npm run dev             # start the dashboard
 ```
 
-**Check:** http://localhost:5173 shows the dashboard. `Ctrl+C` stops it; `cd ..` goes back.
+**Map key (optional):** for the satellite basemap, create a free key at https://cloud.maptiler.com ("API keys") and put it in `frontend/.env` as `VITE_MAPTILER_KEY=...` (never in a tracked file). Without a key the map uses the OpenStreetMap street map. Restart `npm run dev` after editing `frontend/.env`.
+
+**Check:** http://localhost:5173 shows the sign-in page. Sign in with a demo account (2.3). Arabic is the default; the header has a language switch (Arabic RTL / English) and a dark/light switch. `Ctrl+C` stops it; `cd ..` goes back.
+
+If the page stays blank after `npm install` added new libraries, stop `npm run dev` and start it again.
 
 ## 2.5 AI
 
@@ -180,7 +204,7 @@ Already running after `docker compose up -d` in step 2.3.
 
 **Check:** http://localhost:8001/health shows `{"status":"ok"}`.
 
-The heavy libraries (satellite NDVI, YOLO waste detection) are off to keep the build fast. To turn one on, uncomment its block in `vision-service/requirements.txt`, then:
+The satellite NDVI libraries are on (`POST /ndvi`, called only by the Back). YOLO waste detection is still off to keep the build fast. To turn a block on, uncomment it in `vision-service/requirements.txt`, then:
 
 ```bash
 docker compose build vision   # rebuild with the new libraries
@@ -222,7 +246,7 @@ Analog reads only on GPIO1 to GPIO10 (ADC1); ADC2 does not work with Wi-Fi on. A
 cp firmware/secrets.h.example firmware/secrets.h   # never committed
 ```
 
-In `secrets.h` set the Wi-Fi name and password, `SERVER_HOST` (the laptop's IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID` and `NODE_TOKEN`. Upload `firmware/node-sensor/` once per board with its own values.
+In `secrets.h` set the Wi-Fi name and password, `SERVER_HOST` (the laptop's IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID` and `NODE_TOKEN`. Take `NODE_ID` and `NODE_TOKEN` from `backend/storage/app/private/node-tokens.txt` (Model A = node 1, Model B = node 3 in a fresh seed; check the file). Upload `firmware/node-sensor/` once per board with its own values.
 
 ### Camera (ESP32-S3-CAM)
 
@@ -264,7 +288,7 @@ docker compose down      # stop (data is kept)
 
 ```bash
 docker compose run --rm backend composer install
-docker compose exec backend php artisan migrate
+docker compose exec backend php artisan migrate   # never --seed here: it would duplicate the demo
 cd frontend && npm install
 ```
 
@@ -291,7 +315,7 @@ After editing the root `.env`, run `docker compose up -d` (a restart does not re
 | `npm error ENOENT ... package.json` | Not inside `frontend/`, or the React app does not exist yet. Do 2.4 A. |
 | `ubuntu.sock: no such file or directory` | Docker Desktop > Settings > Resources > WSL Integration > enable your distro > Apply & restart. |
 | `port is already allocated` | Another program uses that port. Change it in `.env`, then `docker compose up -d`. |
-| Database client: `Access denied` | The database was created earlier with other passwords. `docker compose down -v`, `docker compose up -d`, then `migrate`. |
+| Database client: `Access denied` | The database was created earlier with other passwords. `docker compose down -v` (deletes the data), `docker compose up -d`, then `migrate --seed` (new node tokens: re-flash the boards). |
 | DBeaver: `Public Key Retrieval is not allowed` | Driver properties: `allowPublicKeyRetrieval=true`, `useSSL=false`. |
 | `required variable ... is missing` | The root `.env` is missing or incomplete. |
 | CORS error in the browser | The backend must allow `http://localhost:5173`. |
@@ -306,7 +330,7 @@ When asking for help, share `docker compose ps` and `docker compose logs --tail 
 - `main` must always work. Branch (`feat/your-feature`), merge through a pull request someone else reviews.
 - Never commit secrets: `.env`, `frontend/.env`, `backend/.env` and `firmware/secrets.h` are ignored by Git.
 - Large files (model weights, satellite images, videos) stay out of the repo; share a link.
-- Changes to the data sent between sensor, server and dashboard go into `docs/api.md` first.
+- Changes to the data sent between sensor, server and dashboard are agreed with the team before they are built.
 - Mark every park, sensor and reading as `real` or `simulated`.
 
 | Part | Owner |

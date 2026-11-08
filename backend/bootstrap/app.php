@@ -14,7 +14,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // API only: an unauthenticated request gets 401 JSON, never a redirect
+        // to a "login" route (there is none).
+        $middleware->redirectGuestsTo(fn () => null);
+
+        $middleware->alias([
+            'user.token' => \App\Http\Middleware\EnsureUserToken::class,
+            'device.token' => \App\Http\Middleware\EnsureDeviceToken::class,
+            'role' => \App\Http\Middleware\EnsureRole::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

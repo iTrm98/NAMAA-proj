@@ -10,10 +10,10 @@ numpy~=2.5
 # Versions are the latest on PyPI as of 2026-11-03; re-check when enabling.
 
 # --- Satellite / NDVI ---------------------------------------------------------
-# pystac-client~=0.9      # search the public Sentinel-2 catalogue
-# rasterio~=1.5           # read imagery, windowed reads per park
-# shapely~=2.2            # park polygons
-# pyproj~=3.8             # coordinate transforms
+pystac-client~=0.9      # search the public Sentinel-2 catalogue
+rasterio~=1.5           # read imagery, windowed reads per park
+shapely~=2.2            # park polygons
+pyproj~=3.8             # coordinate transforms
 # pandas~=3.1             # NDVI history / trends
 
 # --- Waste detection (YOLO) ---------------------------------------------------

@@ -1,0 +1,124 @@
+{
+  "app": {
+    "name": "نماء",
+    "tagline": "مراقبة ذكية لحدائق مكة المكرمة"
+  },
+  "common": {
+    "loading": "جارٍ التحميل…",
+    "error": "حدث خطأ. حاول مرة أخرى.",
+    "retry": "إعادة المحاولة",
+    "back": "رجوع",
+    "never": "أبدًا",
+    "none": "لا يوجد"
+  },
+  "header": {
+    "logout": "تسجيل الخروج",
+    "language": "English",
+    "languageLabel": "التبديل إلى الإنجليزية",
+    "themeToDark": "الوضع الداكن",
+    "themeToLight": "الوضع الفاتح",
+    "roles": {
+      "admin": "مشرف",
+      "worker": "عامل",
+      "municipality": "الأمانة"
+    }
+  },
+  "login": {
+    "title": "تسجيل الدخول",
+    "subtitle": "استخدم حسابك في نماء",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "submit": "دخول",
+    "submitting": "جارٍ الدخول…",
+    "invalid": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    "tooMany": "محاولات كثيرة. انتظر دقيقة ثم حاول مرة أخرى.",
+    "failed": "تعذّر الاتصال بالخادم. تأكد أنه يعمل."
+  },
+  "placeholder": {
+    "workerTitle": "مهامي",
+    "workerBody": "ستصل مهامي في السبرنت الثاني.",
+    "municipalityTitle": "نظرة الأمانة العامة",
+    "municipalityBody": "ستصل النظرة العامة (للقراءة فقط) لكل الشركات في السبرنت الثاني."
+  },
+  "status": {
+    "ok": "سليمة",
+    "dry": "جافة",
+    "over": "ري زائد",
+    "offline": "غير متصلة"
+  },
+  "source": {
+    "real": "حقيقي",
+    "simulated": "محاكاة"
+  },
+  "parkType": {
+    "public_park": "حديقة عامة",
+    "median": "جزيرة وسطية",
+    "mosque_garden": "حديقة مسجد",
+    "other": "أخرى"
+  },
+  "nodeType": {
+    "sensor": "حساس",
+    "camera": "كاميرا"
+  },
+  "alertType": {
+    "dry": "التربة جافة جدًا",
+    "over": "التربة مشبعة بالماء",
+    "no_flow": "المضخة تعمل بلا تدفق ماء",
+    "leak": "الماء يتدفق والمضخة متوقفة",
+    "offline": "الجهاز غير متصل",
+    "sensor_fault": "عطل في الحساس",
+    "litter": "رصد نفايات",
+    "ndvi_drop": "تراجع الغطاء الأخضر"
+  },
+  "severity": {
+    "info": "معلومة",
+    "warning": "تحذير",
+    "critical": "حرج"
+  },
+  "admin": {
+    "parks": "الحدائق",
+    "noParks": "لا توجد حدائق بعد.",
+    "openAlerts_zero": "لا تنبيهات مفتوحة",
+    "openAlerts_one": "تنبيه مفتوح واحد",
+    "openAlerts_two": "تنبيهان مفتوحان",
+    "openAlerts_few": "{{count}} تنبيهات مفتوحة",
+    "openAlerts_many": "{{count}} تنبيهًا مفتوحًا",
+    "openAlerts_other": "{{count}} تنبيه مفتوح",
+    "satellite": "قمر صناعي",
+    "streets": "شوارع",
+    "osmNote": "خريطة الشوارع (OpenStreetMap). أضف VITE_MAPTILER_KEY لصور الأقمار الصناعية.",
+    "openPark": "فتح صفحة الحديقة",
+    "lastReading": "آخر قراءة",
+    "noReadingYet": "لا توجد قراءة بعد"
+  },
+  "park": {
+    "moisture": "رطوبة التربة",
+    "temperature": "درجة الحرارة",
+    "humidity": "رطوبة الجو",
+    "flow": "تدفق الماء",
+    "pump": "المضخة",
+    "pumpOn": "تعمل",
+    "pumpOff": "متوقفة",
+    "noPump": "لا توجد مضخة",
+    "lastReading": "آخر قراءة",
+    "thresholds": "الحدود {{min}}–{{max}} ٪",
+    "min": "الأدنى",
+    "max": "الأعلى",
+    "range24h": "٢٤ ساعة",
+    "range7d": "٧ أيام",
+    "chartMoisture": "رطوبة التربة (٪)",
+    "chartTemperature": "درجة الحرارة (°م)",
+    "chartHumidity": "رطوبة الجو (٪)",
+    "noData": "لا توجد قراءات في هذه الفترة.",
+    "nodes": "الأجهزة",
+    "online": "متصل",
+    "offline": "غير متصل",
+    "lastSeen": "آخر ظهور",
+    "openAlerts": "التنبيهات المفتوحة",
+    "noAlerts": "لا توجد تنبيهات مفتوحة.",
+    "notFound": "لم يتم العثور على هذه الحديقة.",
+    "refreshNote": "تتحدث كل ١٥ ثانية",
+    "district": "الحي",
+    "area": "{{area}} م²"
+  }
+}

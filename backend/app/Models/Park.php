@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AlertStatus;
 use App\Enums\DataSource;
 use App\Enums\NodeType;
 use App\Enums\ParkStatus;
@@ -86,6 +87,12 @@ class Park extends Model
     }
 
     /** @return HasMany<Task, $this> */
+    /** Open alerts, newest first. @return HasMany<Alert, $this> */
+    public function openAlerts(): HasMany
+    {
+        return $this->hasMany(Alert::class)->where('status', AlertStatus::Open)->latest()->orderByDesc('id');
+    }
+
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);

@@ -1,10 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>NAMAA</title>
+    <script>
+      // Apply the saved theme and language before the first paint (no flash).
+      try {
+        var theme = localStorage.getItem('namaa.theme') || 'dark';
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        var lang = localStorage.getItem('namaa.lang') || 'ar';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

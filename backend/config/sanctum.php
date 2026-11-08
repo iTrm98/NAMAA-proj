@@ -37,7 +37,8 @@ return [
     |
     */
 
-    'guard' => ['web'],
+    // Bearer tokens only (NAMAA has no cookie or session auth).
+    'guard' => [],
 
     /*
     |--------------------------------------------------------------------------

@@ -34,6 +34,9 @@ class DataModelTest extends TestCase
     public function test_tests_run_on_sqlite_not_the_real_database(): void
     {
         $this->assertSame('sqlite', DB::connection()->getDriverName());
+        // Docker sets APP_ENV=local; phpunit.xml must force "testing" (runningUnitTests() relies on it).
+        $this->assertSame('testing', app()->environment());
+        $this->assertNotSame('reverb', config('broadcasting.default')); // "null" in phpunit.xml
         $this->assertSame(':memory:', DB::connection()->getDatabaseName());
     }
 

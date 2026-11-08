@@ -39,6 +39,8 @@ x-laravel-env: &laravel-env
   CAMERA_URL: ${CAMERA_URL:-}
   # Shared password of the seeded demo accounts (php artisan db:seed).
   DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
+  # true = boards report every 5 s instead of 30 s (sent as interval_s).
+  DEMO_MODE: ${DEMO_MODE:-false}
 
 x-laravel: &laravel
   build: ./backend
@@ -74,7 +76,11 @@ services:
 
   backend:
     <<: *laravel
-    command: php artisan serve --host=0.0.0.0 --port=8000
+    # --no-reload: without it, artisan serve drops the Docker environment
+    # (DB_CONNECTION=mysql, ...) for every key that also exists in backend/.env,
+    # and ignores PHP_CLI_SERVER_WORKERS. Restart the container after editing .env.
+    command: php artisan serve --host=0.0.0.0 --port=8000 --no-reload
+    restart: unless-stopped
     environment:
       <<: *laravel-env
       PHP_CLI_SERVER_WORKERS: 4
@@ -85,20 +91,24 @@ services:
   reverb:
     <<: *laravel
     command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    restart: unless-stopped
     ports:
       - "${REVERB_HOST_PORT:-8080}:8080"
 
   scheduler:
     <<: *laravel
     command: php artisan schedule:work
+    restart: unless-stopped
 
   queue:
     <<: *laravel
     command: php artisan queue:work --tries=1
+    restart: unless-stopped
 
   vision:
     build: ./vision-service
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --log-level ${VISION_LOG_LEVEL:-info}
+    restart: unless-stopped
     volumes:
       - ./vision-service:/srv
       - ./data:/data

@@ -1,0 +1,120 @@
+{
+  "app": {
+    "name": "NAMAA",
+    "tagline": "Smart monitoring for Makkah's parks"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong. Please try again.",
+    "retry": "Retry",
+    "back": "Back",
+    "never": "Never",
+    "none": "None"
+  },
+  "header": {
+    "logout": "Sign out",
+    "language": "العربية",
+    "languageLabel": "Switch to Arabic",
+    "themeToDark": "Dark theme",
+    "themeToLight": "Light theme",
+    "roles": {
+      "admin": "Admin",
+      "worker": "Worker",
+      "municipality": "Municipality"
+    }
+  },
+  "login": {
+    "title": "Sign in",
+    "subtitle": "Use your NAMAA account",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "invalid": "The email or password is incorrect.",
+    "tooMany": "Too many attempts. Wait a minute and try again.",
+    "failed": "Could not reach the server. Check that it is running."
+  },
+  "placeholder": {
+    "workerTitle": "My tasks",
+    "workerBody": "My tasks arrive in Sprint 2.",
+    "municipalityTitle": "Municipality overview",
+    "municipalityBody": "The read-only overview of every company arrives in Sprint 2."
+  },
+  "status": {
+    "ok": "OK",
+    "dry": "Dry",
+    "over": "Over-watered",
+    "offline": "Offline"
+  },
+  "source": {
+    "real": "Real",
+    "simulated": "Simulated"
+  },
+  "parkType": {
+    "public_park": "Public park",
+    "median": "Median",
+    "mosque_garden": "Mosque garden",
+    "other": "Other"
+  },
+  "nodeType": {
+    "sensor": "Sensor",
+    "camera": "Camera"
+  },
+  "alertType": {
+    "dry": "Soil too dry",
+    "over": "Soil waterlogged",
+    "no_flow": "Pump on, no water flow",
+    "leak": "Water flows with the pump off",
+    "offline": "Node offline",
+    "sensor_fault": "Sensor fault",
+    "litter": "Litter detected",
+    "ndvi_drop": "Green cover dropping"
+  },
+  "severity": {
+    "info": "Info",
+    "warning": "Warning",
+    "critical": "Critical"
+  },
+  "admin": {
+    "parks": "Parks",
+    "noParks": "No parks yet.",
+    "openAlerts_one": "{{count}} open alert",
+    "openAlerts_other": "{{count}} open alerts",
+    "satellite": "Satellite",
+    "streets": "Streets",
+    "osmNote": "Street map (OpenStreetMap). Set VITE_MAPTILER_KEY for satellite.",
+    "openPark": "Open park page",
+    "lastReading": "Last reading",
+    "noReadingYet": "No reading yet"
+  },
+  "park": {
+    "moisture": "Soil moisture",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "flow": "Water flow",
+    "pump": "Pump",
+    "pumpOn": "On",
+    "pumpOff": "Off",
+    "noPump": "No pump",
+    "lastReading": "Last reading",
+    "thresholds": "Thresholds {{min}}–{{max}} %",
+    "min": "Min",
+    "max": "Max",
+    "range24h": "24 hours",
+    "range7d": "7 days",
+    "chartMoisture": "Soil moisture (%)",
+    "chartTemperature": "Temperature (°C)",
+    "chartHumidity": "Humidity (% RH)",
+    "noData": "No readings in this period.",
+    "nodes": "Nodes",
+    "online": "Online",
+    "offline": "Offline",
+    "lastSeen": "Last seen",
+    "openAlerts": "Open alerts",
+    "noAlerts": "No open alerts.",
+    "notFound": "This park was not found.",
+    "refreshNote": "Updates every 15 seconds",
+    "district": "District",
+    "area": "{{area}} m²"
+  }
+}

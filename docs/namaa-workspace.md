@@ -1,6 +1,6 @@
 # NAMAA | Team Workspace
 
-Last updated: Nov 3, 2026 · Demo: Nov 18 and 19
+Last updated: Nov 7, 2026 · Demo: Nov 18 and 19
 
 ---
 
@@ -62,7 +62,7 @@ The order is deliberate: foundation first, extras after. If time runs short, we 
 
 ### Phase 1: Setup (Oct 29 to 31)
 - [ ] Assign roles and an owner for each part (hardware, server, dashboard, data, vision, pitch)
-- [ ] Parts list: ESP32, soil moisture sensor, water flow sensor, relay or valve, wires, power supply, USB camera (Logitech C920)
+- [ ] Parts list: ESP32, soil moisture sensor, water flow sensor, relay or valve, wires, power supply, ESP32-S3-CAM (camera node)
 - [ ] Order parts now, with a local Makkah shop as backup if delivery is late
 - [x] One code repository (GitHub `NAMAA-proj`) with the folder split
 - [ ] Pick a test site (university campus or any park we can access)

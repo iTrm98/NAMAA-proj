@@ -17,7 +17,7 @@ NAMAA connects the parks to one live dashboard so problems are caught early:
 
 - **Soil and water sensors** (ESP32) report soil moisture and water flow.
 - **Satellite imagery** (Sentinel-2, NDVI) tracks how green each park is over time.
-- **A camera with computer vision** (YOLO) detects waste.
+- **A camera node** (ESP32-S3-CAM) sends park photos; computer vision (YOLO) on the server detects waste.
 - **A rules engine** turns those signals into alerts and a recommended action.
 - **A map dashboard** shows every park's status, open alerts and maintenance tasks, and checks afterwards that each fix worked.
 
@@ -31,18 +31,19 @@ Goal: less wasted water, fewer dead plants, faster response, decisions based on 
 | **Back** | `backend/` | PHP 8.5, Laravel 13, Reverb (live updates) | Docker | http://localhost:8000 |
 | **Front** | `frontend/` | TypeScript, React 19, Vite | Node on your machine | http://localhost:5173 |
 | **AI** | `vision-service/` | Python 3.12, FastAPI (NDVI + waste detection) | Docker | http://localhost:8001 |
-| **Hardware** | `firmware/` | C++ (Arduino) on ESP32 + sensors | The ESP32 board | |
-| **Camera** | `tools/camera-capture/` | Python 3.12, OpenCV | Your machine | |
+| **Sensor node** | `firmware/node-sensor/` | C++ (Arduino) on ESP32 + soil and flow sensors | ESP32 board | |
+| **Camera node** | `firmware/node-cam/` | C++ (Arduino) on ESP32-S3-CAM | ESP32-S3-CAM board | |
 
 Also: `docs/` (API contract `api.md`, team workspace) and `data/` (seed and recorded data for the offline demo).
 
 ```
-ESP32 sensors ──► Back (Laravel API) ──► Database (MySQL)
-                       │
-                       └──► Front (map dashboard, live updates)
-Camera ──────► AI (waste detection) ──► Back
-Sentinel-2 ──► AI (NDVI) ─────────────► Back
+Sensor node (ESP32) ──readings──► Back (Laravel API) ──► Database (MySQL)
+Camera node (ESP32-S3-CAM) ─photos─►   │
+                                       ├──► AI: waste detection (YOLO), NDVI (Sentinel-2)
+                                       └──► Front (map dashboard, live updates)
 ```
+
+Every device talks only to the Back. The Back calls the AI service and stores the results.
 
 ## Ports
 
@@ -186,39 +187,48 @@ docker compose build vision   # rebuild with the new libraries
 docker compose up -d vision   # restart the AI service
 ```
 
-## 2.6 Hardware (ESP32 sensor node)
+## 2.6 Hardware (sensor node and camera node)
 
-1. Install the Arduino IDE and the ESP32 board package.
-2. Create the node's settings file:
+Both nodes are flashed from the Arduino IDE and post to the Back on port 8000. They share one settings template.
+
+**Once:**
+
+1. Install the Arduino IDE and the ESP32 board package ("esp32 by Espressif").
+2. Allow port 8000 in the Windows firewall.
+3. Put the computer and the nodes on the same network (a phone hotspot or small router works best; public Wi-Fi often blocks devices). Test by opening `http://<your-IP>:8000` from a phone on that network.
+
+**For each node** (repeat with different `NODE_ID` and `NODE_TOKEN`):
 
 ```bash
 cp firmware/secrets.h.example firmware/secrets.h   # never committed
 ```
 
-3. In `firmware/secrets.h` set: Wi-Fi name and password, `SERVER_HOST` (your computer's local IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID`, `NODE_TOKEN`.
-4. Allow port 8000 in the Windows firewall.
-5. Upload `firmware/node-sensor/` to the ESP32.
+In `firmware/secrets.h` set: Wi-Fi name and password, `SERVER_HOST` (your computer's local IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID`, `NODE_TOKEN`.
 
-The ESP32 and your computer must be on the same network (a phone hotspot or small router works best; public Wi-Fi often blocks devices). Test by opening `http://<your-IP>:8000` from a phone on that network.
+### Sensor node (ESP32)
 
-## 2.7 Camera (USB webcam)
+Upload `firmware/node-sensor/`. Board: your ESP32 model. It posts a reading every `REPORT_INTERVAL_MS` to `/api/readings`.
 
-Docker cannot see a USB webcam, so this runs on the computer the camera is plugged into.
+### Camera node (ESP32-S3-CAM)
 
-```bash
-cd tools/camera-capture
-py -3.12 -m venv .venv            # private Python environment (Mac/Linux: python3.12 -m venv .venv)
-.venv\Scripts\activate            # turn it on (Mac/Linux: source .venv/bin/activate)
-pip install -r requirements.txt   # install OpenCV
-```
+Upload `firmware/node-cam/`. In the Arduino IDE:
+- Board: **ESP32S3 Dev Module**
+- PSRAM: **OPI PSRAM** (most S3-CAM boards; check your board's page)
+- The camera pin map must match your board model. The **CameraWebServer** example (File > Examples > ESP32 > Camera) lists the known models.
 
-The capture script (`capture.py`) is not written yet.
+It sends a JPEG photo every `CAPTURE_INTERVAL_MS` to `/api/images`. Use a solid 5 V supply: camera plus Wi-Fi draws current peaks that reset boards on weak USB ports.
+
+The sketches in `node-sensor/` and `node-cam/` are not written yet.
 
 ---
 
 # 3. Quick start
 
-Open Docker Desktop, then:
+**Windows, one click:** double-click `start-namaa.bat` in the project folder. It starts Docker Desktop (and waits for it), the Database, Back and AI, opens VS Code, starts the dashboard in its own window, and opens the browser. `stop-namaa.bat` stops everything: the dashboard window, the containers, Docker Desktop and the WSL virtual machine (frees its memory). The data is kept.
+
+To run it automatically when Windows starts: press `Win+R`, type `shell:startup`, and put a shortcut to `start-namaa.bat` in that folder.
+
+**By hand:** open Docker Desktop, then:
 
 ```bash
 docker compose up -d     # Database + Back + AI
@@ -288,5 +298,5 @@ When asking for help, share `docker compose ps` and `docker compose logs --tail 
 | Back + Database | |
 | Front | |
 | AI | |
-| Hardware | |
-| Camera | |
+| Sensor node | |
+| Camera node | |

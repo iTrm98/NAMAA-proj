@@ -53,14 +53,30 @@ PATCH /api/tasks/{id}            { "status": "in_progress" | "done", "note": "..
 - Statuses: `open` -> `in_progress` -> `done`. Closing a task stores `closed_at`.
 - Once a task is `done`, the server checks whether readings returned to normal and sets `verified` (true/false) plus `time_to_resolve_minutes`. This is the step-7 proof of value.
 
-## 6) Waste detections
+## 6) Photos from camera nodes, and waste detections
+
+The camera node (ESP32-S3-CAM) only takes and sends photos. Detection runs on the server.
 
 ```
-POST /api/detections             (called by the camera capture script; Bearer token)
-{ "park_id": 1, "camera_id": 1, "count": 4, "boxes": [[x,y,w,h,conf], ...], "image_path": "...", "detected_at": "..." }
+POST /api/images
+Authorization: Bearer <node-token>
+Content-Type: multipart/form-data
 
-GET  /api/detections?park_id=...&from=...&to=...
+image        JPEG file (VGA or SVGA is enough)
+node_id      2
+captured_at  2026-11-08T09:30:00Z
 ```
+
+- Responses: `202` accepted (detection runs in the background), `401` bad token, `422` missing or invalid data.
+- Laravel stores the image, then a queued job calls the AI service (`POST /waste`), saves the detection, and raises an alert when waste is found.
+
+```
+GET /api/detections?park_id=...&from=...&to=...
+```
+
+Returns `{ "id", "park_id", "node_id", "count", "boxes": [[x,y,w,h,conf], ...], "image_url", "captured_at" }`.
+
+Nodes have a `type`: `sensor` or `camera`. Each node belongs to one park.
 
 ## 7) NDVI (vegetation health)
 
@@ -73,7 +89,7 @@ The vision service computes these; the backend stores them. Internal vision-serv
 
 ```
 POST /ndvi     { "park_id": 1, "polygon": <GeoJSON>, "date_from": "...", "date_to": "..." }
-POST /waste    multipart image -> { "count": 4, "boxes": [...] }
+POST /waste    multipart image -> { "count": 4, "boxes": [...] }   (called by Laravel only)
 ```
 
 ## 8) Recommendations (rules engine)

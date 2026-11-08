@@ -16,7 +16,7 @@ backend/public/hot
 frontend/node_modules/
 frontend/dist/
 
-# Python (AI service, camera tool)
+# Python (AI service)
 __pycache__/
 *.pyc
 .venv/

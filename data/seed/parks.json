@@ -1,0 +1,92 @@
+{
+  "notes": [
+    "Demo parks for the NAMAA seeder (backend/database/seeders/DemoParksSeeder.php). No secrets in this file.",
+    "Coordinates are WGS84. lat/lng is the map marker (park centre).",
+    "polygon_approximate = true: the seeder builds a rectangle of area_m2 around the centre. To use a real outline, add a GeoJSON Polygon as \"polygon\" (coordinates [lng, lat], closed ring, e.g. drawn at geojson.io) and set polygon_approximate to false.",
+    "area_m2 values are estimates. baseline_l_per_day is computed by the seeder as area_m2 x 4 (assumption: 4 L per m2 per day on a fixed schedule).",
+    "scenario: real = no seeded readings (history comes from the boards); healthy = normal irrigation history; drying_out = irrigation stopped 2 days ago."
+  ],
+  "parks": [
+    {
+      "key": "king_abdullah",
+      "name_en": "King Abdullah Park",
+      "name_ar": "حديقة الملك عبدالله",
+      "district": "Al Mashair",
+      "lat": 21.3802586,
+      "lng": 39.8770183,
+      "park_type": "public_park",
+      "area_m2": 40000,
+      "source": "real",
+      "scenario": "real",
+      "polygon_approximate": true,
+      "nodes": [
+        { "name": "Model A", "type": "sensor", "has_pump": true },
+        { "name": "Camera 1", "type": "camera", "has_pump": false }
+      ]
+    },
+    {
+      "key": "aziziyah",
+      "name_en": "Garden Aziziyah",
+      "name_ar": "حديقة العزيزية",
+      "district": "Al Mursalat",
+      "lat": 21.4150694,
+      "lng": 39.8664169,
+      "park_type": "public_park",
+      "area_m2": 6000,
+      "source": "real",
+      "scenario": "real",
+      "polygon_approximate": true,
+      "nodes": [
+        { "name": "Model B", "type": "sensor", "has_pump": false }
+      ]
+    },
+    {
+      "key": "al_adel",
+      "name_en": "Al Adel Park",
+      "name_ar": "حديقة العدل",
+      "district": "Al Maabdah",
+      "lat": 21.4374739,
+      "lng": 39.8545572,
+      "park_type": "public_park",
+      "area_m2": 20000,
+      "source": "simulated",
+      "scenario": "drying_out",
+      "polygon_approximate": true,
+      "nodes": [
+        { "name": "Sim 1", "type": "sensor", "has_pump": true }
+      ]
+    },
+    {
+      "key": "alkhatateen",
+      "name_en": "Alkhatateen Park",
+      "name_ar": "حديقة الخطاطين",
+      "district": "Al Aziziyah",
+      "lat": 21.3971781,
+      "lng": 39.8852504,
+      "park_type": "public_park",
+      "area_m2": 35000,
+      "source": "simulated",
+      "scenario": "healthy",
+      "polygon_approximate": true,
+      "nodes": [
+        { "name": "Sim 2", "type": "sensor", "has_pump": true }
+      ]
+    },
+    {
+      "key": "alhilal",
+      "name_en": "Alhilal Park",
+      "name_ar": "حديقة الهلال",
+      "district": "Al Khalidiyyah",
+      "lat": 21.4021764,
+      "lng": 39.7894742,
+      "park_type": "public_park",
+      "area_m2": 12000,
+      "source": "simulated",
+      "scenario": "healthy",
+      "polygon_approximate": true,
+      "nodes": [
+        { "name": "Sim 3", "type": "sensor", "has_pump": true }
+      ]
+    }
+  ]
+}

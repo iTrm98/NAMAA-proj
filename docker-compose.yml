@@ -37,11 +37,15 @@ x-laravel-env: &laravel-env
   VISION_SERVICE_URL: http://vision:8001
   # Camera node (ESP32-S3-CAM running CameraWebServer). Laravel fetches photos from it.
   CAMERA_URL: ${CAMERA_URL:-}
+  # Shared password of the seeded demo accounts (php artisan db:seed).
+  DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
 
 x-laravel: &laravel
   build: ./backend
   volumes:
     - ./backend:/var/www/html
+    # Seed and recorded demo data (data/seed/parks.json), read-only.
+    - ./data:/var/www/data:ro
   environment:
     <<: *laravel-env
   depends_on:

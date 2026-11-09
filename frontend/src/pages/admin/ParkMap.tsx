@@ -1,43 +1,20 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FeatureCollection, Polygon } from 'geojson'
-import type { StyleSpecification } from 'maplibre-gl'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Map, { Layer, type MapLayerMouseEvent, Marker, NavigationControl, Popup, Source } from 'react-map-gl/maplibre'
 import { Link } from 'react-router'
+import { OpenAlertsPanel } from '@/components/OpenAlertsPanel'
+import { CATEGORY_META, PriorityBadge } from '@/components/ops'
+import { useOpenAlerts } from '@/hooks/useOps'
 import { SourceBadge, STATUS_COLORS, StatusPill } from '@/components/StatusPill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { parkName, useParks } from '@/hooks/useParks'
 import { formatDateTime, formatNumber } from '@/lib/format'
+import { type Basemap, MAKKAH, MAPTILER_KEY, mapStyle } from '@/lib/mapStyle'
 import { cn } from '@/lib/utils'
 import type { Park } from '@/types'
-
-const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY?.trim() || ''
-const MAKKAH = { latitude: 21.42, longitude: 39.83, zoom: 11 }
-
-type Basemap = 'satellite' | 'streets'
-
-/** Without a MapTiler key: OpenStreetMap raster tiles (with attribution). */
-const OSM_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-    },
-  },
-  layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-}
-
-function mapStyle(basemap: Basemap): string | StyleSpecification {
-  if (!MAPTILER_KEY) return OSM_STYLE
-  const map = basemap === 'satellite' ? 'satellite' : 'streets-v2'
-  return `https://api.maptiler.com/maps/${map}/style.json?key=${encodeURIComponent(MAPTILER_KEY)}`
-}
 
 function boundsOf(parks: Park[]): [[number, number], [number, number]] | null {
   const points = parks.flatMap((p) => p.polygon?.coordinates?.[0] ?? [[p.lng, p.lat]])
@@ -65,7 +42,14 @@ export default function ParkMap() {
       </div>
     )
 
-  return <ParkMapView parks={parks.data} />
+  return (
+    <div className="flex h-full flex-col lg:flex-row">
+      <div className="min-h-[480px] flex-1">
+        <ParkMapView parks={parks.data} />
+      </div>
+      <OpenAlertsPanel className="border-t lg:w-96 lg:shrink-0 lg:border-s lg:border-t-0" />
+    </div>
+  )
 }
 
 function ParkMapView({ parks }: { parks: Park[] }) {
@@ -170,6 +154,9 @@ function ParkMapView({ parks }: { parks: Park[] }) {
 function ParkPopup({ park }: { park: Park }) {
   const { t, i18n } = useTranslation()
   const latest = park.latest
+  const openAlerts = useOpenAlerts()
+  // Already sorted: priority first, then oldest.
+  const alerts = (openAlerts.data ?? []).filter((alert) => alert.park_id === park.id)
 
   return (
     <div dir={i18n.dir()} className="flex min-w-52 flex-col gap-2 p-1 text-sm text-neutral-900">
@@ -180,6 +167,23 @@ function ParkPopup({ park }: { park: Park }) {
         <StatusPill status={park.status} />
         <SourceBadge source={park.source} />
       </div>
+      {alerts.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {alerts.map((alert) => {
+            const meta = CATEGORY_META[alert.category]
+            return (
+              <li key={alert.id} className={cn('flex items-center gap-1.5 border-s-4 ps-1.5 text-xs', meta.frame)}>
+                {/* The popup is always light: use the light colour of the category. */}
+                <span className={cn('[&_svg]:size-3.5', meta.text.split(' ')[0])} title={t(`category.${alert.category}`)}>
+                  {meta.icon}
+                </span>
+                <span className="font-medium">{t(`alertType.${alert.type}`)}</span>
+                <PriorityBadge priority={alert.priority} className="ms-auto px-1 py-0 text-[11px]" />
+              </li>
+            )
+          })}
+        </ul>
+      )}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
         <dt className="text-neutral-500">{t('park.moisture')}</dt>
         <dd className="font-medium">{latest?.moisture_pct != null ? `${formatNumber(latest.moisture_pct)} %` : '—'}</dd>

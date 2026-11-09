@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
+import { RealtimeBridge } from '@/components/RealtimeBridge'
 import { RequireRole } from '@/components/RequireRole'
+import { Toaster } from '@/components/ui/sonner'
 import { homeFor, useAuth } from '@/lib/auth'
 import { LoginPage } from '@/pages/LoginPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
@@ -9,6 +11,11 @@ import { PlaceholderPage } from '@/pages/PlaceholderPage'
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'))
 const ParkMap = lazy(() => import('@/pages/admin/ParkMap'))
 const ParkPage = lazy(() => import('@/pages/admin/ParkPage'))
+const TasksPage = lazy(() => import('@/pages/admin/TasksPage'))
+const DemoPage = lazy(() => import('@/pages/admin/DemoPage'))
+const WorkerLayout = lazy(() => import('@/pages/worker/WorkerLayout'))
+const MyTasksPage = lazy(() => import('@/pages/worker/MyTasksPage'))
+const TaskDetailPage = lazy(() => import('@/pages/worker/TaskDetailPage'))
 
 function Loading() {
   return <div className="h-svh" aria-busy="true" />
@@ -20,6 +27,16 @@ function Home() {
 }
 
 export default function App() {
+  return (
+    <>
+      <RealtimeBridge />
+      <Toaster position="top-center" richColors closeButton />
+      <AppRoutes />
+    </>
+  )
+}
+
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -35,16 +52,24 @@ export default function App() {
       >
         <Route index element={<Suspense fallback={null}><ParkMap /></Suspense>} />
         <Route path="parks/:id" element={<Suspense fallback={null}><ParkPage /></Suspense>} />
+        <Route path="tasks" element={<Suspense fallback={null}><TasksPage /></Suspense>} />
+        <Route path="demo" element={<Suspense fallback={null}><DemoPage /></Suspense>} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
       <Route
-        path="/worker/*"
+        path="/worker"
         element={
           <RequireRole role="worker">
-            <PlaceholderPage titleKey="placeholder.workerTitle" bodyKey="placeholder.workerBody" />
+            <Suspense fallback={<Loading />}>
+              <WorkerLayout />
+            </Suspense>
           </RequireRole>
         }
-      />
+      >
+        <Route index element={<Suspense fallback={null}><MyTasksPage /></Suspense>} />
+        <Route path="tasks/:id" element={<Suspense fallback={null}><TaskDetailPage /></Suspense>} />
+        <Route path="*" element={<Navigate to="/worker" replace />} />
+      </Route>
       <Route
         path="/municipality/*"
         element={

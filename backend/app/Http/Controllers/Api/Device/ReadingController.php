@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Device\StoreReadingRequest;
 use App\Models\Node;
 use App\Services\ReadingIngestor;
+use App\Support\Namaa;
 use Illuminate\Http\JsonResponse;
 
 class ReadingController extends Controller
@@ -22,7 +23,7 @@ class ReadingController extends Controller
         return response()->json([
             // The server decides the pump; nodes without a pump always get false.
             'pump' => $node->has_pump && $node->pump_target,
-            'interval_s' => config('namaa.demo_mode') ? config('namaa.interval_s.demo') : config('namaa.interval_s.normal'),
+            'interval_s' => Namaa::timing('interval_s'),
         ], 201);
     }
 }

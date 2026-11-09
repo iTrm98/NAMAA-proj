@@ -2,10 +2,10 @@ import { auth } from '@/lib/auth'
 import type { ValidationErrorBody } from '@/types'
 
 /**
- * The one API client. Base URL from VITE_API_URL, JSON in and out, Bearer token
- * from the auth store. A 401 signs out and goes to /login.
+ * The one API client. Base URL from VITE_API_URL, JSON in and out (FormData for
+ * uploads), Bearer token from the auth store. A 401 signs out and goes to /login.
  */
-const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
+export const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
 
 export class ApiError extends Error {
   readonly status: number
@@ -20,16 +20,29 @@ export class ApiError extends Error {
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
-export async function api<T>(path: string, options: { method?: Method; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+interface Options {
+  method?: Method
+  body?: unknown
+  signal?: AbortSignal
+}
+
+async function request(path: string, options: Options): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   const token = auth.token()
   if (token) headers.Authorization = `Bearer ${token}`
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+
+  let body: BodyInit | undefined
+  if (options.body instanceof FormData) {
+    body = options.body // the browser sets the multipart boundary
+  } else if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    body = JSON.stringify(options.body)
+  }
 
   const response = await fetch(`${BASE_URL}/api${path}`, {
     method: options.method ?? 'GET',
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body,
     signal: options.signal,
   })
 
@@ -37,6 +50,12 @@ export async function api<T>(path: string, options: { method?: Method; body?: un
     auth.signOut()
     if (window.location.pathname !== '/login') window.location.assign('/login')
   }
+
+  return response
+}
+
+export async function api<T>(path: string, options: Options = {}): Promise<T> {
+  const response = await request(path, options)
 
   if (response.status === 204) return undefined as T
 
@@ -46,4 +65,11 @@ export async function api<T>(path: string, options: { method?: Method; body?: un
   if (!response.ok) throw new ApiError(response.status, data as ValidationErrorBody | null)
 
   return data as T
+}
+
+/** A protected file (task photos are never public URLs). */
+export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await request(path, { signal })
+  if (!response.ok) throw new ApiError(response.status, null)
+  return response.blob()
 }

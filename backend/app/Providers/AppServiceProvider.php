@@ -29,5 +29,9 @@ class AppServiceProvider extends ServiceProvider
         // Device readings: per node (the token's node), so one noisy board cannot block the others.
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(config('namaa.device_readings_per_minute'))
             ->by('node:'.($request->user()?->getKey() ?? $request->ip())));
+
+        // One-click demo sign-in: 10 per minute per IP.
+        RateLimiter::for('demo-login', fn (Request $request) => Limit::perMinute(config('namaa.demo_login_per_minute'))
+            ->by('demo-login|'.$request->ip()));
     }
 }

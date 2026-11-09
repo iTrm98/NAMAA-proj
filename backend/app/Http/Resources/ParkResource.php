@@ -6,6 +6,7 @@ use App\Enums\NodeType;
 use App\Http\Resources\Concerns\FormatsTimes;
 use App\Models\Node;
 use App\Models\Park;
+use App\Support\Namaa;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,6 +23,17 @@ class ParkResource extends JsonResource
 
     public bool $detail = false;
 
+    /** Pump card data for the detail view (set by the controller). @var array<string, mixed>|null */
+    public ?array $pump = null;
+
+    /** @param array<string, mixed>|null $pump */
+    public function withPump(?array $pump): static
+    {
+        $this->pump = $pump;
+
+        return $this;
+    }
+
     public function detailed(): static
     {
         $this->detail = true;
@@ -34,6 +46,7 @@ class ParkResource extends JsonResource
     {
         $nodes = $this->nodes->sortBy('id');
         $sensor = $nodes->first(fn (Node $n) => $n->type === NodeType::Sensor);
+        $pumpNode = $nodes->first(fn (Node $n) => $n->type === NodeType::Sensor && $n->has_pump);
 
         $data = [
             'id' => $this->id,
@@ -51,7 +64,9 @@ class ParkResource extends JsonResource
             'source' => $this->source->value,
             'moisture_min' => $this->moisture_min,
             'moisture_max' => $this->moisture_max,
-            'has_pump' => $nodes->contains(fn (Node $n) => $n->type === NodeType::Sensor && $n->has_pump),
+            'has_pump' => $pumpNode !== null,
+            'pump_target' => $pumpNode?->pump_target,
+            'auto_irrigation' => $this->auto_irrigation,
             'open_alerts_count' => (int) ($this->open_alerts_count ?? 0),
             'latest' => $sensor?->last_seen_at ? [
                 'node_id' => $sensor->id,
@@ -60,6 +75,7 @@ class ParkResource extends JsonResource
                 'temperature' => $sensor->last_temperature,
                 'humidity' => $sensor->last_humidity,
                 'pump_on' => $sensor->last_pump_on,
+                'battery_pct' => $sensor->last_battery_pct,
                 'at' => $this->iso($sensor->last_seen_at),
                 'source' => $sensor->source->value,
             ] : null,
@@ -70,7 +86,7 @@ class ParkResource extends JsonResource
         }
 
         if ($this->detail) {
-            $offlineAfter = now()->subMinutes(config('namaa.offline_minutes'));
+            $offlineAfter = now()->subSeconds(Namaa::timing('offline_seconds'));
 
             $data['nodes'] = $nodes->values()->map(fn (Node $n) => [
                 'id' => $n->id,
@@ -81,16 +97,26 @@ class ParkResource extends JsonResource
                 'source' => $n->source->value,
                 'has_pump' => $n->has_pump,
                 'pump_target' => $n->pump_target,
+                'battery_pct' => $n->last_battery_pct,
+                'expected_flow_l_min' => $n->expected_flow_l_min,
             ])->all();
 
             $data['open_alerts'] = $this->openAlerts->map(fn ($a) => [
                 'id' => $a->id,
                 'node_id' => $a->node_id,
                 'type' => $a->type->value,
-                'severity' => $a->severity->value,
+                'category' => $a->type->category()->value,
+                'priority' => $a->priority->value,
+                'task_ready' => $a->isTaskReady(),
                 'data' => $a->data,
                 'created_at' => $this->iso($a->created_at),
             ])->all();
+
+            $data['open_tasks'] = $this->relationLoaded('activeTasks')
+                ? TaskResource::collection($this->activeTasks)->resolve()
+                : [];
+
+            $data['pump'] = $this->pump;
         }
 
         return $data;

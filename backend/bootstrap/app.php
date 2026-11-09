@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Middleware\EnsureDemoMode;
+use App\Http\Middleware\EnsureDeviceToken;
+use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureUserToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -10,18 +14,24 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
-        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
     )
+    // Private channel auth for the dashboard: POST /api/broadcasting/auth with
+    // the Bearer token (no session, no cookies).
+    ->withBroadcasting(__DIR__.'/../routes/channels.php', [
+        'prefix' => 'api',
+        'middleware' => ['auth:sanctum', 'user.token'],
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         // API only: an unauthenticated request gets 401 JSON, never a redirect
         // to a "login" route (there is none).
         $middleware->redirectGuestsTo(fn () => null);
 
         $middleware->alias([
-            'user.token' => \App\Http\Middleware\EnsureUserToken::class,
-            'device.token' => \App\Http\Middleware\EnsureDeviceToken::class,
-            'role' => \App\Http\Middleware\EnsureRole::class,
+            'user.token' => EnsureUserToken::class,
+            'device.token' => EnsureDeviceToken::class,
+            'role' => EnsureRole::class,
+            'demo' => EnsureDemoMode::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

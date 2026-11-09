@@ -24,8 +24,15 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => __('auth.failed')]);
         }
 
-        $token = $user->createToken('dashboard', ['user'])->plainTextToken;
         $logger->log('auth.login', $user, user: $user);
+
+        return self::tokenResponse($user);
+    }
+
+    /** A new user token (ability `user`) and the user: the login response, also used by the demo login. */
+    public static function tokenResponse(User $user): JsonResponse
+    {
+        $token = $user->createToken('dashboard', ['user'])->plainTextToken;
 
         return response()->json([
             'token' => $token,

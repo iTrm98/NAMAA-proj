@@ -161,7 +161,7 @@ class DemoHistorySeeder extends Seeder
             'status' => TaskStatus::Done,
             'started_at' => $startedAt,
             'done_at' => $doneAt,
-            'note' => $note,
+            'done_note' => $note,
             'verified' => true,
             'verified_at' => $verifiedAt,
             'time_to_resolve_min' => $minutes,

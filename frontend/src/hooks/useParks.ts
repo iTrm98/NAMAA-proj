@@ -2,8 +2,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Park, ParkDetail, ReadingRange, ReadingSeries } from '@/types'
 
-/** Polling every 15 s until live push (Reverb) arrives in Sprint 2. */
-export const POLL_MS = 15_000
+/** Live updates come over Reverb; polling every 60 s is only the fallback. */
+export const POLL_MS = 60_000
 
 export function useParks() {
   return useQuery({

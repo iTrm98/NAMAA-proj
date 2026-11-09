@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'node_id', 'park_id', 'moisture_raw', 'moisture_pct', 'flow', 'temperature',
-    'humidity', 'pump_on', 'water_level', 'source', 'created_at',
+    'humidity', 'pump_on', 'water_level', 'battery_pct', 'source', 'created_at',
 ])]
 class Reading extends Model
 {
@@ -33,6 +33,7 @@ class Reading extends Model
             'humidity' => 'float',
             'pump_on' => 'boolean',
             'water_level' => 'integer',
+            'battery_pct' => 'float',
             'source' => DataSource::class,
             'created_at' => 'datetime',
         ];

@@ -1,26 +1,56 @@
-import { Map as MapIcon } from 'lucide-react'
+import { ClipboardList, FlaskConical, Map as MapIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, Outlet } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { AppHeader } from '@/components/AppHeader'
 import { SourceBadge, StatusPill } from '@/components/StatusPill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDemoStatus } from '@/hooks/useOps'
 import { parkName, useParks } from '@/hooks/useParks'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/** /admin: header, park list on the start side, main area (map or park page). */
+/** /admin: header with Map · Tasks (· Demo), park list on the start side (map and park pages), main area. */
 export default function AdminLayout() {
+  const { pathname } = useLocation()
+  const wide = pathname.startsWith('/admin/tasks') || pathname.startsWith('/admin/demo')
+
   return (
     <div className="flex h-svh flex-col">
-      <AppHeader />
+      <AppHeader nav={<AdminNav />} />
       <div className="flex min-h-0 flex-1">
-        <ParkSidebar />
+        {!wide && <ParkSidebar />}
         <main className="min-w-0 flex-1 overflow-y-auto">
           <Outlet />
         </main>
       </div>
     </div>
+  )
+}
+
+function NavItem({ to, active, icon, label }: { to: string; active: boolean; icon: ReactNode; label: string }) {
+  return (
+    <Button asChild variant={active ? 'secondary' : 'ghost'} size="sm">
+      <Link to={to} aria-current={active ? 'page' : undefined}>
+        {icon}
+        <span className="hidden sm:inline">{label}</span>
+      </Link>
+    </Button>
+  )
+}
+
+function AdminNav() {
+  const { t } = useTranslation()
+  const demo = useDemoStatus()
+  const { pathname } = useLocation()
+
+  return (
+    <nav className="ms-2 flex items-center gap-1">
+      <NavItem to="/admin" active={pathname === '/admin' || pathname.startsWith('/admin/parks')} icon={<MapIcon />} label={t('nav.map')} />
+      <NavItem to="/admin/tasks" active={pathname.startsWith('/admin/tasks')} icon={<ClipboardList />} label={t('nav.tasks')} />
+      {demo.data && <NavItem to="/admin/demo" active={pathname.startsWith('/admin/demo')} icon={<FlaskConical />} label={t('nav.demo')} />}
+    </nav>
   )
 }
 

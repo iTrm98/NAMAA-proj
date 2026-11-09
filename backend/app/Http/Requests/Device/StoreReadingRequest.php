@@ -23,6 +23,8 @@ class StoreReadingRequest extends FormRequest
             'humidity' => ['nullable', 'numeric', 'between:0,100'],
             'pump_on' => ['nullable', 'boolean'],
             'water_level' => ['nullable', 'integer', 'between:0,4095'],
+            // Field version (solar + battery). The USB-powered boards never send it.
+            'battery_pct' => ['nullable', 'numeric', 'between:0,100'],
         ];
     }
 }

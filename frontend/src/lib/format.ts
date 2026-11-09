@@ -41,3 +41,14 @@ export function formatAgo(iso: string | null | undefined): string {
   if (Math.abs(hours) < 48) return rtf.format(-hours, 'hour')
   return rtf.format(-Math.round(hours / 24), 'day')
 }
+
+/** A duration in words ("2 h 05 min", "3 min", "45 s"); seconds >= 0. */
+export function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds))
+  if (s < 60) return i18n.t('common.durationS', { s })
+  const m = Math.floor(s / 60)
+  if (m < 60) return i18n.t('common.durationM', { m })
+  const h = Math.floor(m / 60)
+  if (h < 48) return i18n.t('common.durationH', { h, m: String(m % 60).padStart(2, '0') })
+  return i18n.t('common.durationD', { d: Math.floor(h / 24), h: h % 24 })
+}

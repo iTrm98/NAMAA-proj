@@ -85,8 +85,8 @@ Two demo settings live there too:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `DEMO_PASSWORD` | `password` | Password of the four demo accounts the seed creates (see 2.3). Change it before showing the demo on a shared network. |
-| `DEMO_MODE` | `false` | `true`: the boards report every 5 s instead of 30 s. The server sends the interval in every reply, so no re-flashing is needed; run `docker compose up -d` after changing it. |
+| `DEMO_PASSWORD` | `password` | Password of the four demo accounts the seed creates (see 2.3). It must match the password the accounts were seeded with; the one-click demo buttons log in with it. |
+| `DEMO_MODE` | `false` | `true`: fast timings (readings every 5 s, short response times, ...), the one-click demo buttons and the `/admin/demo` page (see 3.2). The server sends the interval in every reply, so no re-flashing is needed; run `docker compose up -d` after changing it. |
 
 This root `.env` is the only settings file for the Database, Back and AI. Two others appear later: `backend/.env` (Laravel's own, overridden by the root file, ignore it) and `frontend/.env` (dashboard settings, step 2.4).
 
@@ -304,6 +304,67 @@ docker compose down -v                              # stop and DELETE the databa
 
 After editing the root `.env`, run `docker compose up -d` (a restart does not re-read it).
 
+## 3.1 Background services
+
+Besides the API, three containers keep the system running. If one is down, `docker compose up -d` starts it again.
+
+| Container | Role | If it stops |
+|---|---|---|
+| `scheduler` | Every minute: the simulator (readings for the simulated parks), the offline check, the pump safety cut-off, the task verification and the task escalation. Each command repeats inside the minute (every 5 to 10 s in demo mode). | Simulated parks stop reporting; offline alerts, the safety cut-off, verification and escalation stop. Done tasks stay "Waiting". |
+| `queue` | Background jobs (camera photos, NDVI). | Photos and NDVI stop updating. |
+| `reverb` | Live updates to the browsers (WebSocket, port 8080): readings, alerts, tasks, pump. | The pages still refresh every minute; the "Live" dot turns amber. |
+
+## 3.2 Demo mode
+
+Demo mode makes everything fast enough to show live. It also turns on the demo helpers below. **Never leave it on outside a demo**: it lets anyone sign in with one click.
+
+| | Normal | Demo mode |
+|---|---|---|
+| Readings (boards and simulator) | every 30 s | every 5 s |
+| Node offline | after 5 min | after 30 s |
+| Offline alert ready for a task | after 30 min | after 2 min |
+| Pump safety cut-off | 15 min | 3 min |
+| Verification after Done | 10 min of normal readings (gives up after 60 min) | 1 min (gives up after 3 min) |
+| Response time: urgent / high / normal / low | 1 h / 6 h / 48 h / 7 d | 2 / 4 / 6 / 10 min |
+
+A task that is not started by its response time goes up one priority level (and gets a new response time); an urgent one is marked **Overdue**. Admins get a notice each time. Tasks already in progress are not escalated. In demo mode the park page opens on the **1 hour** chart (24 hours otherwise).
+
+Turn it on for one session without editing `.env` (PowerShell):
+
+```powershell
+$env:DEMO_MODE='true'; docker compose up -d --force-recreate backend queue scheduler reverb
+```
+
+Back to normal:
+
+```powershell
+Remove-Item Env:DEMO_MODE; docker compose up -d --force-recreate backend queue scheduler reverb
+```
+
+(Or set `DEMO_MODE=true` in the root `.env` and run `docker compose up -d`.)
+
+In demo mode:
+
+- **Login page:** under a "Demo" divider, **Enter as Admin** and **Enter as Worker** sign in with the seeded accounts in one click (open the worker in a second browser profile or a phone).
+- **`/admin/demo`** (the "Demo" link in the admin menu): one button per scenario, each with what the audience will see. Scenarios only touch the **simulated** parks; real parks are never changed.
+- The same scenarios from the command line:
+
+```bash
+docker compose exec backend php artisan namaa:scenario reset     # back to the start: Al Adel dry (pump off), others healthy, batteries full, alerts and tasks cleared
+docker compose exec backend php artisan namaa:scenario dry       # Al Adel below its minimum: high-priority dry alert after 2 readings
+docker compose exec backend php artisan namaa:scenario heat      # Al Adel at about 42 °C: the open dry alert becomes heat stress (urgent), no second alert
+docker compose exec backend php artisan namaa:scenario escalate  # the newest open, not started task reaches its due time: priority up (or Overdue) within 10 s
+docker compose exec backend php artisan namaa:scenario leak      # Alkhatateen: water flows with the pump off, urgent leak alert within 3 readings
+docker compose exec backend php artisan namaa:scenario blockage  # Al Adel's pump runs but the flow drops to a third: blockage alert after 3 readings
+docker compose exec backend php artisan namaa:scenario battery   # Al Adel's battery drops to 15 %: low battery alert after 2 readings
+docker compose exec backend php artisan namaa:scenario offline   # Alhilal stops reporting: grey after 30 s, ready for a task after 2 min
+docker compose exec backend php artisan namaa:scenario recover   # ends heat, leak, blockage, low battery and the offline sensor; the alerts resolve on their own
+```
+
+**Battery** and **blockage** are field-version alerts: they run on the **simulated parks only** (the real boards have no battery reading and no expected flow yet), and the UI labels them "Simulated".
+
+A typical run: `reset` → the dry alert appears (high) → `heat` → the same alert becomes heat stress (urgent) → the admin creates a task for a worker → `escalate` → the task shows **Overdue** and the admin gets a notice → the worker taps Start, Pump on, then Done → after about a minute of normal readings the task shows **Verified ✓** on both screens. Finish with `recover` and `reset`.
+
 ---
 
 # 4. Troubleshooting
@@ -319,6 +380,7 @@ After editing the root `.env`, run `docker compose up -d` (a restart does not re
 | DBeaver: `Public Key Retrieval is not allowed` | Driver properties: `allowPublicKeyRetrieval=true`, `useSSL=false`. |
 | `required variable ... is missing` | The root `.env` is missing or incomplete. |
 | CORS error in the browser | The backend must allow `http://localhost:5173`. |
+| `Port 5173 is already in use` | The dashboard always uses 5173 (another port breaks CORS and sign-in), so a second `npm run dev` stops with this error. Find the old one in PowerShell: `Get-NetTCPConnection -LocalPort 5173 \| Select-Object OwningProcess`, then `Stop-Process -Id <pid>`, and run `npm run dev` again. If the page stays black after new libraries were installed: `npm run dev -- --force`. |
 | Everything slow | The project is inside OneDrive. Move it to `C:\dev`. |
 
 When asking for help, share `docker compose ps` and `docker compose logs --tail 30 <part>`.

@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\PumpReason;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\SwitchPumpRequest;
 use App\Http\Requests\Admin\UpdateParkRequest;
 use App\Http\Resources\ParkResource;
 use App\Models\Park;
 use App\Services\ActivityLogger;
+use App\Services\PumpService;
 use App\Services\ReadingSeries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +19,8 @@ use Illuminate\Validation\Rule;
 
 class ParkController extends Controller
 {
+    public function __construct(private readonly PumpService $pump) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $parks = Park::forCompany($request->user()->company_id)
@@ -34,17 +39,35 @@ class ParkController extends Controller
         return $this->detail($park);
     }
 
+    /** Thresholds and automatic irrigation; changes logged as park.updated with before/after. */
     public function update(UpdateParkRequest $request, Park $park, ActivityLogger $logger): ParkResource
     {
-        $before = $park->only(['moisture_min', 'moisture_max']);
+        $fields = ['moisture_min', 'moisture_max', 'auto_irrigation'];
+        $before = $park->only($fields);
         $park->fill($request->validated())->save();
-        $after = $park->only(['moisture_min', 'moisture_max']);
+        $after = $park->only($fields);
 
-        if ($before !== $after) {
-            $logger->log('park.updated', $park, ['before' => $before, 'after' => $after]);
+        $changed = array_keys(array_filter($after, fn ($value, $key) => $before[$key] !== $value, ARRAY_FILTER_USE_BOTH));
+
+        if ($changed !== []) {
+            $logger->log('park.updated', $park, [
+                'before' => array_intersect_key($before, array_flip($changed)),
+                'after' => array_intersect_key($after, array_flip($changed)),
+            ]);
         }
 
         return $this->detail($park);
+    }
+
+    /** POST /api/admin/parks/{park}/pump: manual switch by an admin. */
+    public function pump(SwitchPumpRequest $request, Park $park): JsonResponse
+    {
+        $node = $park->pumpNode()->first();
+        abort_if($node === null, 422, 'This park has no pump.');
+
+        $this->pump->set($node, $request->boolean('on'), PumpReason::Manual, $request->user());
+
+        return response()->json(['data' => $this->pump->state($park->load('nodes'))]);
     }
 
     public function readings(Request $request, Park $park, ReadingSeries $series): JsonResponse
@@ -60,8 +83,9 @@ class ParkController extends Controller
 
     private function detail(Park $park): ParkResource
     {
-        $park->load(['nodes', 'openAlerts'])->loadCount(['openAlerts as open_alerts_count']);
+        $park->load(['nodes', 'openAlerts', 'activeTasks.assignee', 'activeTasks.alert'])
+            ->loadCount(['openAlerts as open_alerts_count']);
 
-        return (new ParkResource($park))->detailed();
+        return (new ParkResource($park))->detailed()->withPump($this->pump->state($park));
     }
 }

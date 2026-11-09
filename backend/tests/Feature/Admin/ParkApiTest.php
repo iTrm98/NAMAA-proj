@@ -3,6 +3,7 @@
 namespace Tests\Feature\Admin;
 
 use App\Enums\ParkStatus;
+use App\Models\ActivityLog;
 use App\Models\Alert;
 use App\Models\Company;
 use App\Models\Node;
@@ -140,25 +141,37 @@ class ParkApiTest extends TestCase
 
         $day = $this->as($this->admin)->getJson("/api/admin/parks/{$this->park->id}/readings?range=24h");
 
+        // Every 5-min bucket of the window, oldest first: 2026-11-07 12:00 ... 2026-11-08 12:00.
         $day->assertOk()
             ->assertJsonPath('range', '24h')
             ->assertJsonPath('bucket_seconds', 300)
             ->assertJsonPath('source', 'real')
-            ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.t', '2026-11-08T11:50:00Z')
-            ->assertJsonPath('data.0.moisture_pct', 41)
-            ->assertJsonPath('data.0.temperature', 31)
-            ->assertJsonPath('data.0.readings', 2)
-            ->assertJsonPath('data.1.t', '2026-11-08T11:55:00Z')
-            ->assertJsonPath('data.1.temperature', null);
+            ->assertJsonCount(289, 'data')
+            ->assertJsonPath('data.0.t', '2026-11-07T12:00:00Z')
+            ->assertJsonPath('data.0.moisture_pct', null)
+            ->assertJsonPath('data.0.readings', 0)
+            ->assertJsonPath('data.286.t', '2026-11-08T11:50:00Z')
+            ->assertJsonPath('data.286.moisture_pct', 41)
+            ->assertJsonPath('data.286.temperature', 31)
+            ->assertJsonPath('data.286.readings', 2)
+            ->assertJsonPath('data.287.t', '2026-11-08T11:55:00Z')
+            ->assertJsonPath('data.287.temperature', null)
+            ->assertJsonPath('data.288.t', '2026-11-08T12:00:00Z')
+            ->assertJsonPath('data.288.readings', 0);
+        $this->assertSame(3, collect($day->json('data'))->sum('readings'), 'a gap is null, never interpolated');
 
         $week = $this->getJson("/api/admin/parks/{$this->park->id}/readings?range=7d");
-        $week->assertOk()
-            ->assertJsonPath('bucket_seconds', 3600)
-            ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.t', '2026-11-07T10:00:00Z')
-            ->assertJsonPath('data.1.t', '2026-11-08T11:00:00Z')
-            ->assertJsonPath('data.1.readings', 3);
+        $week->assertOk()->assertJsonPath('bucket_seconds', 3600)->assertJsonCount(169, 'data');
+        $filled = collect($week->json('data'))->where('readings', '>', 0)->values();
+        $this->assertSame(['2026-11-07T10:00:00Z', '2026-11-08T11:00:00Z'], $filled->pluck('t')->all());
+        $this->assertSame(3, $filled[1]['readings']);
+
+        // 1 hour, 30 s buckets: 11:02:00 ... 12:02:00.
+        $hour = $this->getJson("/api/admin/parks/{$this->park->id}/readings?range=1h");
+        $hour->assertOk()->assertJsonPath('bucket_seconds', 30)->assertJsonCount(121, 'data')
+            ->assertJsonPath('data.0.t', '2026-11-08T11:02:00Z');
+        $this->assertSame(['2026-11-08T11:50:00Z', '2026-11-08T11:52:30Z', '2026-11-08T11:56:00Z'],
+            collect($hour->json('data'))->where('readings', '>', 0)->pluck('t')->values()->all());
 
         $this->getJson("/api/admin/parks/{$this->park->id}/readings?range=1y")->assertStatus(422);
         Carbon::setTestNow();
@@ -171,7 +184,7 @@ class ParkApiTest extends TestCase
             ->assertJsonPath('data.moisture_min', 30)
             ->assertJsonPath('data.moisture_max', 65);
 
-        $log = \App\Models\ActivityLog::where('action', 'park.updated')->sole();
+        $log = ActivityLog::where('action', 'park.updated')->sole();
         $this->assertSame($this->admin->id, $log->user_id);
         $this->assertSame($this->company->id, $log->company_id);
         $this->assertSame(['moisture_min' => 25, 'moisture_max' => 70], $log->diff['before']);

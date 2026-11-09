@@ -9,7 +9,17 @@
     "retry": "Retry",
     "back": "Back",
     "never": "Never",
-    "none": "None"
+    "none": "None",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "close": "Close",
+    "all": "All",
+    "minutes": "{{n}} min",
+    "durationH": "{{h}} h {{m}} min",
+    "durationD": "{{d}} d {{h}} h",
+    "durationM": "{{m}} min",
+    "durationS": "{{s}} s"
   },
   "header": {
     "logout": "Sign out",
@@ -32,11 +42,13 @@
     "submitting": "Signing in…",
     "invalid": "The email or password is incorrect.",
     "tooMany": "Too many attempts. Wait a minute and try again.",
-    "failed": "Could not reach the server. Check that it is running."
+    "failed": "Could not reach the server. Check that it is running.",
+    "demoDivider": "Demo",
+    "enterAdmin": "Enter as Admin",
+    "enterWorker": "Enter as Worker",
+    "demoFailed": "Demo sign-in failed."
   },
   "placeholder": {
-    "workerTitle": "My tasks",
-    "workerBody": "My tasks arrive in Sprint 2.",
     "municipalityTitle": "Municipality overview",
     "municipalityBody": "The read-only overview of every company arrives in Sprint 2."
   },
@@ -68,12 +80,10 @@
     "offline": "Node offline",
     "sensor_fault": "Sensor fault",
     "litter": "Litter detected",
-    "ndvi_drop": "Green cover dropping"
-  },
-  "severity": {
-    "info": "Info",
-    "warning": "Warning",
-    "critical": "Critical"
+    "ndvi_drop": "Green cover dropping",
+    "heat_stress": "Heat stress on dry soil",
+    "blockage": "Low flow (blockage)",
+    "low_battery": "Low battery"
   },
   "admin": {
     "parks": "Parks",
@@ -113,8 +123,281 @@
     "openAlerts": "Open alerts",
     "noAlerts": "No open alerts.",
     "notFound": "This park was not found.",
-    "refreshNote": "Updates every 15 seconds",
     "district": "District",
-    "area": "{{area}} m²"
+    "area": "{{area}} m²",
+    "openTasks": "Open tasks",
+    "noTasks": "No open tasks.",
+    "createTask": "Create task",
+    "liveNote": "Live: updates as readings arrive",
+    "range1h": "1 hour",
+    "noDataBand": "No data",
+    "battery": "Battery",
+    "chartBattery": "Battery (%)",
+    "chartFlow": "Water flow (L/min)",
+    "simulated": "Simulated",
+    "expectedFlow": "Expected flow {{flow}} L/min"
+  },
+  "live": {
+    "live": "Live",
+    "reconnecting": "Reconnecting…",
+    "liveHint": "Live updates are on",
+    "reconnectingHint": "Live updates paused; the page still refreshes every minute"
+  },
+  "nav": {
+    "map": "Map",
+    "tasks": "Tasks",
+    "demo": "Demo"
+  },
+  "priority": {
+    "low": "Low",
+    "normal": "Normal",
+    "high": "High",
+    "urgent": "Urgent"
+  },
+  "taskStatus": {
+    "open": "Open",
+    "in_progress": "In progress",
+    "done": "Done",
+    "cancelled": "Cancelled"
+  },
+  "verify": {
+    "verified": "Verified",
+    "notVerified": "Not verified",
+    "waiting": "Checking",
+    "no_data": "No data after the fix",
+    "not_recovered": "Readings did not recover",
+    "condition_returned": "The problem came back in the readings"
+  },
+  "pumpReason": {
+    "manual": "Manual",
+    "task": "Task",
+    "rule": "Automatic",
+    "system": "Demo reset",
+    "safety": "Safety cut-off"
+  },
+  "alertDetail": {
+    "dry": "Moisture {{value}} %, below {{min}} %",
+    "over": "Moisture {{value}} %, above {{max}} %",
+    "no_flow": "Pump on, flow {{flow}} L/min",
+    "leak": "{{flow}} L/min with the pump off",
+    "offline": "Last reading {{since}}",
+    "offlineNever": "Never reported",
+    "sensor_fault": "Raw value {{raw}}",
+    "heat_stress": "Moisture {{value}} %, below {{min}} %, at {{temp}} °C",
+    "blockage": "Flow {{flow}} L/min, expected {{expected}} L/min",
+    "low_battery": "Battery {{value}} %",
+    "sensor_fault_stuck": "Raw value stuck at {{raw}}"
+  },
+  "action": {
+    "dry": "Check that the irrigation runs: valve open, pump working, drippers not blocked. Water the area. If the irrigation looks fine, check that the sensor is still pushed into the soil.",
+    "over": "Stop or shorten the irrigation. Look for pooling water, a stuck valve or a leaking pipe.",
+    "no_flow": "Turn the pump off. Check the tank level, the pipe for kinks or a blockage, and the pump power. Restart and watch the flow.",
+    "leak": "Close the main valve. Walk the line from the tank to the drippers and look for wet ground or a broken fitting.",
+    "offline": "Check the node's power and that the Wi-Fi hotspot is on. Restart the board. If it still does not report, swap in the spare.",
+    "sensor_fault": "Check the sensor cable and connector. Re-seat the soil probe. Replace the sensor if it keeps failing.",
+    "litter": "Collect the litter in the camera's view. Add a photo when you mark the task done.",
+    "ndvi_drop": "Walk the park and look for dry patches, damaged irrigation lines or removed plants.",
+    "manual": "Follow the admin's note.",
+    "heat_stress": "Water now: the soil is dry and it is very hot, plants can be damaged within the hour. Check the valve, the pump and the drippers, and water the area by hand if needed.",
+    "blockage": "The pump runs but too little water flows. Clean the filter, look for kinked or crushed pipes and blocked drippers, then watch the flow.",
+    "low_battery": "Clean the solar panel and check its cable. If the battery stays low, swap it at the next visit."
+  },
+  "taskTitle": {
+    "dry": "Irrigate {{park}}",
+    "over": "Reduce irrigation at {{park}}",
+    "no_flow": "Check the pump at {{park}}",
+    "leak": "Fix the leak at {{park}}",
+    "offline": "Restart the sensor at {{park}}",
+    "sensor_fault": "Check the sensor at {{park}}",
+    "litter": "Collect litter at {{park}}",
+    "ndvi_drop": "Inspect the green cover at {{park}}",
+    "manual": "Check {{park}}",
+    "heat_stress": "Water {{park}} now (heat stress)",
+    "blockage": "Clear the blockage at {{park}}",
+    "low_battery": "Check the battery at {{park}}"
+  },
+  "alerts": {
+    "title": "Open alerts",
+    "empty": "No open alerts. Every park is fine.",
+    "createTask": "Create task",
+    "assignedTo": "Task assigned to {{name}}",
+    "taskUnassigned": "Task created, not assigned yet",
+    "autoRunning": "Automatic irrigation running",
+    "since": "since {{time}}",
+    "watching": "Watching: a task can be created after {{n}} min offline",
+    "raisedNow": "Priority raised: {{type}} at {{park}} is now {{priority}}"
+  },
+  "createTask": {
+    "title": "Create task",
+    "forAlert": "From the alert: {{type}}",
+    "forPark": "Task for {{park}}",
+    "worker": "Worker",
+    "unassigned": "Not assigned yet",
+    "workerLoad": "{{name}} (open tasks: {{n}})",
+    "priority": "Priority",
+    "suggested": "suggested",
+    "taskTitle": "Title",
+    "note": "Note for the worker",
+    "notePlaceholder": "What should the worker know? (optional)",
+    "submit": "Create task",
+    "submitting": "Creating…",
+    "created": "Task created"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "subtitle": "Active tasks first, by priority; then finished tasks, newest first.",
+    "status": "Status",
+    "park": "Park",
+    "allParks": "All parks",
+    "allStatuses": "All statuses",
+    "empty": "No tasks match these filters.",
+    "colPriority": "Priority",
+    "colTask": "Task",
+    "colPark": "Park",
+    "colWorker": "Worker",
+    "colStatus": "Status",
+    "colVerification": "Verification",
+    "colTime": "Time to resolve",
+    "colCreated": "Created",
+    "colPhoto": "Photo",
+    "colActions": "Actions",
+    "unassigned": "Unassigned",
+    "reassign": "Reassign",
+    "reassignTitle": "Reassign the task",
+    "reassigned": "Task reassigned",
+    "cancel": "Cancel task",
+    "cancelTitle": "Cancel this task?",
+    "cancelBody": "The worker will no longer see it as open. This cannot be undone.",
+    "cancelled": "Task cancelled",
+    "photoAlt": "Photo from the worker",
+    "doneNote": "Worker's note",
+    "overdue": "Overdue",
+    "colDue": "Response time",
+    "escalatedToast": "Task escalated: {{title}} is now {{priority}}",
+    "overdueToast": "Task overdue: {{title}} (urgent, not started)"
+  },
+  "pump": {
+    "title": "Pump",
+    "on": "On",
+    "off": "Off",
+    "turnOn": "Turn pump on",
+    "turnOff": "Turn pump off",
+    "confirmOnTitle": "Turn the pump on?",
+    "confirmOffTitle": "Turn the pump off?",
+    "confirmBody": "The board applies it with its next reading (within {{n}} seconds).",
+    "target": "Command",
+    "reported": "Board reports",
+    "unknown": "Not reported yet",
+    "lastChange": "Last change",
+    "system": "System",
+    "cutoffIn": "Safety cut-off in {{time}}",
+    "maxRun": "Safety cut-off after {{n}} min of running",
+    "noPump": "This park has no pump.",
+    "autoTitle": "Automatic irrigation",
+    "autoHelp": "Turns the pump on when the soil is dry and off when it reaches {{mid}} %. The safety cut-off still applies.",
+    "autoOn": "Automatic irrigation on",
+    "autoOff": "Automatic irrigation off",
+    "autoRunning": "Automatic irrigation running",
+    "switched": "Pump command sent"
+  },
+  "demo": {
+    "title": "Demo controls",
+    "intro": "Each button changes the simulated parks only. The real parks are never touched.",
+    "notDemo": "Demo mode is off. Set DEMO_MODE=true in the root .env and restart the containers.",
+    "run": "Run",
+    "running": "Running…",
+    "done": "Scenario started: {{name}}",
+    "confirmResetTitle": "Reset the demo?",
+    "confirmResetBody": "Open alerts of the simulated parks are resolved and their open tasks cancelled. History is kept.",
+    "scenario": {
+      "reset": {
+        "title": "Reset",
+        "body": "Back to the start of the story: Al Adel dry (about 22 %, pump off), the other parks healthy, batteries near 100 %, alerts and tasks cleared."
+      },
+      "dry": {
+        "title": "Dry soil",
+        "body": "Al Adel drops below its minimum: after 2 readings a high-priority dry alert appears on the map."
+      },
+      "leak": {
+        "title": "Leak",
+        "body": "Alkhatateen shows water flowing with the pump off: an urgent leak alert within 3 readings."
+      },
+      "offline": {
+        "title": "Sensor offline",
+        "body": "Alhilal's sensor stops reporting: after 30 seconds the park turns grey; after 2 minutes the alert is ready for a task."
+      },
+      "recover": {
+        "title": "Recover",
+        "body": "Ends heat, leak, blockage, low battery and the offline sensor; the alerts resolve on their own."
+      },
+      "heat": {
+        "title": "Heat stress",
+        "body": "Al Adel's temperature rises to about 42 °C: the open dry alert turns into heat stress (urgent) within one reading, with no second alert."
+      },
+      "blockage": {
+        "title": "Blockage",
+        "body": "While Al Adel's pump is on, its flow drops to about a third of expected: a high-priority blockage alert after 3 readings (field version, simulated parks only)."
+      },
+      "battery": {
+        "title": "Low battery",
+        "body": "Al Adel's simulated battery drops to 15 %: a low-priority low battery alert after 2 readings (field version, simulated parks only)."
+      },
+      "escalate": {
+        "title": "Escalate",
+        "body": "The newest open, not started task reaches its due time now: within 10 seconds its priority goes up (or it is flagged overdue) and you get a notice."
+      }
+    }
+  },
+  "worker": {
+    "myTasks": "My tasks",
+    "empty": "No tasks right now. New tasks appear here by themselves.",
+    "recent": "Recently finished",
+    "newTask": "New task",
+    "open": "Open",
+    "enableSound": "Enable sound",
+    "ago": "{{time}}",
+    "start": "Start",
+    "pumpOn": "Pump on",
+    "pumpOff": "Pump off",
+    "pumpRunning": "Pump running",
+    "pumpStopped": "Pump off",
+    "pumpSent": "Command sent. The pump follows within a few seconds.",
+    "noPump": "This park has no pump.",
+    "done": "Done",
+    "doneTitle": "Finish the task",
+    "note": "What did you do?",
+    "notePlaceholder": "For example: opened the valve, cleaned two drippers",
+    "photo": "Photo (optional)",
+    "takePhoto": "Take a photo",
+    "changePhoto": "Change photo",
+    "submitDone": "Mark as done",
+    "sending": "Sending…",
+    "waiting": "Waiting for verification… the system is checking the readings.",
+    "verified": "Verified: the readings confirm the fix.",
+    "verifiedIn": "Solved in {{n}} min.",
+    "notVerified": "Not verified",
+    "cancelled": "This task was cancelled.",
+    "moistureNow": "Soil moisture now",
+    "range": "Healthy range {{min}}–{{max}} %",
+    "problem": "What is wrong",
+    "whatToDo": "What to do",
+    "adminNote": "Note from the admin",
+    "back": "My tasks",
+    "notFound": "This task was not found.",
+    "startFirst": "Start the task to use the pump.",
+    "urgent": "Urgent"
+  },
+  "category": {
+    "water": "Water & irrigation",
+    "plant": "Plant health",
+    "cleanliness": "Cleanliness",
+    "devices": "Devices"
+  },
+  "due": {
+    "left": "{{time}} left",
+    "overdueBy": "Overdue by {{time}}",
+    "overdue": "Overdue",
+    "escalated": "Escalated",
+    "escalatedTimes": "Escalated ×{{n}}"
   }
 }

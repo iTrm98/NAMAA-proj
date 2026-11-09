@@ -14,7 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'company_id', 'park_id', 'alert_id', 'assigned_to', 'created_by', 'title',
     'priority', 'status', 'started_at', 'done_at', 'note', 'photo_path',
-    'verified', 'verified_at', 'time_to_resolve_min', 'water_used_l',
+    'done_note', 'done_photo_path', 'verified', 'verified_at', 'verify_reason',
+    'time_to_resolve_min', 'water_used_l', 'due_at', 'escalated_at', 'escalation_count', 'overdue_at',
 ])]
 class Task extends Model
 {
@@ -32,6 +33,10 @@ class Task extends Model
             'verified_at' => 'datetime',
             'time_to_resolve_min' => 'integer',
             'water_used_l' => 'float',
+            'due_at' => 'datetime',
+            'escalated_at' => 'datetime',
+            'escalation_count' => 'integer',
+            'overdue_at' => 'datetime',
         ];
     }
 
@@ -63,6 +68,35 @@ class Task extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** @param Builder<Task> $query */
+    public function scopeActive(Builder $query): void
+    {
+        $query->whereIn('status', TaskStatus::active());
+    }
+
+    /**
+     * Urgent first, then high, normal, low; oldest first within a priority.
+     *
+     * @param  Builder<Task>  $query
+     */
+    public function scopeByPriority(Builder $query): void
+    {
+        $query->orderByRaw(TaskPriority::orderSql())
+            ->orderBy('created_at')->orderBy('id');
+    }
+
+    /** Active and past its due time. */
+    public function isOverdue(): bool
+    {
+        return $this->status->isActive() && $this->due_at !== null && $this->due_at->isPast();
+    }
+
+    /** @param Builder<Task> $query */
+    public function scopeOverdue(Builder $query): void
+    {
+        $query->whereIn('status', TaskStatus::active())->whereNotNull('due_at')->where('due_at', '<', now());
     }
 
     /** @param Builder<Task> $query */

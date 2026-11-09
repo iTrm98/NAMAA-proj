@@ -22,6 +22,7 @@ class UpdateParkRequest extends FormRequest
         return [
             'moisture_min' => ['sometimes', 'required', 'integer', 'between:0,100'],
             'moisture_max' => ['sometimes', 'required', 'integer', 'between:0,100'],
+            'auto_irrigation' => ['sometimes', 'required', 'boolean'],
         ];
     }
 
@@ -40,6 +41,10 @@ class UpdateParkRequest extends FormRequest
 
             if ($min >= $max) {
                 $validator->errors()->add('moisture_min', 'moisture_min must be lower than moisture_max.');
+            }
+
+            if ($this->boolean('auto_irrigation') && ! $park->pumpNode()->exists()) {
+                $validator->errors()->add('auto_irrigation', 'Automatic irrigation needs a park with a pump.');
             }
         }];
     }

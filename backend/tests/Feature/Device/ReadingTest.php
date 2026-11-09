@@ -84,31 +84,25 @@ class ReadingTest extends TestCase
         $this->assertNull($calibration->moisturePct($node, null));
     }
 
-    public function test_park_status_follows_the_thresholds_and_only_stamps_changes(): void
+    public function test_park_status_comes_from_the_rules_engine_and_only_stamps_changes(): void
     {
         $node = $this->node();
         $token = $node->createToken('device', ['device'])->plainTextToken;
         $park = $node->park;
 
-        $this->postReading($node, ['moisture' => 3000], $token); // 10.5 % -> dry
-        $this->assertSame(ParkStatus::Dry, $park->refresh()->status);
+        $this->postReading($node, ['moisture' => 2250], $token); // 50 % -> ok (the node is online)
+        $this->assertSame(ParkStatus::Ok, $park->refresh()->status);
         $changedAt = $park->status_changed_at;
 
         $this->travel(1)->minutes();
-        $this->postReading($node, ['moisture' => 2900], $token); // 15.8 % -> still dry
-        $this->assertSame(ParkStatus::Dry, $park->refresh()->status);
+        $this->postReading($node, ['moisture' => 3000], $token); // 10.5 %: one dry reading is not enough
+        $this->assertSame(ParkStatus::Ok, $park->refresh()->status);
         $this->assertEquals($changedAt, $park->status_changed_at);
 
-        $this->postReading($node, ['moisture' => 1350], $token); // 97.4 % -> over
-        $this->assertSame(ParkStatus::Over, $park->refresh()->status);
+        $this->postReading($node, ['moisture' => 2950], $token); // second dry reading: dry alert -> dry
+        $this->assertSame(ParkStatus::Dry, $park->refresh()->status);
         $this->assertTrue($park->status_changed_at->gt($changedAt));
-
-        $this->postReading($node, ['moisture' => 2250], $token); // 50 % -> ok
-        $this->assertSame(ParkStatus::Ok, $park->refresh()->status);
-
-        $this->postReading($node, ['moisture' => null], $token); // no moisture: unchanged
-        $this->assertSame(ParkStatus::Ok, $park->refresh()->status);
-        $this->assertNull(Reading::latest('id')->first()->moisture_pct);
+        $this->assertDatabaseHas('alerts', ['park_id' => $park->id, 'type' => 'dry', 'status' => 'open']);
     }
 
     public function test_reply_has_the_pump_target_and_the_demo_interval(): void

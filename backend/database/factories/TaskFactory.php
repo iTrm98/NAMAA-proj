@@ -45,7 +45,7 @@ class TaskFactory extends Factory
             'status' => TaskStatus::Done,
             'started_at' => now()->subMinutes(40),
             'done_at' => now()->subMinutes(5),
-            'note' => 'Cleared a blocked dripper line',
+            'done_note' => 'Cleared a blocked dripper line',
         ]);
     }
 }

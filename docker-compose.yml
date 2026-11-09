@@ -97,7 +97,9 @@ services:
 
   scheduler:
     <<: *laravel
-    command: php artisan schedule:work
+    # schedule:clear-cache drops the withoutOverlapping locks a killed scheduler left behind;
+    # without it a restart skips the simulator for up to 2 minutes.
+    command: sh -c "php artisan schedule:clear-cache && exec php artisan schedule:work"
     restart: unless-stopped
 
   queue:

@@ -1,17 +1,37 @@
+import logging
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.ndvi import NdviError, compute_ndvi
+from app.waste import WasteConfig, WasteDetector, WasteError
 
-app = FastAPI(title="NAMAA AI Service")
+log = logging.getLogger("uvicorn.error")
+detector: WasteDetector | None = None
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Load the YOLO model(s) once at startup. A failure keeps /health and /ndvi up; /waste answers 503."""
+    global detector
+    try:
+        detector = WasteDetector(WasteConfig.from_env())
+        log.info("waste model loaded: %s", detector.info())
+    except Exception as e:  # noqa: BLE001 - a load error must not take the service down
+        log.error("waste model not loaded: %s", e)
+        detector = None
+    yield
+
+
+app = FastAPI(title="NAMAA AI Service", lifespan=lifespan)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "waste": detector.info() if detector else None}
 
 
 class GeoJsonPolygon(BaseModel):
@@ -56,5 +76,12 @@ def ndvi(request: NdviRequest):
     return {"park_id": request.park_id, "values": values}
 
 
-# To build (see the API contract):
-#   POST /waste   receive an image, return the detected waste boxes and count
+@app.post("/waste")
+def waste(image: UploadFile = File(...)):
+    """Litter boxes (and person boxes, kept apart for blurring) in one JPEG/PNG photo."""
+    if detector is None:
+        raise HTTPException(status_code=503, detail="waste model not loaded")
+    try:
+        return detector.detect(image.file.read())
+    except WasteError as e:
+        raise HTTPException(status_code=e.status, detail=e.message) from e

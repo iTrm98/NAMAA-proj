@@ -5,10 +5,10 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
-import { connectEcho, disconnectEcho, type LiveEvent, onLive } from '@/lib/echo'
+import { connectEcho, disconnectEcho, type LiveEvent, onLive, releaseEcho } from '@/lib/echo'
 import { appendToCachedSeries, type LiveReading } from '@/lib/liveSeries'
 import { beep, vibrate } from '@/lib/notify'
-import type { Park, User } from '@/types'
+import type { HardwareNode, Park, User } from '@/types'
 
 /**
  * Keeps one Reverb connection for the signed-in user and turns live events
@@ -34,7 +34,8 @@ export function RealtimeBridge() {
     })
   }, [token, user, queryClient, t, navigate])
 
-  useEffect(() => () => disconnectEcho(), [])
+  // Deferred: StrictMode's second mount reuses the same connection (see releaseEcho).
+  useEffect(() => () => releaseEcho(), [])
 
   return null
 }
@@ -52,11 +53,14 @@ function handle(queryClient: QueryClient, user: User, event: LiveEvent, payload:
     return
   }
 
+  // Admin and municipality pages share the components; their caches differ only in the first key.
+  const scope = user.role === 'municipality' ? 'municipality' : 'admin'
+
   switch (event) {
     case 'reading.received': {
       const reading = payload.reading as Park['latest'] & { pump_target: boolean }
       // Patch the park list in place (map + sidebar) so 5 s readings do not refetch it.
-      queryClient.setQueryData<Park[]>(['admin', 'parks'], (parks) =>
+      queryClient.setQueryData<Park[]>([scope, 'parks'], (parks) =>
         parks?.map((park) =>
           park.id === parkId && reading
             ? {
@@ -70,25 +74,76 @@ function handle(queryClient: QueryClient, user: User, event: LiveEvent, payload:
         ),
       )
       // The park detail only (exact): the chart series get the point appended, not refetched.
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'parks', parkId], exact: true })
-      if (reading) appendToCachedSeries(queryClient, parkId, reading as LiveReading)
+      void queryClient.invalidateQueries({ queryKey: [scope, 'parks', parkId], exact: true })
+      if (reading) appendToCachedSeries(queryClient, parkId, reading as LiveReading, scope)
+      if (scope === 'admin' && reading) patchHardwareNode(queryClient, Number(payload.node_id), reading as unknown as Record<string, unknown>)
       break
     }
+    case 'node.updated':
+      // Calibration, camera mode or relay test changed (hardware page).
+      invalidate(queryClient, [scope, 'nodes'])
+      break
     case 'park.status_changed':
     case 'pump.changed':
-      invalidate(queryClient, ['admin', 'parks'])
+      invalidate(queryClient, [scope, 'parks'])
       break
     case 'alert.raised':
     case 'alert.resolved':
     case 'alert.updated':
-      invalidate(queryClient, ['admin', 'alerts'], ['admin', 'parks'])
+      invalidate(queryClient, [scope, 'alerts'], [scope, 'parks'], [scope, 'impact'])
       break
     case 'task.created':
     case 'task.updated':
     case 'task.escalated':
-      invalidate(queryClient, ['admin', 'tasks'], ['admin', 'alerts'], ['admin', 'workers'], ['admin', 'parks', parkId])
+      invalidate(queryClient, [scope, 'tasks'], [scope, 'alerts'], [scope, 'workers'], [scope, 'parks', parkId], [scope, 'impact'])
       break
+    case 'ndvi.updated':
+      invalidate(queryClient, [scope, 'parks'])
+      break
+    case 'detection.created': {
+      // New camera frame: patch the map's item count, refetch the park's frame strip.
+      const count = Number(payload.count ?? 0)
+      const at = (payload.detection as { captured_at?: string } | undefined)?.captured_at ?? null
+      queryClient.setQueryData<Park[]>([scope, 'parks'], (parks) =>
+        parks?.map((park) => (park.id === parkId && park.camera ? { ...park, camera: { ...park.camera, last_count: count, last_frame_at: at } } : park)),
+      )
+      invalidate(queryClient, [scope, 'parks', parkId, 'detections'])
+      break
+    }
   }
+}
+
+/** Hardware page: the node's last payload and liveness, patched in place (a refetch every 5 s would be wasteful). */
+function patchHardwareNode(queryClient: QueryClient, nodeId: number, reading: Record<string, unknown>) {
+  const num = (key: string) => (typeof reading[key] === 'number' ? (reading[key] as number) : null)
+  queryClient.setQueriesData<HardwareNode[]>({ queryKey: ['admin', 'nodes'] }, (nodes) =>
+    nodes?.map((node) => {
+      if (node.id !== nodeId) return node
+      const last = {
+        at: String(reading.at ?? new Date().toISOString()),
+        moisture_raw: num('moisture_raw'),
+        moisture_pct: num('moisture_pct'),
+        temperature: num('temperature'),
+        humidity: num('humidity'),
+        flow: num('flow'),
+        water_level: num('water_level'),
+        battery_pct: num('battery_pct'),
+        pump_on: typeof reading.pump_on === 'boolean' ? reading.pump_on : null,
+      }
+      return {
+        ...node,
+        online: true,
+        last_seen_at: new Date().toISOString(),
+        seconds_since_seen: 0,
+        rssi: num('rssi') ?? node.rssi,
+        uptime_s: num('uptime_s') ?? node.uptime_s,
+        fw_version: typeof reading.fw_version === 'string' ? reading.fw_version : node.fw_version,
+        via: reading.via === 'wifi' || reading.via === 'usb' ? reading.via : node.via,
+        last_reading: last,
+        calibration: node.calibration ? { ...node.calibration, latest_raw: last.moisture_raw, latest_pct: last.moisture_pct } : null,
+      }
+    }),
+  )
 }
 
 /** Admin notice: a task passed its due time (raised one level, or overdue when already urgent). */

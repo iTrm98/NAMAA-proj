@@ -83,7 +83,8 @@
     "ndvi_drop": "Green cover dropping",
     "heat_stress": "Heat stress on dry soil",
     "blockage": "Low flow (blockage)",
-    "low_battery": "Low battery"
+    "low_battery": "Low battery",
+    "litter_repeated": "Repeated litter"
   },
   "admin": {
     "parks": "Parks",
@@ -135,7 +136,8 @@
     "chartBattery": "Battery (%)",
     "chartFlow": "Water flow (L/min)",
     "simulated": "Simulated",
-    "expectedFlow": "Expected flow {{flow}} L/min"
+    "expectedFlow": "Expected flow {{flow}} L/min",
+    "chartsShown": "Charts shown"
   },
   "live": {
     "live": "Live",
@@ -146,7 +148,9 @@
   "nav": {
     "map": "Map",
     "tasks": "Tasks",
-    "demo": "Demo"
+    "demo": "Demo",
+    "impact": "Impact",
+    "hardware": "Hardware"
   },
   "priority": {
     "low": "Low",
@@ -186,7 +190,13 @@
     "heat_stress": "Moisture {{value}} %, below {{min}} %, at {{temp}} °C",
     "blockage": "Flow {{flow}} L/min, expected {{expected}} L/min",
     "low_battery": "Battery {{value}} %",
-    "sensor_fault_stuck": "Raw value stuck at {{raw}}"
+    "sensor_fault_stuck": "Raw value stuck at {{raw}}",
+    "litter_one": "{{count}} item in view: {{labels}}",
+    "litter_other": "{{count}} items in view: {{labels}}",
+    "litter_repeated_many_items": "{{count}} items in one frame",
+    "litter_repeated_came_back": "Litter keeps coming back here",
+    "litter_repeated_open_long": "Litter has not been collected for a long time",
+    "ndvi_drop": "NDVI {{value}}, {{drop}} % below the 4-week average ({{baseline}})"
   },
   "action": {
     "dry": "Check that the irrigation runs: valve open, pump working, drippers not blocked. Water the area. If the irrigation looks fine, check that the sensor is still pushed into the soil.",
@@ -200,7 +210,8 @@
     "manual": "Follow the admin's note.",
     "heat_stress": "Water now: the soil is dry and it is very hot, plants can be damaged within the hour. Check the valve, the pump and the drippers, and water the area by hand if needed.",
     "blockage": "The pump runs but too little water flows. Clean the filter, look for kinked or crushed pipes and blocked drippers, then watch the flow.",
-    "low_battery": "Clean the solar panel and check its cable. If the battery stays low, swap it at the next visit."
+    "low_battery": "Clean the solar panel and check its cable. If the battery stays low, swap it at the next visit.",
+    "litter_repeated": "Litter keeps coming back here. Collect it now, and check whether the bins are full or missing. Add a photo when you mark the task done."
   },
   "taskTitle": {
     "dry": "Irrigate {{park}}",
@@ -214,7 +225,8 @@
     "manual": "Check {{park}}",
     "heat_stress": "Water {{park}} now (heat stress)",
     "blockage": "Clear the blockage at {{park}}",
-    "low_battery": "Check the battery at {{park}}"
+    "low_battery": "Check the battery at {{park}}",
+    "litter_repeated": "Clean {{park}} (repeated litter)"
   },
   "alerts": {
     "title": "Open alerts",
@@ -308,7 +320,7 @@
     "running": "Running…",
     "done": "Scenario started: {{name}}",
     "confirmResetTitle": "Reset the demo?",
-    "confirmResetBody": "Open alerts of the simulated parks are resolved and their open tasks cancelled. History is kept.",
+    "confirmResetBody": "Resets only the demo story: Al Adel, forced faults, and the open alerts and tasks of the simulated parks. Healthy parks keep their state.",
     "scenario": {
       "reset": {
         "title": "Reset",
@@ -345,8 +357,16 @@
       "escalate": {
         "title": "Escalate",
         "body": "The newest open, not started task reaches its due time now: within 10 seconds its priority goes up (or it is flagged overdue) and you get a notice."
+      },
+      "litter": {
+        "title": "Litter",
+        "body": "Sim Cam on Al Adel Park (a simulated camera) sends the litter sample photos: after 2 frames a litter alert appears; after 3 episodes or 5+ items it becomes repeated litter (high)."
       }
-    }
+    },
+    "fullReset": "Full reset",
+    "confirmFullResetTitle": "Full reset of all simulated parks?",
+    "confirmFullResetBody": "Every simulated park goes back to its starting state: soil, irrigation, pump, batteries, alerts and tasks. History is kept. Use it only before a fresh run.",
+    "fullResetHint": "Full reset also restores the healthy parks to their start."
   },
   "worker": {
     "myTasks": "My tasks",
@@ -385,7 +405,14 @@
     "back": "My tasks",
     "notFound": "This task was not found.",
     "startFirst": "Start the task to use the pump.",
-    "urgent": "Urgent"
+    "urgent": "Urgent",
+    "waterUntil": "Water until {{target}} %",
+    "waterProgress": "{{from}} % → {{target}} %",
+    "targetReached": "Target reached. You can mark the task as done.",
+    "belowTargetTitle": "Moisture is still below the target",
+    "belowTargetBody": "Moisture is still below the target ({{target}} %). Mark as done anyway?",
+    "doneAnyway": "Mark as done anyway",
+    "doneBelowTarget": "Marked done below the target ({{moisture}} % of {{target}} %)."
   },
   "category": {
     "water": "Water & irrigation",
@@ -399,5 +426,288 @@
     "overdue": "Overdue",
     "escalated": "Escalated",
     "escalatedTimes": "Escalated ×{{n}}"
+  },
+  "camera": {
+    "title": "Camera",
+    "frameAlt_one": "Camera frame, {{count}} litter item",
+    "frameAlt_other": "Camera frame, {{count}} litter items",
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "clean": "Clean",
+    "noFrames": "No frames yet.",
+    "frameAt_one": "Frame of {{time}}, {{count}} item",
+    "frameAt_other": "Frame of {{time}}, {{count}} items",
+    "origin": {
+      "upload": "Demo upload",
+      "scenario": "Demo sample",
+      "camera": "Camera",
+      "browser": "Browser camera"
+    },
+    "peopleBlurred_one": "{{count}} person blurred",
+    "peopleBlurred_other": "{{count}} people blurred",
+    "demoTitle": "Camera",
+    "demoIntro": "Stage fallback: send frames from this laptop's webcam or upload a photo. They go through the same pipeline as the camera board (blur, litter detection, alerts).",
+    "noCamera": "No simulated camera in your parks. Run php artisan namaa:sim:camera to add \"Sim Cam\".",
+    "webcam": "Laptop webcam",
+    "webcamHint": "While on, one frame every 10 seconds.",
+    "webcamDenied": "The webcam is not available (permission denied or no camera).",
+    "upload": "Upload a photo",
+    "uploadHint": "JPEG or PNG, up to 5 MB.",
+    "sending": "Sending…",
+    "choosePhoto": "Choose a photo",
+    "lastResult": "Last result",
+    "visionDown": "The vision service is not reachable. Check the vision container.",
+    "frameTitle": "Camera frame",
+    "sendTo": "Send frames to",
+    "nodeOption": "{{camera}} ({{park}})",
+    "simOnly": "Simulated cameras only; real cameras get frames from the camera board."
+  },
+  "ndvi": {
+    "title": "Vegetation (NDVI)",
+    "source": "Sentinel-2, Copernicus. One value per clear satellite pass (about every 5 days).",
+    "imageDate": "Image of {{date}}",
+    "empty": "No satellite values yet.",
+    "pixels_one": "{{count}} clear pixel (10 m)",
+    "pixels_other": "{{count}} clear pixels (10 m)",
+    "layer": "Map layer",
+    "layer_status": "Status",
+    "layer_ndvi": "Vegetation (NDVI)",
+    "legend": "NDVI (green cover)",
+    "bare": "Bare",
+    "dense": "Dense",
+    "noValue": "No value yet",
+    "demoTitle": "Satellite data",
+    "demoIntro": "Fetch the last 90 days of Sentinel-2 NDVI for every park with an outline. Runs on the queue; each park takes up to a minute.",
+    "fetchNow": "Fetch satellite data now",
+    "fetching": "Fetching…",
+    "alreadyRunning": "A fetch is already running.",
+    "progress": "{{done}} of {{total}} parks, {{values}} values",
+    "startedAgo": "started {{ago}}",
+    "finished": "finished {{ago}}",
+    "someFailed": "Some parks failed after 3 tries. Check the vision container and the internet connection.",
+    "tooSmall": "Too small to measure reliably",
+    "tooSmallBody": "This park covers too few clear satellite pixels for a reliable NDVI."
+  },
+  "impact": {
+    "title": "Impact",
+    "intro": "What NAMAA changed in the parks over the period: water, alerts and how fast they were fixed.",
+    "period": "Period",
+    "lastDays_one": "Last {{count}} day",
+    "lastDays_other": "Last {{count}} days",
+    "waterSaved": "Water saved",
+    "waterUsed": "Pump time",
+    "noWaterData": "No park with automatic irrigation reported in this period",
+    "alerts": "Alerts",
+    "alertsHint": "{{urgent}} urgent, {{high}} high",
+    "tasksDone": "Tasks done",
+    "pendingHint_one": "{{count}} still being verified",
+    "pendingHint_other": "{{count}} still being verified",
+    "verified": "Verified by sensors",
+    "verifiedHint": "{{verified}} verified, {{failed}} not fixed",
+    "medianResolve": "Median time to fix",
+    "medianHint": "From the alert to the verified fix",
+    "minutes_one": "{{count}} min",
+    "minutes_other": "{{count}} min",
+    "escalated": "Escalated",
+    "overdue": "Overdue",
+    "overdueHint_one": "{{count}} overdue",
+    "overdueHint_other": "{{count}} overdue",
+    "alertsTitle": "Alerts in the period",
+    "byCategory": "By category",
+    "byPriority": "By priority",
+    "perPark": "Per park",
+    "park": "Park",
+    "sourceNote": "{{real}} real parks and {{simulated}} simulated: figures of simulated parks come from the simulator, not from sensors.",
+    "baselineNote": "Water saved: NAMAA's pump time against a fixed schedule of 2 × 20 min a day (an assumption), over measured time only.",
+    "pumpMinutes": "{{value}} min",
+    "waterHint": "{{pump}} of pump time vs {{baseline}} on the schedule, {{hours}} h measured",
+    "waterShort": "Less than a day measured: the figure settles after a few days",
+    "waterMethod": "How it is measured: NAMAA's pump time against a fixed schedule of {{sessions}} × {{minutes}} min a day, over the same measured time only (hours without readings are left out of both). Parks with a pump and automatic irrigation on; simulated parks included. The schedule is an assumption, to confirm with the Amanah or the operator.",
+    "notCompared": {
+      "no_pump": "No pump",
+      "manual_irrigation": "Manual irrigation",
+      "no_readings": "No readings"
+    },
+    "notEnoughData": "Not enough data yet",
+    "needs": "Needs {{what}}",
+    "needCycles_one": "{{count}} more completed irrigation cycle",
+    "needCycles_other": "{{count}} more completed irrigation cycles",
+    "needHours_one": "{{count}} more measured hour",
+    "needHours_other": "{{count}} more measured hours",
+    "and": "and",
+    "parksExcluded_one": "{{count}} park left out (not enough data yet)",
+    "parksExcluded_other": "{{count}} parks left out (not enough data yet)"
+  },
+  "municipality": {
+    "overview": "Overview",
+    "readOnly": "Read-only",
+    "title": "Makkah parks overview",
+    "intro": "Every maintenance company, read-only. Updates live.",
+    "byCompany": "Per company",
+    "company": "Company",
+    "parks": "Parks",
+    "simulatedShort_one": "{{count}} simulated",
+    "simulatedShort_other": "{{count}} simulated"
+  },
+  "health": {
+    "title": "System health",
+    "intro": "The same checks as php artisan namaa:doctor, refreshed every 10 seconds.",
+    "unreachable": "The server does not answer.",
+    "checked": "Checked {{ago}}",
+    "overall": {
+      "ok": "All good",
+      "warn": "Check the warnings",
+      "fail": "Something is down"
+    },
+    "check": {
+      "demo_mode": "Demo mode",
+      "app_debug": "Debug mode",
+      "mysql": "Database",
+      "migrations": "Migrations",
+      "queue": "Queue worker",
+      "scheduler": "Scheduler",
+      "reverb": "Live updates (Reverb)",
+      "vision": "Vision service (YOLO)",
+      "camera": "Camera",
+      "real_nodes": "Real sensor boards",
+      "node_tokens": "Node tokens",
+      "disk": "Disk space"
+    }
+  },
+  "sources": {
+    "title": "Data sources",
+    "outline": "Outline",
+    "area": "Area",
+    "by": "by {{name}}",
+    "areaFromOutline": "computed from the outline",
+    "type": {
+      "official": "official",
+      "traced": "traced on satellite imagery",
+      "osm": "OpenStreetMap",
+      "approximate": "approximate, not verified"
+    }
+  },
+  "outline": {
+    "edit": "Edit outline",
+    "title": "Outline of {{park}}",
+    "editHint": "Drag a point to move it, drag a midpoint to add one, right-click a point to delete it, or redraw the outline.",
+    "drawHint": "Click to add points around the green area; click the first point (or double-click) to close the outline.",
+    "area": "Area",
+    "redraw": "Redraw",
+    "reset": "Back to the saved outline",
+    "source": "Source",
+    "reference": "Reference",
+    "referenceRequired": "Reference (document, plan number), required",
+    "referenceOptional": "Reference (optional)",
+    "save": "Save outline",
+    "saving": "Saving…",
+    "saved": "Outline saved. Recomputing satellite data…",
+    "needPolygon": "Draw an outline first.",
+    "noSatellite": "No MapTiler key: street map instead of satellite imagery",
+    "recomputing": "Recomputing satellite data…"
+  },
+  "scheduler": {
+    "stalled": "Scheduler stalled",
+    "stalledBody": "Scheduled jobs (simulator, offline checks, verification) are not running. Check the scheduler container."
+  },
+  "hardware": {
+    "title": "Hardware",
+    "intro": "Every node of your company: live status, calibration, relay test, tokens and camera feeds.",
+    "showBench": "Show test bench",
+    "bench": "Test bench",
+    "empty": "No nodes to show.",
+    "online": "Online",
+    "offline": "Offline",
+    "type": "Type",
+    "park": "Park",
+    "lastPost": "Last post",
+    "secondsAgo": "{{s}} s ago",
+    "expected": "(expected every {{s}} s)",
+    "rssi": "Signal",
+    "uptime": "Uptime",
+    "fw": "Firmware",
+    "connection": "Connection",
+    "types": {
+      "sensor": "Sensor",
+      "camera": "Camera",
+      "pump": "pump"
+    },
+    "signal": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "fair": "Fair",
+      "weak": "Weak"
+    },
+    "via": {
+      "wifi": "Wi-Fi",
+      "usb": "USB bridge"
+    },
+    "lastPayload": "Last raw payload",
+    "noPayload": "No reading yet.",
+    "rejections": {
+      "title": "Last rejected requests",
+      "none": "None."
+    },
+    "calibration": {
+      "title": "Soil calibration",
+      "raw": "Live raw value",
+      "preview": "Moisture now",
+      "dry": "Dry value",
+      "wet": "Wet value",
+      "use_dry": "Use as dry",
+      "use_wet": "Use as wet",
+      "confirm_dry_title": "Use the current value as dry?",
+      "confirm_dry_body": "Keep the probe in dry air or dry soil. The raw value {{raw}} becomes the dry point.",
+      "confirm_wet_title": "Use the current value as wet?",
+      "confirm_wet_body": "Keep the probe in water or saturated soil. The raw value {{raw}} becomes the wet point.",
+      "saved_dry": "Dry point saved.",
+      "saved_wet": "Wet point saved.",
+      "needLive": "Needs a recent raw value from an online node."
+    },
+    "relay": {
+      "title": "Relay test",
+      "button": "Test relay 10 s",
+      "running": "Running, {{s}} s left",
+      "started": "Pump on for {{s}} s.",
+      "benchHint": "Bench node: switches immediately after one confirmation.",
+      "realHint": "Real pump: asks for two confirmations.",
+      "confirmTitle": "Test the relay of {{name}}?",
+      "confirmBench": "The pump switches on for 10 seconds.",
+      "confirmReal": "This switches a real pump on for 10 seconds.",
+      "secondTitle": "Switch a real pump on?",
+      "secondBody": "Water will flow at {{name}}. Make sure nobody is at risk.",
+      "secondConfirm": "Switch on"
+    },
+    "token": {
+      "button": "New token",
+      "confirmTitle": "New token for {{name}}?",
+      "confirmBody": "The old token stops working at once. The board must be updated with the new token or it will be rejected.",
+      "confirm": "Create new token",
+      "title": "New token for {{name}}",
+      "once": "Shown only once. Copy it now; it cannot be shown again.",
+      "serial": "Serial commands",
+      "secrets": "secrets.h block",
+      "copy": "Copy",
+      "copied": "Copied.",
+      "copyFailed": "Could not copy. Select the text by hand.",
+      "done": "I copied it, close"
+    },
+    "camera": {
+      "browserMode": "Use a browser camera",
+      "browserHint": "A browser tab sends the frames. The server does not poll this camera.",
+      "urlHint": "The server polls {{url}}.",
+      "noUrl": "no camera URL",
+      "testNow": "Test camera now",
+      "testing": "Testing…",
+      "testAlt": "Camera test image",
+      "testResult": "{{ms}} ms, {{kb}} KB. Nothing was stored.",
+      "useThis": "Use this computer's camera",
+      "stop": "Stop camera",
+      "picker": "Choose camera",
+      "deviceN": "Camera {{n}}",
+      "sendingEvery": "Sending a frame every {{s}} s while this page is open.",
+      "sentAt": "last sent {{ago}}",
+      "noFrameYet": "No frame sent yet."
+    }
   }
 }

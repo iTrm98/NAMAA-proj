@@ -3,7 +3,7 @@ import { AlarmClock, CheckCircle2, Clock, Cpu, Droplets, Sprout, Trash2, Trendin
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { apiBlob } from '@/lib/api'
+import { apiBlob, isAbortError } from '@/lib/api'
 import { formatAgo, formatDateTime, formatDuration, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { AlertCategory, AlertType, Task, TaskPriority, TaskStatus } from '@/types'
@@ -24,11 +24,11 @@ const PRIORITY_STYLE: Record<TaskPriority, string> = {
 }
 
 /** Category: what the problem is and who handles it. Icon + frame colour, used on alert cards, task cards and the map popup. */
-export const CATEGORY_META: Record<AlertCategory, { icon: ReactNode; text: string; frame: string; row: string }> = {
-  water: { icon: <Droplets />, text: 'text-cyan-600 dark:text-cyan-400', frame: 'border-s-cyan-500', row: '[&>td:first-child]:border-s-cyan-500' },
-  plant: { icon: <Sprout />, text: 'text-emerald-600 dark:text-emerald-400', frame: 'border-s-emerald-500', row: '[&>td:first-child]:border-s-emerald-500' },
-  cleanliness: { icon: <Trash2 />, text: 'text-amber-600 dark:text-amber-400', frame: 'border-s-amber-500', row: '[&>td:first-child]:border-s-amber-500' },
-  devices: { icon: <Cpu />, text: 'text-violet-600 dark:text-violet-400', frame: 'border-s-violet-500', row: '[&>td:first-child]:border-s-violet-500' },
+export const CATEGORY_META: Record<AlertCategory, { icon: ReactNode; text: string; frame: string; row: string; bar: string }> = {
+  water: { icon: <Droplets />, text: 'text-cyan-600 dark:text-cyan-400', frame: 'border-s-cyan-500', row: '[&>td:first-child]:border-s-cyan-500', bar: 'bg-cyan-500' },
+  plant: { icon: <Sprout />, text: 'text-emerald-600 dark:text-emerald-400', frame: 'border-s-emerald-500', row: '[&>td:first-child]:border-s-emerald-500', bar: 'bg-emerald-500' },
+  cleanliness: { icon: <Trash2 />, text: 'text-amber-600 dark:text-amber-400', frame: 'border-s-amber-500', row: '[&>td:first-child]:border-s-amber-500', bar: 'bg-amber-500' },
+  devices: { icon: <Cpu />, text: 'text-violet-600 dark:text-violet-400', frame: 'border-s-violet-500', row: '[&>td:first-child]:border-s-violet-500', bar: 'bg-violet-500' },
 }
 
 /** The same frame on a table row (on its first cell). */
@@ -129,6 +129,14 @@ export function alertDetail(t: TFunction, type: AlertType, data: Record<string, 
     case 'sensor_fault':
       if (d.moisture_raw == null) return null
       return t(d.reason === 'stuck' ? 'alertDetail.sensor_fault_stuck' : 'alertDetail.sensor_fault', { raw: n('moisture_raw', 0) })
+    case 'ndvi_drop':
+      return typeof d.ndvi !== 'number' ? null : t('alertDetail.ndvi_drop', { value: n('ndvi', 2), drop: n('drop_pct', 0), baseline: n('baseline', 2) })
+    case 'litter':
+      return t('alertDetail.litter', { count: Number(d.count ?? 0), labels: Array.isArray(d.labels) ? (d.labels as string[]).join(', ') : '' })
+    case 'litter_repeated': {
+      const reason = typeof d.repeated_reason === 'string' ? d.repeated_reason : 'many_items'
+      return t(`alertDetail.litter_repeated_${reason}`, { count: Number(d.count ?? 0) })
+    }
     default:
       return null
   }
@@ -147,8 +155,10 @@ export function TaskPhoto({ path, alt, className }: { path: string; alt: string;
         objectUrl = URL.createObjectURL(blob)
         setUrl(objectUrl)
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setFailed(true)
+      .catch((error: unknown) => {
+        // Unmounted or the frame changed: the abort is expected, not a failure.
+        if (isAbortError(error) || controller.signal.aborted) return
+        setFailed(true)
       })
     return () => {
       controller.abort()

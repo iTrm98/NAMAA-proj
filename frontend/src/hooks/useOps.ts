@@ -1,6 +1,8 @@
+import type { Polygon } from 'geojson'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { POLL_MS } from '@/hooks/useParks'
 import { api } from '@/lib/api'
+import { useScope } from '@/lib/scope'
 import type {
   Alert,
   Paginated,
@@ -35,9 +37,10 @@ export const isActive = (status: TaskStatus) => status === 'open' || status === 
 // ---- admin ----
 
 export function useOpenAlerts() {
+  const scope = useScope()
   return useQuery({
-    queryKey: ['admin', 'alerts', 'open'],
-    queryFn: ({ signal }) => api<Paginated<Alert>>('/admin/alerts?status=open&per_page=100', { signal }).then((r) => sortAlerts(r.data)),
+    queryKey: [scope, 'alerts', 'open'],
+    queryFn: ({ signal }) => api<Paginated<Alert>>(`/${scope}/alerts?status=open&per_page=100`, { signal }).then((r) => sortAlerts(r.data)),
     refetchInterval: POLL_MS,
   })
 }
@@ -120,6 +123,20 @@ export function useUpdatePark(parkId: number) {
   })
 }
 
+/** PUT /api/admin/parks/{id}/outline (Sprint 3.1): the editor's outline and its source. */
+export function useSaveOutline(parkId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { polygon: Polygon; source: 'traced' | 'official'; reference: string | null }) =>
+      api<{ data: ParkDetail }>(`/admin/parks/${parkId}/outline`, { method: 'PUT', body }).then((r) => r.data),
+    onSuccess: (park) => {
+      queryClient.setQueryData(['admin', 'parks', parkId], park)
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'parks'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'impact'] })
+    },
+  })
+}
+
 // ---- demo ----
 
 export function useDemoStatus() {
@@ -134,8 +151,8 @@ export function useDemoStatus() {
 export function useRunScenario() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (name: ScenarioName) =>
-      api<{ data: Record<string, unknown> }>('/admin/demo/scenario', { method: 'POST', body: { name } }).then((r) => r.data),
+    mutationFn: ({ name, full }: { name: ScenarioName; full?: boolean }) =>
+      api<{ data: Record<string, unknown> }>('/admin/demo/scenario', { method: 'POST', body: full ? { name, full: true } : { name } }).then((r) => r.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
   })
 }
@@ -174,5 +191,16 @@ export function useWorkerAction(id: number) {
       queryClient.setQueryData(['worker', 'tasks', id], data)
       void queryClient.invalidateQueries({ queryKey: ['worker', 'tasks'], exact: true })
     },
+  })
+}
+
+/** GET /admin/system/status: the scheduler heartbeat; polled every 15 s so the banner clears by itself. */
+export function useSystemStatus() {
+  return useQuery({
+    queryKey: ['admin', 'system', 'status'],
+    queryFn: ({ signal }) =>
+      api<{ data: { scheduler: { heartbeat_at: string | null; age_s: number | null; stalled: boolean } } }>('/admin/system/status', { signal }).then((r) => r.data),
+    refetchInterval: 15_000,
+    retry: false,
   })
 }

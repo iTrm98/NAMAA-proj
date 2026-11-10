@@ -1,10 +1,13 @@
-import { ArrowLeft, BatteryMedium, ClipboardPlus, Droplets, Eye, Gauge, Power, ShieldAlert, Thermometer, Timer, Waves } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { ArrowLeft, BatteryMedium, ClipboardPlus, Droplets, Eye, Gauge, Loader2, MapPinned, Power, ShieldAlert, Thermometer, Timer, Waves } from 'lucide-react'
+import { lazy, type ReactNode, Suspense, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { CameraCard, FrameImage } from '@/components/camera'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { NdviCard } from '@/components/NdviCard'
 import { CreateTaskDialog, type TaskSeed } from '@/components/CreateTaskDialog'
+import { DataSources } from '@/components/DataSources'
 import { alertDetail, CategoryTag, categoryFrame, DueBadge, EscalatedBadge, PriorityBadge, TaskStatusBadge, useCountdown } from '@/components/ops'
 import { ReadingCharts } from '@/components/ReadingCharts'
 import { SourceBadge, StatusPill } from '@/components/StatusPill'
@@ -18,8 +21,12 @@ import { sortAlerts, sortTasks, useDemoStatus, useSwitchPump, useUpdatePark } fr
 import { parkName, usePark } from '@/hooks/useParks'
 import { ApiError } from '@/lib/api'
 import { formatAgo, formatDateTime, formatNumber } from '@/lib/format'
+import { useBasePath, useReadOnly } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import type { ParkDetail, ReadingRange } from '@/types'
+
+// The outline editor (terra-draw, turf) loads only when an admin opens it.
+const OutlineEditor = lazy(() => import('@/components/OutlineEditor').then((m) => ({ default: m.OutlineEditor })))
 
 export default function ParkPage() {
   const { t, i18n } = useTranslation()
@@ -30,6 +37,9 @@ export default function ParkPage() {
   // Demo mode opens on the last hour, so the live story is visible at once.
   const range: ReadingRange = picked ?? (demo.data ? '1h' : '24h')
   const [seed, setSeed] = useState<TaskSeed | null>(null)
+  const [editOutline, setEditOutline] = useState(false)
+  const readOnly = useReadOnly()
+  const base = useBasePath()
 
   if (park.isPending) {
     return (
@@ -53,7 +63,7 @@ export default function ParkPage() {
           {notFound ? t('park.notFound') : t('common.error')}
         </p>
         <Button asChild variant="outline" size="sm">
-          <Link to="/admin">{t('common.back')}</Link>
+          <Link to={base}>{t('common.back')}</Link>
         </Button>
       </div>
     )
@@ -65,7 +75,7 @@ export default function ParkPage() {
     <div className="flex flex-col gap-5 p-4 lg:p-6">
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="ghost" size="icon" aria-label={t('common.back')} title={t('common.back')}>
-          <Link to="/admin">
+          <Link to={base}>
             <ArrowLeft className="rtl:-scale-x-100" />
           </Link>
         </Button>
@@ -80,13 +90,30 @@ export default function ParkPage() {
               .filter(Boolean)
               .join(' · ')}
           </p>
+          {p.sources && <DataSources sources={p.sources} />}
+          {p.ndvi_recomputing && (
+            <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-sky-600 dark:text-sky-400">
+              <Loader2 className="size-3.5 animate-spin" />
+              {t('outline.recomputing')}
+            </p>
+          )}
         </div>
         <div className="ms-auto flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{t('park.liveNote')}</span>
-          <Button size="sm" variant="outline" onClick={() => setSeed({ park: p })}>
-            <ClipboardPlus />
-            {t('park.createTask')}
-          </Button>
+          {readOnly ? (
+            p.company && <Badge variant="outline">{p.company.name}</Badge>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" onClick={() => setEditOutline(true)}>
+                <MapPinned />
+                {t('outline.edit')}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setSeed({ park: p })}>
+                <ClipboardPlus />
+                {t('park.createTask')}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -115,11 +142,18 @@ export default function ParkPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <NodesCard park={p} />
-        <AlertsCard park={p} onCreate={setSeed} />
+        <AlertsCard park={p} onCreate={readOnly ? undefined : setSeed} />
+        {p.camera && <CameraCard parkId={p.id} />}
+        <NdviCard parkId={p.id} />
         <TasksCard park={p} />
       </div>
 
-      <CreateTaskDialog seed={seed} onOpenChange={(open) => !open && setSeed(null)} />
+      {!readOnly && <CreateTaskDialog seed={seed} onOpenChange={(open) => !open && setSeed(null)} />}
+      {!readOnly && editOutline && (
+        <Suspense fallback={null}>
+          <OutlineEditor park={p} open={editOutline} onOpenChange={setEditOutline} />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -130,6 +164,7 @@ function PumpCard({ park }: { park: ParkDetail }) {
   const pump = park.pump
   const demo = useDemoStatus()
   const switchPump = useSwitchPump(park.id)
+  const readOnly = useReadOnly()
   const updatePark = useUpdatePark(park.id)
   const target = pump?.target ?? park.pump_target ?? false
   const countdown = useCountdown(target ? pump?.cutoff_at : null)
@@ -164,7 +199,7 @@ function PumpCard({ park }: { park: ParkDetail }) {
               <div className="text-sm text-muted-foreground">{t('pump.title')}</div>
               <div className="text-lg font-semibold">{target ? t('pump.on') : t('pump.off')}</div>
             </div>
-            <ConfirmDialog
+            {!readOnly && <ConfirmDialog
               trigger={
                 <Button className="ms-auto" variant={target ? 'outline' : 'default'} disabled={switchPump.isPending}>
                   {target ? t('pump.turnOff') : t('pump.turnOn')}
@@ -173,7 +208,7 @@ function PumpCard({ park }: { park: ParkDetail }) {
               title={target ? t('pump.confirmOffTitle') : t('pump.confirmOnTitle')}
               body={t('pump.confirmBody', { n: demo.data ? 5 : 30 })}
               onConfirm={() => setPump(!target)}
-            />
+            />}
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
             <dt className="text-muted-foreground">{t('pump.reported')}</dt>
@@ -205,7 +240,7 @@ function PumpCard({ park }: { park: ParkDetail }) {
             <label htmlFor="auto-irrigation" className="font-medium">
               {t('pump.autoTitle')}
             </label>
-            <Switch id="auto-irrigation" checked={park.auto_irrigation} disabled={updatePark.isPending} onCheckedChange={setAuto} />
+            <Switch id="auto-irrigation" checked={park.auto_irrigation} disabled={readOnly || updatePark.isPending} onCheckedChange={setAuto} />
           </div>
           <p className="text-xs text-muted-foreground">{t('pump.autoHelp', { mid: Math.round((park.moisture_min + park.moisture_max) / 2) })}</p>
           {park.auto_irrigation && target && pump?.reason === 'rule' && (
@@ -222,15 +257,18 @@ function PumpCard({ park }: { park: ParkDetail }) {
 
 function TasksCard({ park }: { park: ParkDetail }) {
   const { t } = useTranslation()
+  const readOnly = useReadOnly()
   const tasks = sortTasks(park.open_tasks)
 
   return (
     <Card className="lg:col-span-2">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>{t('park.openTasks')}</CardTitle>
-        <Button asChild variant="link" size="sm">
-          <Link to={`/admin/tasks?park=${park.id}`}>{t('nav.tasks')}</Link>
-        </Button>
+        {!readOnly && (
+          <Button asChild variant="link" size="sm">
+            <Link to={`/admin/tasks?park=${park.id}`}>{t('nav.tasks')}</Link>
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {tasks.length === 0 ? (
@@ -349,7 +387,7 @@ function NodesCard({ park }: { park: ParkDetail }) {
   )
 }
 
-function AlertsCard({ park, onCreate }: { park: ParkDetail; onCreate: (seed: TaskSeed) => void }) {
+function AlertsCard({ park, onCreate }: { park: ParkDetail; onCreate?: (seed: TaskSeed) => void }) {
   const { t } = useTranslation()
   const demo = useDemoStatus()
   const alertsWithTask = new Set(park.open_tasks.map((task) => task.alert_id))
@@ -377,6 +415,7 @@ function AlertsCard({ park, onCreate }: { park: ParkDetail; onCreate: (seed: Tas
                     <CategoryTag category={alert.category} />
                   </div>
                   <span className="text-xs text-muted-foreground">{alertDetail(t, alert.type, alert.data)}</span>
+                  {alert.detection && <FrameImage detection={alert.detection} labels={false} className="mt-1 w-40" />}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground" title={formatDateTime(alert.created_at)}>
@@ -388,7 +427,7 @@ function AlertsCard({ park, onCreate }: { park: ParkDetail; onCreate: (seed: Tas
                       {t('alerts.watching', { n: demo.data ? 2 : 30 })}
                     </span>
                   )}
-                  {!alertsWithTask.has(alert.id) && alert.task_ready && (
+                  {onCreate && !alertsWithTask.has(alert.id) && alert.task_ready && (
                     <Button
                       size="sm"
                       variant="outline"

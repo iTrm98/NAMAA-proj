@@ -67,8 +67,8 @@ function mergeInto(bucket: ReadingBucket, reading: LiveReading): ReadingBucket {
 }
 
 /** Append a live reading to every cached range of a park (1 h, 24 h, 7 d). */
-export function appendToCachedSeries(queryClient: QueryClient, parkId: number, reading: LiveReading) {
-  for (const [key, series] of queryClient.getQueriesData<ReadingSeries>({ queryKey: ['admin', 'parks', parkId, 'readings'] })) {
+export function appendToCachedSeries(queryClient: QueryClient, parkId: number, reading: LiveReading, scope: 'admin' | 'municipality' = 'admin') {
+  for (const [key, series] of queryClient.getQueriesData<ReadingSeries>({ queryKey: [scope, 'parks', parkId, 'readings'] })) {
     if (series) queryClient.setQueryData<ReadingSeries>(key, appendReading(series, reading))
   }
 }

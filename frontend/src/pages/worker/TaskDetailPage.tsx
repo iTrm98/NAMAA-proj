@@ -1,12 +1,23 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { ArrowRight, Camera, CheckCircle2, Clock, Droplets, MapPin, Play, Power, XCircle } from 'lucide-react'
+import { ArrowRight, Camera, CheckCircle2, Clock, Droplets, MapPin, Play, Power, Target, XCircle } from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Map, { Layer, Source } from 'react-map-gl/maplibre'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { FrameImage } from '@/components/camera'
 import { alertDetail, CategoryTag, categoryFrame, DueBadge, PriorityBadge, STATUS_TEXT, TaskPhoto, TaskStatusBadge } from '@/components/ops'
 import { SourceBadge, STATUS_COLORS, StatusPill } from '@/components/StatusPill'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -90,6 +101,7 @@ function TaskDetail({ task }: { task: WorkerTaskDetail }) {
 
       <MiniMap park={park} />
       <MoistureCard park={park} />
+      {task.watering_target_pct != null && (task.status === 'open' || task.status === 'in_progress') && <WateringTarget task={task} />}
 
       {task.alert && (
         <Card className={cn('py-4', categoryFrame(task.alert.category))}>
@@ -100,6 +112,10 @@ function TaskDetail({ task }: { task: WorkerTaskDetail }) {
             </div>
             <div className="font-semibold">{t(`alertType.${task.alert.type}`)}</div>
             {alertDetail(t, task.alert.type, task.alert.data) && <div className="text-sm text-muted-foreground">{alertDetail(t, task.alert.type, task.alert.data)}</div>}
+            {task.alert.detection && (
+              // Workers read the frame through their task (the admin image route is not theirs).
+              <FrameImage detection={{ ...task.alert.detection, image_url: `/worker/tasks/${task.id}/frame` }} className="mt-2" />
+            )}
           </CardContent>
         </Card>
       )}
@@ -185,6 +201,50 @@ function MoistureCard({ park }: { park: Park }) {
   )
 }
 
+/**
+ * Dry / heat stress: "Water until X %" (X = middle of the range, where automatic
+ * irrigation stops), with a live bar from the moisture when the alert was raised
+ * to the target. The page refetches on every reading, so the bar moves by itself.
+ */
+function WateringTarget({ task }: { task: WorkerTaskDetail }) {
+  const { t } = useTranslation()
+  const target = task.watering_target_pct ?? 0
+  const current = task.park_detail.latest?.moisture_pct ?? null
+  const raised = Number(task.alert?.data?.moisture_pct)
+  const from = Number.isFinite(raised) && raised < target ? raised : Math.min(task.park_detail.moisture_min, target)
+  const span = Math.max(target - from, 1)
+  const progress = current == null ? 0 : Math.min(100, Math.max(0, ((current - from) / span) * 100))
+  const reached = current != null && current >= target
+
+  return (
+    <Card className={cn('py-4', reached && 'border-status-ok/50')}>
+      <CardContent className="flex flex-col gap-3 px-4">
+        <div className="flex items-center gap-3">
+          <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-full', reached ? 'bg-status-ok/15 text-status-ok' : 'bg-sky-500/15 text-sky-500')}>
+            <Target className="size-5" />
+          </span>
+          <div className="flex min-w-0 flex-col">
+            <span className="text-lg font-semibold">{t('worker.waterUntil', { target: formatNumber(target) })}</span>
+            <span className="text-xs text-muted-foreground" dir="ltr">
+              {t('worker.waterProgress', { from: formatNumber(from), target: formatNumber(target) })}
+            </span>
+          </div>
+        </div>
+        <div
+          className="h-3 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuemin={Math.round(from)}
+          aria-valuemax={Math.round(target)}
+          aria-valuenow={current == null ? undefined : Math.round(current)}
+        >
+          <div className={cn('h-full rounded-full transition-[width] duration-700', reached ? 'bg-status-ok' : 'bg-sky-500')} style={{ width: `${progress}%` }} />
+        </div>
+        {reached && <p className="text-sm text-status-ok">{t('worker.targetReached')}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
 function Actions({ task }: { task: WorkerTaskDetail }) {
   const { t } = useTranslation()
   const action = useWorkerAction(task.id)
@@ -237,6 +297,10 @@ function DoneForm({ task }: { task: WorkerTaskDetail }) {
   const [note, setNote] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [confirmBelow, setConfirmBelow] = useState(false)
+  const target = task.watering_target_pct
+  const current = task.park_detail.latest?.moisture_pct ?? null
+  const belowTarget = target != null && current != null && current < target
 
   useEffect(() => {
     if (!photo) return setPreview(null)
@@ -247,6 +311,13 @@ function DoneForm({ task }: { task: WorkerTaskDetail }) {
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    // Below the watering target: ask first. Done stays possible (the worker may know better).
+    if (belowTarget) return setConfirmBelow(true)
+    send()
+  }
+
+  function send() {
+    setConfirmBelow(false)
     action.mutate(
       { kind: 'done', note, photo },
       { onError: (error) => toast.error(error instanceof ApiError && error.body?.message ? error.body.message : t('common.error')) },
@@ -282,6 +353,18 @@ function DoneForm({ task }: { task: WorkerTaskDetail }) {
             {action.isPending ? t('worker.sending') : t('worker.submitDone')}
           </Button>
         </form>
+        <AlertDialog open={confirmBelow} onOpenChange={setConfirmBelow}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('worker.belowTargetTitle')}</AlertDialogTitle>
+              <AlertDialogDescription>{t('worker.belowTargetBody', { target: formatNumber(target ?? 0) })}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+              <AlertDialogAction onClick={send}>{t('worker.doneAnyway')}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   )
@@ -314,6 +397,11 @@ function Verification({ task }: { task: WorkerTaskDetail }) {
             {task.verify_reason && <p className="text-muted-foreground">{t(`verify.${task.verify_reason}`)}</p>}
           </div>
         </div>
+      )}
+      {task.done_below_target && task.watering_target_pct != null && task.done_moisture_pct != null && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          {t('worker.doneBelowTarget', { moisture: formatNumber(task.done_moisture_pct), target: formatNumber(task.watering_target_pct) })}
+        </p>
       )}
       {task.done_note && <p className="text-sm text-muted-foreground">“{task.done_note}”</p>}
       {task.has_photo && <TaskPhoto path={`/worker/tasks/${task.id}/photo`} alt={t('tasks.photoAlt')} className="max-h-48 w-full" />}

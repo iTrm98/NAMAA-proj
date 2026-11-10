@@ -2,6 +2,7 @@ import { BellRing, CheckCircle2, ClipboardPlus, Droplets, Eye } from 'lucide-rea
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { FrameImage } from '@/components/camera'
 import { CreateTaskDialog, type TaskSeed } from '@/components/CreateTaskDialog'
 import { alertDetail, CategoryTag, categoryFrame, DueBadge, PriorityBadge, TaskStatusBadge, VerifyBadge } from '@/components/ops'
 import { SourceBadge } from '@/components/StatusPill'
@@ -11,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useDemoStatus, useOpenAlerts } from '@/hooks/useOps'
 import { parkName } from '@/hooks/useParks'
 import { formatAgo, formatDateTime } from '@/lib/format'
+import { useBasePath, useReadOnly } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/types'
 
@@ -24,6 +26,7 @@ export function OpenAlertsPanel({ className }: { className?: string }) {
   const { t } = useTranslation()
   const alerts = useOpenAlerts()
   const [seed, setSeed] = useState<TaskSeed | null>(null)
+  const readOnly = useReadOnly()
 
   return (
     <section className={cn('flex min-h-0 flex-col', className)} aria-labelledby="open-alerts-title">
@@ -59,17 +62,18 @@ export function OpenAlertsPanel({ className }: { className?: string }) {
         )}
         <ul className="flex flex-col gap-2">
           {alerts.data?.map((alert) => (
-            <AlertItem key={alert.id} alert={alert} onCreate={setSeed} />
+            <AlertItem key={alert.id} alert={alert} onCreate={readOnly ? undefined : setSeed} />
           ))}
         </ul>
       </div>
 
-      <CreateTaskDialog seed={seed} onOpenChange={(open) => !open && setSeed(null)} />
+      {!readOnly && <CreateTaskDialog seed={seed} onOpenChange={(open) => !open && setSeed(null)} />}
     </section>
   )
 }
 
-function AlertItem({ alert, onCreate }: { alert: Alert; onCreate: (seed: TaskSeed) => void }) {
+function AlertItem({ alert, onCreate }: { alert: Alert; onCreate?: (seed: TaskSeed) => void }) {
+  const base = useBasePath()
   const { t, i18n } = useTranslation()
   const demo = useDemoStatus()
   const urgent = alert.priority === 'urgent'
@@ -92,9 +96,10 @@ function AlertItem({ alert, onCreate }: { alert: Alert; onCreate: (seed: TaskSee
             <span className="font-medium">{t(`alertType.${alert.type}`)}</span>
           </div>
           <CategoryTag category={alert.category} />
-          <Link to={`/admin/parks/${alert.park_id}`} className="flex items-center gap-1.5 truncate text-muted-foreground hover:text-foreground hover:underline">
+          <Link to={`${base}/parks/${alert.park_id}`} className="flex items-center gap-1.5 truncate text-muted-foreground hover:text-foreground hover:underline">
             {parkName(park, i18n.language)}
             <SourceBadge source={park.source} className="px-1 py-0 text-[0.6rem]" />
+            {alert.park?.company && <span className="truncate text-xs">· {alert.park.company.name}</span>}
           </Link>
         </div>
         <span className="shrink-0 text-xs text-muted-foreground" title={formatDateTime(alert.created_at)}>
@@ -103,6 +108,7 @@ function AlertItem({ alert, onCreate }: { alert: Alert; onCreate: (seed: TaskSee
       </div>
 
       {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
+      {alert.detection && <FrameImage detection={alert.detection} labels={false} className="w-48" />}
 
       {autoRunning ? (
         <p className="flex items-center gap-1.5 text-xs text-status-over">
@@ -121,7 +127,7 @@ function AlertItem({ alert, onCreate }: { alert: Alert; onCreate: (seed: TaskSee
           <Eye className="size-3.5" />
           {t('alerts.watching', { n: demo.data ? 2 : 30 })}
         </p>
-      ) : (
+      ) : !onCreate ? null : (
         <Button
           size="sm"
           variant={urgent || alert.priority === 'high' ? 'default' : 'outline'}

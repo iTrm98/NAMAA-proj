@@ -20,6 +20,9 @@ export const LIVE_EVENTS = [
   'task.created',
   'task.updated',
   'task.escalated',
+  'detection.created',
+  'ndvi.updated',
+  'node.updated',
 ] as const
 
 export type LiveEvent = (typeof LIVE_EVENTS)[number]
@@ -52,8 +55,13 @@ function channelFor(user: User): string | null {
   return null
 }
 
+/** A disconnect asked for by an unmounting component, not yet done (see releaseEcho). */
+let pendingDisconnect: number | undefined
+
 export function connectEcho(user: User, token: string) {
   const key = `${user.id}:${token}`
+  window.clearTimeout(pendingDisconnect)
+  pendingDisconnect = undefined
   if (echo && connectedFor === key) return
   disconnectEcho()
 
@@ -91,7 +99,20 @@ export function connectEcho(user: User, token: string) {
   }
 }
 
+/**
+ * The shared connection is no longer needed by this component: disconnect a
+ * moment later unless someone connects again first. React StrictMode mounts
+ * components twice in development; closing at once would kill a socket that is
+ * still opening ("WebSocket is closed before the connection is established").
+ */
+export function releaseEcho(delayMs = 1000) {
+  window.clearTimeout(pendingDisconnect)
+  pendingDisconnect = window.setTimeout(disconnectEcho, delayMs)
+}
+
 export function disconnectEcho() {
+  window.clearTimeout(pendingDisconnect)
+  pendingDisconnect = undefined
   echo?.disconnect()
   echo = null
   connectedFor = null

@@ -1,3 +1,5 @@
+import { useCallback, useState } from 'react'
+import '@/lib/maplibreWorker'
 import type { StyleSpecification } from 'maplibre-gl'
 
 /** Basemaps: MapTiler (VITE_MAPTILER_KEY) satellite or streets; OpenStreetMap without a key. */
@@ -5,6 +7,30 @@ export const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY?.trim() || ''
 export const MAKKAH = { latitude: 21.42, longitude: 39.83, zoom: 11 }
 
 export type Basemap = 'satellite' | 'streets'
+
+const BASEMAP_KEY = 'namaa.map.basemap'
+
+/** The user's last basemap choice; Satellite by default (it needs the MapTiler key). */
+export function useBasemap(): [Basemap, (next: Basemap) => void] {
+  const [basemap, setBasemap] = useState<Basemap>(() => {
+    try {
+      const saved = localStorage.getItem(BASEMAP_KEY)
+      if (saved === 'satellite' || saved === 'streets') return saved
+    } catch {
+      // storage blocked (private window): fall back to the default
+    }
+    return 'satellite'
+  })
+  const choose = useCallback((next: Basemap) => {
+    setBasemap(next)
+    try {
+      localStorage.setItem(BASEMAP_KEY, next)
+    } catch {
+      // not remembered, still switched
+    }
+  }, [])
+  return [basemap, choose]
+}
 
 /** Without a MapTiler key: OpenStreetMap raster tiles (with attribution). */
 const OSM_STYLE: StyleSpecification = {

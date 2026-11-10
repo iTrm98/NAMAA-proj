@@ -1,8 +1,9 @@
-import { ClipboardList, FlaskConical, Map as MapIcon } from 'lucide-react'
+import { ChartColumn, ClipboardList, Cpu, FlaskConical, Map as MapIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { AppHeader } from '@/components/AppHeader'
+import { SchedulerBanner } from '@/components/SchedulerBanner'
 import { SourceBadge, StatusPill } from '@/components/StatusPill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,11 +15,12 @@ import { cn } from '@/lib/utils'
 /** /admin: header with Map · Tasks (· Demo), park list on the start side (map and park pages), main area. */
 export default function AdminLayout() {
   const { pathname } = useLocation()
-  const wide = pathname.startsWith('/admin/tasks') || pathname.startsWith('/admin/demo')
+  const wide = pathname.startsWith('/admin/tasks') || pathname.startsWith('/admin/demo') || pathname.startsWith('/admin/impact') || pathname.startsWith('/admin/hardware')
 
   return (
     <div className="flex h-svh flex-col">
       <AppHeader nav={<AdminNav />} />
+      <SchedulerBanner />
       <div className="flex min-h-0 flex-1">
         {!wide && <ParkSidebar />}
         <main className="min-w-0 flex-1 overflow-y-auto">
@@ -49,6 +51,8 @@ function AdminNav() {
     <nav className="ms-2 flex items-center gap-1">
       <NavItem to="/admin" active={pathname === '/admin' || pathname.startsWith('/admin/parks')} icon={<MapIcon />} label={t('nav.map')} />
       <NavItem to="/admin/tasks" active={pathname.startsWith('/admin/tasks')} icon={<ClipboardList />} label={t('nav.tasks')} />
+      <NavItem to="/admin/impact" active={pathname.startsWith('/admin/impact')} icon={<ChartColumn />} label={t('nav.impact')} />
+      <NavItem to="/admin/hardware" active={pathname.startsWith('/admin/hardware')} icon={<Cpu />} label={t('nav.hardware')} />
       {demo.data && <NavItem to="/admin/demo" active={pathname.startsWith('/admin/demo')} icon={<FlaskConical />} label={t('nav.demo')} />}
     </nav>
   )

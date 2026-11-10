@@ -1,11 +1,13 @@
-import { memo, type ReactNode, useMemo } from 'react'
+import { memo, type ReactNode, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useNow } from '@/components/ops'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useParkReadings } from '@/hooks/useParks'
 import i18n from '@/i18n'
+import { useAuth } from '@/lib/auth'
 import { formatNumber } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { ParkDetail, ReadingBucket, ReadingRange } from '@/types'
 
 const COLORS = { moisture: '#38bdf8', temperature: '#f97316', humidity: '#a78bfa', battery: '#22c55e', flow: '#06b6d4', min: '#f97316', max: '#3b82f6', gap: '#71717a' }
@@ -30,6 +32,36 @@ function ticksFor(from: number, to: number, step: number): number[] {
 }
 
 const KEYS: SeriesKey[] = ['moisture_pct', 'temperature', 'humidity', 'battery_pct', 'flow']
+
+/** The time under the mouse and the chart that owns it (only that chart shows a tooltip). */
+type Hover = { ts: number; owner: SeriesKey } | null
+
+/** Which charts the user hid, remembered per user in localStorage (defaults to all shown). */
+function useHiddenCharts(userId: number | undefined) {
+  const storageKey = `namaa.charts.hidden.${userId ?? 'anon'}`
+  const [hidden, setHidden] = useState<SeriesKey[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? '[]')
+      return Array.isArray(saved) ? saved.filter((k): k is SeriesKey => KEYS.includes(k as SeriesKey)) : []
+    } catch {
+      return []
+    }
+  })
+  const toggle = useCallback(
+    (key: SeriesKey) =>
+      setHidden((current) => {
+        const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(next))
+        } catch {
+          // Storage blocked (private window): the choice lasts for this page only.
+        }
+        return next
+      }),
+    [storageKey],
+  )
+  return { hidden, toggle }
+}
 
 /**
  * One empty bucket between two full ones is sampling jitter (a reading landed
@@ -90,9 +122,16 @@ function useFormatters(range: ReadingRange) {
   }, [language, range])
 }
 
-/** The park page charts: one shared crosshair, real time axis, gaps shown as gaps. */
+/**
+ * The park page charts: real time axis, gaps shown as gaps. Hovering one chart
+ * shows its tooltip only; the others show a thin line at the same time. Chips
+ * above the charts show or hide each one (remembered per user).
+ */
 export function ReadingCharts({ park, range }: { park: ParkDetail; range: ReadingRange }) {
   const { t } = useTranslation()
+  const { user } = useAuth()
+  const { hidden, toggle } = useHiddenCharts(user?.id)
+  const [hover, setHover] = useState<Hover>(null)
   const series = useParkReadings(park.id, range)
   const now = useNow(range === '1h' ? 5_000 : 60_000)
   const fmt = useFormatters(range)
@@ -101,13 +140,17 @@ export function ReadingCharts({ park, range }: { park: ParkDetail; range: Readin
   const bucketMs = (series.data?.bucket_seconds ?? 60) * 1000
   const data = useMemo<Point[]>(() => bridgeSingleHoles((raw ?? []).map((b) => ({ ...b, ts: new Date(b.t).getTime() }))), [raw])
   const gaps = useMemo(() => gapsOf(data, bucketMs), [data, bucketMs])
-  const has = useMemo(
+  const has = useMemo<Record<SeriesKey, boolean>>(
     () => ({
-      battery: data.some((p) => p.battery_pct != null),
+      moisture_pct: data.some((p) => p.moisture_pct != null),
+      temperature: data.some((p) => p.temperature != null),
+      humidity: data.some((p) => p.humidity != null),
+      battery_pct: data.some((p) => p.battery_pct != null),
       flow: park.has_pump || data.some((p) => p.flow != null && p.flow > 0),
     }),
     [data, park.has_pump],
   )
+  const show = (key: SeriesKey) => has[key] && !hidden.includes(key)
 
   // Minute precision is enough for the axis; it keeps the domain stable between renders.
   const to = Math.ceil(now / 60_000) * 60_000
@@ -118,11 +161,43 @@ export function ReadingCharts({ park, range }: { park: ParkDetail; range: Readin
   if (series.isError) return <p className="text-sm text-destructive">{t('common.error')}</p>
   if (!data.some((p) => p.readings > 0)) return <p className="py-10 text-center text-sm text-muted-foreground">{t('park.noData')}</p>
 
-  const common = { data, from, to, ticks, gaps, fmt, syncId: `park-${park.id}`, gapLabel: t('park.noDataBand') }
+  const common = { data, from, to, ticks, gaps, fmt, onHover: setHover, gapLabel: t('park.noDataBand') }
+  // The hovered chart gets null (its own tooltip and cursor); the others get a thin line.
+  const lineAt = (key: SeriesKey) => (hover && hover.owner !== key ? hover.ts : null)
+  const chips: { key: SeriesKey; label: string; color: string }[] = [
+    { key: 'moisture_pct', label: t('park.moisture'), color: COLORS.moisture },
+    { key: 'temperature', label: t('park.temperature'), color: COLORS.temperature },
+    { key: 'humidity', label: t('park.humidity'), color: COLORS.humidity },
+    { key: 'flow', label: t('park.flow'), color: COLORS.flow },
+    { key: 'battery_pct', label: t('park.battery'), color: COLORS.battery },
+  ]
 
   return (
     <div className="flex flex-col gap-6">
-      <Chart {...common} dataKey="moisture_pct" color={COLORS.moisture} label={t('park.moisture')} unit="%" domain={[0, 100]}>
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t('park.chartsShown')}>
+        {chips
+          .filter((c) => has[c.key])
+          .map((c) => {
+            const on = !hidden.includes(c.key)
+            return (
+              <button
+                key={c.key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(c.key)}
+                className={cn(
+                  'flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors',
+                  on ? 'bg-muted text-foreground' : 'text-muted-foreground opacity-60 hover:opacity-100',
+                )}
+              >
+                <span className="size-2 rounded-full" style={{ background: on ? c.color : 'transparent', boxShadow: `inset 0 0 0 1.5px ${c.color}` }} />
+                {c.label}
+              </button>
+            )
+          })}
+      </div>
+      {show('moisture_pct') && (
+      <Chart {...common} lineAt={lineAt('moisture_pct')} dataKey="moisture_pct" color={COLORS.moisture} label={t('park.moisture')} unit="%" domain={[0, 100]}>
         <ReferenceLine
           y={park.moisture_max}
           stroke={COLORS.max}
@@ -138,21 +213,26 @@ export function ReadingCharts({ park, range }: { park: ParkDetail; range: Readin
           label={{ value: `${t('park.min')} ${park.moisture_min}`, position: 'insideTopLeft', fill: COLORS.min, fontSize: 11, offset: 6 }}
         />
       </Chart>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
-        <ChartBlock title={t('park.chartTemperature')}>
-          <Chart {...common} dataKey="temperature" color={COLORS.temperature} label={t('park.temperature')} unit="°C" height={200} pad={2} />
-        </ChartBlock>
-        <ChartBlock title={t('park.chartHumidity')}>
-          <Chart {...common} dataKey="humidity" color={COLORS.humidity} label={t('park.humidity')} unit="%" domain={[0, 100]} height={200} />
-        </ChartBlock>
-        {has.flow && (
-          <ChartBlock title={t('park.chartFlow')}>
-            <Chart {...common} dataKey="flow" color={COLORS.flow} label={t('park.flow')} unit="L/min" height={200} pad={0.5} digits={2} min0 />
+        {show('temperature') && (
+          <ChartBlock title={t('park.chartTemperature')}>
+            <Chart {...common} lineAt={lineAt('temperature')} dataKey="temperature" color={COLORS.temperature} label={t('park.temperature')} unit="°C" height={200} pad={2} />
           </ChartBlock>
         )}
-        {has.battery && (
+        {show('humidity') && (
+          <ChartBlock title={t('park.chartHumidity')}>
+            <Chart {...common} lineAt={lineAt('humidity')} dataKey="humidity" color={COLORS.humidity} label={t('park.humidity')} unit="%" domain={[0, 100]} height={200} />
+          </ChartBlock>
+        )}
+        {show('flow') && (
+          <ChartBlock title={t('park.chartFlow')}>
+            <Chart {...common} lineAt={lineAt('flow')} dataKey="flow" color={COLORS.flow} label={t('park.flow')} unit="L/min" height={200} pad={0.5} digits={2} min0 />
+          </ChartBlock>
+        )}
+        {show('battery_pct') && (
           <ChartBlock title={t('park.chartBattery')} badge={t('park.simulated')}>
-            <Chart {...common} dataKey="battery_pct" color={COLORS.battery} label={t('park.battery')} unit="%" domain={[0, 100]} height={200} />
+            <Chart {...common} lineAt={lineAt('battery_pct')} dataKey="battery_pct" color={COLORS.battery} label={t('park.battery')} unit="%" domain={[0, 100]} height={200} />
           </ChartBlock>
         )}
       </div>
@@ -179,7 +259,9 @@ interface ChartProps {
   ticks: number[]
   gaps: [number, number][]
   fmt: { tick: (v: number) => string; full: (v: number) => string }
-  syncId: string
+  onHover: (hover: Hover) => void
+  /** Another chart is hovered: a thin line at this time, no tooltip. */
+  lineAt: number | null
   gapLabel: string
   dataKey: SeriesKey
   color: string
@@ -193,7 +275,7 @@ interface ChartProps {
   children?: ReactNode
 }
 
-const Chart = memo(function Chart({ data, from, to, ticks, gaps, fmt, syncId, gapLabel, dataKey, color, label, unit, domain, pad = 1, digits = 1, min0, height = 260, children }: ChartProps) {
+const Chart = memo(function Chart({ data, from, to, ticks, gaps, fmt, onHover, lineAt, gapLabel, dataKey, color, label, unit, domain, pad = 1, digits = 1, min0, height = 260, children }: ChartProps) {
   const yDomain = useMemo(
     () =>
       domain ??
@@ -227,7 +309,15 @@ const Chart = memo(function Chart({ data, from, to, ticks, gaps, fmt, syncId, ga
     // Time runs left to right in both languages.
     <div dir="ltr" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} syncId={syncId} syncMethod="value" margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 10, right: 16, bottom: 0, left: 0 }}
+          onMouseMove={(state) => {
+            const ts = Number(state?.activeLabel)
+            if (Number.isFinite(ts)) onHover({ ts, owner: dataKey })
+          }}
+          onMouseLeave={() => onHover(null)}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border" vertical={false} />
           {gaps.map(([x1, x2]) => (
             <ReferenceArea
@@ -254,6 +344,7 @@ const Chart = memo(function Chart({ data, from, to, ticks, gaps, fmt, syncId, ga
           <YAxis domain={yDomain} width={40} tick={{ fontSize: 11, fill: 'currentColor' }} className="text-muted-foreground" tickFormatter={(v: number) => formatNumber(v, 0)} allowDecimals={false} />
           <Tooltip content={tooltip} cursor={{ stroke: 'currentColor', strokeOpacity: 0.35, strokeWidth: 1 }} isAnimationActive={false} />
           {children}
+          {lineAt != null && <ReferenceLine x={lineAt} stroke="currentColor" strokeOpacity={0.35} strokeWidth={1} ifOverflow="hidden" />}
           <Line
             type="monotoneX"
             dataKey={dataKey}

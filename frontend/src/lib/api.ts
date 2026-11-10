@@ -18,6 +18,14 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A request cancelled on purpose (TanStack Query cancels queries when a page
+ * unmounts; components abort their own fetches). Not an error: no toast, no log.
+ */
+export function isAbortError(error: unknown): boolean {
+  return (error instanceof DOMException || error instanceof Error) && error.name === 'AbortError'
+}
+
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
 interface Options {

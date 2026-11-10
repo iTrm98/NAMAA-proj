@@ -5,7 +5,6 @@ import { RequireRole } from '@/components/RequireRole'
 import { Toaster } from '@/components/ui/sonner'
 import { homeFor, useAuth } from '@/lib/auth'
 import { LoginPage } from '@/pages/LoginPage'
-import { PlaceholderPage } from '@/pages/PlaceholderPage'
 
 // Admin pages load on demand (MapLibre and Recharts are large).
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'))
@@ -13,6 +12,10 @@ const ParkMap = lazy(() => import('@/pages/admin/ParkMap'))
 const ParkPage = lazy(() => import('@/pages/admin/ParkPage'))
 const TasksPage = lazy(() => import('@/pages/admin/TasksPage'))
 const DemoPage = lazy(() => import('@/pages/admin/DemoPage'))
+const HardwarePage = lazy(() => import('@/pages/admin/HardwarePage'))
+const ImpactPage = lazy(() => import('@/pages/admin/ImpactPage'))
+const MunicipalityLayout = lazy(() => import('@/pages/municipality/MunicipalityLayout'))
+const OverviewPage = lazy(() => import('@/pages/municipality/OverviewPage'))
 const WorkerLayout = lazy(() => import('@/pages/worker/WorkerLayout'))
 const MyTasksPage = lazy(() => import('@/pages/worker/MyTasksPage'))
 const TaskDetailPage = lazy(() => import('@/pages/worker/TaskDetailPage'))
@@ -54,6 +57,8 @@ function AppRoutes() {
         <Route path="parks/:id" element={<Suspense fallback={null}><ParkPage /></Suspense>} />
         <Route path="tasks" element={<Suspense fallback={null}><TasksPage /></Suspense>} />
         <Route path="demo" element={<Suspense fallback={null}><DemoPage /></Suspense>} />
+        <Route path="hardware" element={<Suspense fallback={null}><HardwarePage /></Suspense>} />
+        <Route path="impact" element={<Suspense fallback={null}><ImpactPage /></Suspense>} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
       <Route
@@ -71,13 +76,19 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/worker" replace />} />
       </Route>
       <Route
-        path="/municipality/*"
+        path="/municipality"
         element={
           <RequireRole role="municipality">
-            <PlaceholderPage titleKey="placeholder.municipalityTitle" bodyKey="placeholder.municipalityBody" />
+            <Suspense fallback={<Loading />}>
+              <MunicipalityLayout />
+            </Suspense>
           </RequireRole>
         }
-      />
+      >
+        <Route index element={<Suspense fallback={null}><OverviewPage /></Suspense>} />
+        <Route path="parks/:id" element={<Suspense fallback={null}><ParkPage /></Suspense>} />
+        <Route path="*" element={<Navigate to="/municipality" replace />} />
+      </Route>
       <Route path="*" element={<Home />} />
     </Routes>
   )

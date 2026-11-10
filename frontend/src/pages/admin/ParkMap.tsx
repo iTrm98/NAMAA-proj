@@ -1,5 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FeatureCollection, Polygon } from 'geojson'
+import { Camera } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Map, { Layer, type MapLayerMouseEvent, Marker, NavigationControl, Popup, Source } from 'react-map-gl/maplibre'
@@ -11,8 +12,10 @@ import { SourceBadge, STATUS_COLORS, StatusPill } from '@/components/StatusPill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { parkName, useParks } from '@/hooks/useParks'
-import { formatDateTime, formatNumber } from '@/lib/format'
-import { type Basemap, MAKKAH, MAPTILER_KEY, mapStyle } from '@/lib/mapStyle'
+import { formatAgo, formatDate, formatDateTime, formatNumber } from '@/lib/format'
+import { NDVI_GRADIENT, NDVI_NONE, ndviColor } from '@/lib/ndvi'
+import { MAKKAH, MAPTILER_KEY, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { useBasePath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import type { Park } from '@/types'
 
@@ -26,6 +29,8 @@ function boundsOf(parks: Park[]): [[number, number], [number, number]] | null {
     [Math.max(...lngs), Math.max(...lats)],
   ]
 }
+
+type MapLayer = 'status' | 'ndvi'
 
 export default function ParkMap() {
   const { t } = useTranslation()
@@ -54,9 +59,12 @@ export default function ParkMap() {
 
 function ParkMapView({ parks }: { parks: Park[] }) {
   const { t, i18n } = useTranslation()
-  const [basemap, setBasemap] = useState<Basemap>('satellite')
+  const [basemap, setBasemap] = useBasemap()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [layer, setLayer] = useState<MapLayer>('status')
   const selected = parks.find((p) => p.id === selectedId) ?? null
+  const colorOf = (p: Park) => (layer === 'ndvi' ? ndviColor(p.ndvi?.too_small ? null : p.ndvi?.mean) : STATUS_COLORS[p.status])
+  const imageDate = parks.reduce<string | null>((newest, p) => (p.ndvi && (!newest || p.ndvi.date > newest) ? p.ndvi.date : newest), null)
 
   const features = useMemo<FeatureCollection<Polygon>>(
     () => ({
@@ -67,10 +75,10 @@ function ParkMapView({ parks }: { parks: Park[] }) {
           type: 'Feature',
           id: p.id,
           geometry: p.polygon,
-          properties: { id: p.id, color: STATUS_COLORS[p.status] },
+          properties: { id: p.id, color: layer === 'ndvi' ? ndviColor(p.ndvi?.too_small ? null : p.ndvi?.mean) : STATUS_COLORS[p.status] },
         })),
     }),
-    [parks],
+    [parks, layer],
   )
 
   // Only computed once: the initial view fits every park; polling must not move the map.
@@ -113,7 +121,7 @@ function ParkMapView({ parks }: { parks: Park[] }) {
               aria-label={parkName(park, i18n.language)}
               title={parkName(park, i18n.language)}
             >
-              <span className="size-3 rounded-full ring-2 ring-white/80" style={{ backgroundColor: STATUS_COLORS[park.status] }} />
+              <span className="size-3 rounded-full ring-2 ring-white/80" style={{ backgroundColor: colorOf(park) }} />
               {park.source === 'simulated' && <SourceBadge source="simulated" className="px-1 py-0 text-[0.6rem]" />}
             </button>
           </Marker>
@@ -134,17 +142,51 @@ function ParkMapView({ parks }: { parks: Park[] }) {
         )}
       </Map>
 
-      {MAPTILER_KEY ? (
-        <div className="absolute top-3 left-3 flex gap-1 rounded-lg bg-background/90 p-1 shadow" dir={i18n.dir()}>
-          {(['satellite', 'streets'] as const).map((b) => (
-            <Button key={b} size="sm" variant={basemap === b ? 'default' : 'ghost'} onClick={() => setBasemap(b)}>
-              {t(`admin.${b}`)}
+      <div className="absolute top-3 left-3 flex flex-col items-start gap-2" dir={i18n.dir()}>
+        {MAPTILER_KEY ? (
+          <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow">
+            {(['satellite', 'streets'] as const).map((b) => (
+              <Button key={b} size="sm" variant={basemap === b ? 'default' : 'ghost'} onClick={() => setBasemap(b)}>
+                {t(`admin.${b}`)}
+              </Button>
+            ))}
+          </div>
+        ) : (
+          <div className="max-w-xs rounded-lg bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow">{t('admin.osmNote')}</div>
+        )}
+        <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow" role="group" aria-label={t('ndvi.layer')}>
+          {(['status', 'ndvi'] as const).map((l) => (
+            <Button key={l} size="sm" variant={layer === l ? 'default' : 'ghost'} onClick={() => setLayer(l)} aria-pressed={layer === l}>
+              {t(`ndvi.layer_${l}`)}
             </Button>
           ))}
         </div>
-      ) : (
-        <div className="absolute top-3 left-3 max-w-xs rounded-lg bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow" dir={i18n.dir()}>
-          {t('admin.osmNote')}
+      </div>
+
+      {layer === 'ndvi' && (
+        <div className="absolute bottom-8 left-3 flex w-56 flex-col gap-1 rounded-lg bg-background/90 px-3 py-2 text-xs shadow" dir={i18n.dir()}>
+          <span className="font-medium">{t('ndvi.legend')}</span>
+          <div className="h-2.5 w-full rounded-full" style={{ background: NDVI_GRADIENT }} dir="ltr" />
+          <div className="flex justify-between text-muted-foreground" dir="ltr">
+            <span>0.1</span>
+            <span>0.3</span>
+            <span>0.6+</span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>{t('ndvi.bare')}</span>
+            <span>{t('ndvi.dense')}</span>
+          </div>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="size-2.5 rounded-full" style={{ backgroundColor: NDVI_NONE }} />
+            {t('ndvi.noValue')}
+          </span>
+          {parks.some((x) => x.ndvi?.too_small) && (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="size-2.5 rounded-full" style={{ backgroundColor: NDVI_NONE }} />
+              {t('ndvi.tooSmall')}: {parks.filter((x) => x.ndvi?.too_small).map((x) => parkName(x, i18n.language)).join(', ')}
+            </span>
+          )}
+          <span className="text-muted-foreground">{imageDate ? t('ndvi.imageDate', { date: formatDate(imageDate) }) : t('ndvi.empty')}</span>
         </div>
       )}
     </div>
@@ -153,6 +195,7 @@ function ParkMapView({ parks }: { parks: Park[] }) {
 
 function ParkPopup({ park }: { park: Park }) {
   const { t, i18n } = useTranslation()
+  const base = useBasePath()
   const latest = park.latest
   const openAlerts = useOpenAlerts()
   // Already sorted: priority first, then oldest.
@@ -163,10 +206,20 @@ function ParkPopup({ park }: { park: Park }) {
       <div className="flex items-start justify-between gap-2 pe-4">
         <span className="font-semibold">{parkName(park, i18n.language)}</span>
       </div>
+      {park.company && <span className="-mt-1.5 text-xs text-neutral-500">{park.company.name}</span>}
       <div className="flex items-center gap-1.5">
         <StatusPill status={park.status} />
         <SourceBadge source={park.source} />
       </div>
+      {park.camera && (
+        <div className="flex items-center gap-1.5 text-xs" title={t('camera.title')}>
+          <Camera className="size-3.5 text-neutral-500" />
+          <span className={cn('font-medium', (park.camera.last_count ?? 0) > 0 ? 'text-amber-700' : 'text-green-700')}>
+            {park.camera.last_frame_at == null ? t('camera.noFrames') : (park.camera.last_count ?? 0) > 0 ? t('camera.items', { count: park.camera.last_count }) : t('camera.clean')}
+          </span>
+          {park.camera.last_frame_at && <span className="text-neutral-500">{formatAgo(park.camera.last_frame_at)}</span>}
+        </div>
+      )}
       {alerts.length > 0 && (
         <ul className="flex flex-col gap-1">
           {alerts.map((alert) => {
@@ -191,12 +244,26 @@ function ParkPopup({ park }: { park: Park }) {
         <dd className="font-medium">{latest?.temperature != null ? `${formatNumber(latest.temperature)} °C` : '—'}</dd>
         <dt className="text-neutral-500">{t('park.humidity')}</dt>
         <dd className="font-medium">{latest?.humidity != null ? `${formatNumber(latest.humidity)} %` : '—'}</dd>
+        <dt className="text-neutral-500">NDVI</dt>
+        <dd className="flex items-center gap-1 font-medium">
+          {park.ndvi?.too_small ? (
+            <span className="font-normal text-neutral-500">{t('ndvi.tooSmall')}</span>
+          ) : park.ndvi && park.ndvi.mean != null ? (
+            <>
+              <span className="size-2.5 rounded-full" style={{ backgroundColor: ndviColor(park.ndvi.mean) }} />
+              {formatNumber(park.ndvi.mean, 2)}
+              <span className="font-normal text-neutral-500">{formatDate(park.ndvi.date, true)}</span>
+            </>
+          ) : (
+            '—'
+          )}
+        </dd>
         <dt className="text-neutral-500">{t('admin.lastReading')}</dt>
         <dd className={cn('font-medium', !park.last_reading_at && 'text-neutral-500')}>
           {park.last_reading_at ? formatDateTime(park.last_reading_at) : t('admin.noReadingYet')}
         </dd>
       </dl>
-      <Link to={`/admin/parks/${park.id}`} className="text-xs font-medium text-green-700 underline-offset-4 hover:underline">
+      <Link to={`${base}/parks/${park.id}`} className="text-xs font-medium text-green-700 underline-offset-4 hover:underline">
         {t('admin.openPark')}
       </Link>
     </div>

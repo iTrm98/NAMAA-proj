@@ -16,6 +16,17 @@ export function formatDateTime(iso: string | null | undefined): string {
   }).format(new Date(iso))
 }
 
+/** A calendar date ("2026-11-05", as the API sends NDVI dates): "5 Nov 2026". */
+export function formatDate(date: string | null | undefined, short = false): string {
+  if (!date) return '—'
+  return new Intl.DateTimeFormat(locale(), {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    ...(short ? {} : { year: 'numeric' }),
+  }).format(new Date(`${date.slice(0, 10)}T00:00:00Z`))
+}
+
 export function formatTime(iso: string, withDay = false): string {
   return new Intl.DateTimeFormat(locale(), {
     timeZone: TIME_ZONE,

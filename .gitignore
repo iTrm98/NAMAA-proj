@@ -42,3 +42,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Training (local only, never committed)
+ml/data/
+ml/runs/
+runs/
+*.pt

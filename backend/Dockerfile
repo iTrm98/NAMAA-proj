@@ -2,8 +2,10 @@
 FROM php:8.5-cli
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git unzip libzip-dev libicu-dev \
-    && docker-php-ext-install pdo_mysql pcntl zip intl bcmath \
+        git unzip libzip-dev libicu-dev libjpeg62-turbo-dev libpng-dev \
+    # gd (JPEG + PNG): blurs people in camera photos before they are saved.
+    && docker-php-ext-configure gd --with-jpeg \
+    && docker-php-ext-install pdo_mysql pcntl zip intl bcmath gd \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

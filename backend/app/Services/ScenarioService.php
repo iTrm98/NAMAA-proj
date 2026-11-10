@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AlertType;
 use App\Enums\DataSource;
 use App\Enums\NodeType;
 use App\Enums\PumpReason;
@@ -36,7 +37,7 @@ use InvalidArgumentException;
  */
 class ScenarioService
 {
-    public const NAMES = ['reset', 'dry', 'heat', 'leak', 'blockage', 'battery', 'offline', 'escalate', 'recover'];
+    public const NAMES = ['reset', 'dry', 'heat', 'leak', 'blockage', 'battery', 'offline', 'escalate', 'litter', 'recover'];
 
     /** Flags that `recover` ends. */
     private const RECOVERABLE = ['leak', 'offline', 'heat', 'blockage', 'battery_forced'];
@@ -47,25 +48,38 @@ class ScenarioService
         private readonly TaskService $tasks,
         private readonly ParkStatusService $status,
         private readonly ActivityLogger $logger,
+        private readonly CameraFeed $feed,
     ) {}
 
     /**
      * Run a scenario. With a company id, only that company's simulated parks
-     * are touched (the API passes the admin's company).
+     * are touched (the API passes the admin's company). `$full` only matters for
+     * `reset`: without it the demo story is reset (Al Adel, forced faults, open
+     * alerts and tasks of the simulated parks) and the healthy parks' soil, water
+     * cycle, automatic irrigation and pump are left alone; with it the healthy
+     * parks are put back to the start as well.
      *
      * @return array<string, mixed> a short summary
      */
-    public function run(string $name, ?User $by = null, ?int $companyId = null): array
+    public function run(string $name, ?User $by = null, ?int $companyId = null, bool $full = false): array
     {
         if (! in_array($name, self::NAMES, true)) {
             throw new InvalidArgumentException("Unknown scenario [$name].");
+        }
+
+        if ($name === 'litter') {
+            // The camera, not the simulated sensor nodes: sample photos as the next frames.
+            $summary = $this->feed->start('litter', $companyId);
+            $this->logger->log('demo.scenario', null, ['after' => ['scenario' => $name] + $summary], user: $by, companyId: $companyId);
+
+            return ['scenario' => $name] + $summary;
         }
 
         $nodes = $this->simulatedNodes($companyId);
         $this->ensureExpectedFlow($nodes, $by);
 
         $summary = match ($name) {
-            'reset' => $this->reset($nodes, $by),
+            'reset' => $this->reset($nodes, $by, $full) + $this->resetCamera($companyId, $by) + ['full' => $full],
             'dry' => $this->dry($nodes),
             'heat' => $this->flag($nodes, 'heat_node', 'heat'),
             'leak' => $this->flag($nodes, 'leak_node', 'leak'),
@@ -73,7 +87,7 @@ class ScenarioService
             'battery' => $this->lowBattery($nodes),
             'offline' => $this->flag($nodes, 'offline_node', 'offline'),
             'escalate' => $this->escalate($nodes, $by),
-            'recover' => $this->recover($nodes),
+            'recover' => $this->recover($nodes) + $this->recoverCamera($companyId),
         };
 
         $this->logger->log('demo.scenario', null, ['after' => ['scenario' => $name] + $summary], user: $by,
@@ -141,16 +155,40 @@ class ScenarioService
         return (bool) Cache::get($this->key($node, 'watered'), false);
     }
 
+    /** Stage mode: fast drying and a fast pump for the scenario story (see Simulator). */
+    public function isStaged(Node $node): bool
+    {
+        return (bool) Cache::get($this->key($node, 'stage'), false);
+    }
+
+    public function unstage(Node $node): void
+    {
+        Cache::forget($this->key($node, 'stage'));
+    }
+
+    /** The simulated soil moisture without sensor noise (null: continue from the last reading). */
+    public function trueMoisture(Node $node): ?float
+    {
+        $value = Cache::get($this->key($node, 'soil'));
+
+        return $value === null ? null : (float) $value;
+    }
+
+    public function setTrueMoisture(Node $node, float $pct): void
+    {
+        Cache::forever($this->key($node, 'soil'), $pct);
+    }
+
     // ---- scenarios ----
 
     /** @param Collection<int, Node> $nodes */
-    private function reset(Collection $nodes, ?User $by): array
+    private function reset(Collection $nodes, ?User $by, bool $full): array
     {
         $parkIds = $nodes->pluck('park_id')->unique()->values();
         $resolved = 0;
         $cancelled = 0;
 
-        DB::transaction(function () use ($nodes, $parkIds, $by, &$resolved, &$cancelled) {
+        DB::transaction(function () use ($nodes, $parkIds, $by, $full, &$resolved, &$cancelled) {
             foreach (Alert::open()->whereIn('park_id', $parkIds)->with('park')->get() as $alert) {
                 $this->alerts->resolve($alert, 'scenario_reset');
                 $resolved++;
@@ -162,22 +200,52 @@ class ScenarioService
             }
 
             foreach ($nodes as $node) {
-                $this->clearFlags($node);
+                $isDry = $node->name === config('namaa.scenario.dry_node');
                 $park = $node->park;
+                $forcedBattery = $this->forcedBattery($node) !== null;
 
-                if ($node->name === config('namaa.scenario.dry_node')) {
+                if (! $full && ! $isDry) {
+                    // Demo-story reset: a healthy park only loses its forced faults; its soil,
+                    // water cycle, irrigation setting and pump stay as they are.
+                    foreach (self::RECOVERABLE as $flag) {
+                        Cache::forget($this->key($node, $flag));
+                    }
+                    if ($forcedBattery && $this->hasBattery($node)) {
+                        $this->setBattery($node, (float) config('namaa.scenario.reset_battery_pct'));
+                    }
+                    $this->status->recalculate($park);
+
+                    continue;
+                }
+
+                $this->clearFlags($node);
+
+                if ($isDry) {
                     // Al Adel starts dry, with a pump, pump off, automatic irrigation off.
                     if (! $node->has_pump) {
                         $node->update(['has_pump' => true]);
                     }
                     Cache::forever($this->key($node, 'moisture'), config('namaa.scenario.reset_dry_pct'));
+                    Cache::forever($this->key($node, 'stage'), true);
 
                     if ($park->auto_irrigation) {
                         $park->update(['auto_irrigation' => false]);
                         $this->logger->log('park.updated', $park, ['before' => ['auto_irrigation' => true], 'after' => ['auto_irrigation' => false]], user: $by);
                     }
                 } else {
-                    Cache::forever($this->key($node, 'moisture'), config('namaa.scenario.reset_healthy_pct'));
+                    // Healthy parks keep their soil (moving it would add or remove water
+                    // that was never pumped, and skew the water comparison); only a value
+                    // outside the range is brought back to the reset value.
+                    $soil = $this->trueMoisture($node) ?? (float) ($node->last_moisture_pct ?? config('namaa.scenario.reset_healthy_pct'));
+                    if ($soil < $park->moisture_min || $soil > $park->moisture_max) {
+                        Cache::forever($this->key($node, 'moisture'), config('namaa.scenario.reset_healthy_pct'));
+                    }
+
+                    // NAMAA waters the healthy parks by itself (Al Adel stays manual: the worker story).
+                    if ($node->has_pump && ! $park->auto_irrigation) {
+                        $park->update(['auto_irrigation' => true]);
+                        $this->logger->log('park.updated', $park, ['before' => ['auto_irrigation' => false], 'after' => ['auto_irrigation' => true]], user: $by);
+                    }
                 }
 
                 if ($this->hasBattery($node)) {
@@ -200,6 +268,7 @@ class ScenarioService
     {
         $node = $this->target($nodes, 'dry_node');
         Cache::forget($this->key($node, 'watered'));
+        Cache::forever($this->key($node, 'stage'), true);
         Cache::forever($this->key($node, 'moisture'), $node->park->moisture_min - 4);
 
         return ['node_id' => $node->id, 'park_id' => $node->park_id];
@@ -266,6 +335,45 @@ class ScenarioService
         return ['nodes' => $nodes->count()];
     }
 
+    /** Reset: stop the sample feed; litter alerts raised from demo frames are resolved. @return array<string, mixed> */
+    private function resetCamera(?int $companyId, ?User $by): array
+    {
+        $this->feed->stop();
+        $resolved = 0;
+
+        $alerts = Alert::open()
+            ->whereIn('type', [AlertType::Litter->value, AlertType::LitterRepeated->value])
+            ->whereHas('detection', fn ($q) => $q->whereIn('origin', ['upload', 'scenario']))
+            ->when($companyId, fn ($q) => $q->whereHas('park', fn ($p) => $p->where('company_id', $companyId)))
+            ->with('park')->get();
+
+        foreach ($alerts as $alert) {
+            $this->alerts->resolve($alert, 'scenario_reset');
+            foreach ($alert->activeTasks()->get() as $task) {
+                $this->tasks->cancel($task, $by, 'scenario_reset');
+            }
+            $resolved++;
+        }
+
+        return ['litter_alerts_resolved' => $resolved];
+    }
+
+    /** Recover: a running litter feed switches to the clean photos. @return array<string, mixed> */
+    private function recoverCamera(?int $companyId): array
+    {
+        if (($this->feed->current()['kind'] ?? null) !== 'litter') {
+            return [];
+        }
+
+        try {
+            return ['camera' => $this->feed->start('clean', $companyId)];
+        } catch (InvalidArgumentException $e) {
+            $this->feed->stop();
+
+            return ['camera' => ['feed' => null, 'message' => $e->getMessage()]];
+        }
+    }
+
     // ---- helpers ----
 
     /**
@@ -314,6 +422,12 @@ class ScenarioService
         $name = config("namaa.scenario.$configKey");
         $node = $nodes->firstWhere('name', $name);
 
+        // Alhilal (Sim 3) may belong to the second demo company (namaa:demo:second-company):
+        // then the first company's offline scenario uses its last other simulated node.
+        if (! $node && $configKey === 'offline_node') {
+            $node = $nodes->reject(fn (Node $n) => $n->name === config('namaa.scenario.dry_node'))->last();
+        }
+
         if (! $node) {
             throw new InvalidArgumentException("Simulated node [$name] not found.");
         }
@@ -323,7 +437,7 @@ class ScenarioService
 
     private function clearFlags(Node $node): void
     {
-        foreach (['moisture', 'watered', ...self::RECOVERABLE] as $flag) {
+        foreach (['moisture', 'watered', 'stage', ...self::RECOVERABLE] as $flag) {
             Cache::forget($this->key($node, $flag));
         }
     }

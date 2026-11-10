@@ -21,7 +21,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable([
     'company_id', 'name_ar', 'name_en', 'district', 'park_type', 'area_m2',
     'polygon', 'lat', 'lng', 'moisture_min', 'moisture_max', 'auto_irrigation', 'baseline_l_per_day',
-    'status', 'status_changed_at', 'last_reading_at', 'source',
+    'status', 'status_changed_at', 'last_reading_at', 'source', 'is_test',
+    'outline_source', 'outline_reference', 'outline_by', 'outline_at',
+    'area_source', 'area_reference', 'area_by', 'area_at', 'ndvi_recompute_at',
 ])]
 class Park extends Model
 {
@@ -44,7 +46,29 @@ class Park extends Model
             'status_changed_at' => 'datetime',
             'last_reading_at' => 'datetime',
             'source' => DataSource::class,
+            'is_test' => 'boolean',
+            'outline_at' => 'datetime',
+            'area_at' => 'datetime',
+            'ndvi_recompute_at' => 'datetime',
         ];
+    }
+
+    /** Who drew or confirmed the outline (data sources, Sprint 3.1). @return BelongsTo<User, $this> */
+    public function outlineBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'outline_by');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function areaBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'area_by');
+    }
+
+    /** An NDVI recompute queued after an outline change is still running (stale after 30 min). */
+    public function ndviRecomputing(): bool
+    {
+        return $this->ndvi_recompute_at !== null && $this->ndvi_recompute_at->gt(now()->subMinutes(30));
     }
 
     /** @return BelongsTo<Company, $this> */
@@ -142,6 +166,18 @@ class Park extends Model
     public function ndviReadings(): HasMany
     {
         return $this->hasMany(NdviReading::class);
+    }
+
+    /** The newest NDVI value (map layer). @return HasOne<NdviReading, $this> */
+    public function latestNdvi(): HasOne
+    {
+        return $this->hasOne(NdviReading::class)->latestOfMany('date');
+    }
+
+    /** Leaves out the test bench park (unless an admin asks for it). @param Builder<Park> $query */
+    public function scopeWithoutTest(Builder $query): void
+    {
+        $query->where('is_test', false);
     }
 
     /** @param Builder<Park> $query */

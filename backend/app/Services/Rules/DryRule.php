@@ -9,7 +9,8 @@ use App\Support\Namaa;
 
 /**
  * dry: moisture < moisture_min (per park: plants differ) for 2 readings in a
- * row; resolves after 2 at or above it. Faulty readings break the streak, and
+ * row; resolves after 2 at or above moisture_min + margin (hysteresis: a park
+ * watered to exactly the minimum must not flap between ok and dry). Faulty readings break the streak, and
  * an open sensor_fault skips the rule (a broken sensor must not send a worker
  * to water). With automatic irrigation the alert is `info` internally.
  * The engine turns an open dry alert into heat_stress in place at >= 40 °C;
@@ -36,9 +37,9 @@ class DryRule implements Rule
 
     public function resolves(RuleContext $c): bool
     {
-        $min = $c->park->moisture_min;
+        $recovered = RuleContext::dryRecovered($c->park);
 
-        return $c->lastAll(RuleContext::resolveCount(), fn (Reading $r) => ! RuleContext::faulty($r) && $r->moisture_pct >= $min);
+        return $c->lastAll(RuleContext::resolveCount(), fn (Reading $r) => ! RuleContext::faulty($r) && $r->moisture_pct >= $recovered);
     }
 
     public function confirmCount(RuleContext $c): int

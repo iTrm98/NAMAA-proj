@@ -28,8 +28,11 @@ class AlertService
         private readonly TaskService $tasks,
     ) {}
 
-    /** @param array<string, mixed> $data */
-    public function raise(Park $park, ?Node $node, AlertType $type, AlertSeverity $severity, array $data, ?TaskPriority $priority = null): Alert
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $attributes  extra columns, e.g. detection_id
+     */
+    public function raise(Park $park, ?Node $node, AlertType $type, AlertSeverity $severity, array $data, ?TaskPriority $priority = null, array $attributes = []): Alert
     {
         $priority ??= $type->priority();
 
@@ -42,14 +45,14 @@ class AlertService
             'status' => AlertStatus::Open,
             'task_ready_at' => $type->taskReadyAtOnce() ? now() : null,
             'data' => $data,
-        ]);
+        ] + $attributes);
 
         $this->logger->log('alert.raised', $alert, ['after' => [
             'type' => $type->value, 'priority' => $priority->value, 'severity' => $severity->value,
             'node_id' => $node?->id, 'data' => $data,
         ]], companyId: $park->company_id);
 
-        Realtime::send(new AlertRaised($park->company_id, ['alert' => self::payload($alert)]));
+        Realtime::send(new AlertRaised($park->company_id, ['alert' => self::payload($alert)], toMunicipality: ! $park->is_test));
 
         return $alert;
     }
@@ -145,12 +148,12 @@ class AlertService
             'alert_id' => $alert->id,
             'park_id' => $alert->park_id,
             'type' => $alert->type->value,
-        ]));
+        ], toMunicipality: ! $park->is_test));
     }
 
     private function broadcastUpdated(Alert $alert): void
     {
-        Realtime::send(new AlertUpdated($alert->park->company_id, ['alert' => self::payload($alert)]));
+        Realtime::send(new AlertUpdated($alert->park->company_id, ['alert' => self::payload($alert)], toMunicipality: ! $alert->park->is_test));
     }
 
     /** The small alert payload of alert.raised / alert.updated. @return array<string, mixed> */
@@ -164,6 +167,7 @@ class AlertService
             'category' => $alert->type->category()->value,
             'priority' => $alert->priority->value,
             'task_ready' => $alert->isTaskReady(),
+            'detection_id' => $alert->detection_id,
             'data' => $alert->data,
         ];
     }

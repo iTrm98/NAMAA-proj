@@ -31,7 +31,13 @@ class DemoSeederTest extends TestCase
         $this->assertSame(4, User::count());
         $this->assertNull(User::where('email', 'municipality@namaa.test')->value('company_id'));
         $this->assertSame(5, Park::count());
-        $this->assertSame(6, Node::count());
+        // 4 sensors, Camera 1 and Sim Cam (Sprint 3.1); the second company's park is not seeded.
+        $this->assertSame(7, Node::count());
+        $this->assertSame('simulated', Node::where('name', 'Sim Cam')->sole()->source->value);
+        $this->assertNull(Park::where('name_en', 'Al Masfalah Park')->first());
+        // Data sources come from parks.json (Sprint 3.1).
+        $this->assertSame('osm', Park::where('name_en', 'King Abdullah Park')->value('outline_source'));
+        $this->assertSame('approximate', Park::where('name_en', 'Garden Aziziyah')->value('outline_source'));
         $this->assertSame(5, DB::table('personal_access_tokens')->where('abilities', '["device"]')->count());
 
         // Real parks: no fake history.

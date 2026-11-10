@@ -68,7 +68,7 @@ class TaskService
                 $this->logger->log('task.assigned', $task, ['before' => ['assigned_to' => null], 'after' => ['assigned_to' => $task->assigned_to]], user: $admin);
             }
 
-            Realtime::send(new TaskCreated($task->company_id, self::payload($task), [$task->assigned_to]));
+            Realtime::send(new TaskCreated($task->company_id, self::payload($task), [$task->assigned_to], ! $task->park->is_test));
 
             return $task;
         });
@@ -168,11 +168,18 @@ class TaskService
         $path = $photo?->store('task-photos', 'local');
 
         DB::transaction(function () use ($task, $worker, $note, $path) {
+            // Dry / heat stress: record the moisture at Done and whether it was below the
+            // watering target (allowed: the worker may know better, but it is logged).
+            $target = $task->wateringTarget();
+            $moisture = $target === null ? null : ($task->alert->node ?? $task->park->sensorNode()->first())?->last_moisture_pct;
+
             $task->update([
                 'status' => TaskStatus::Done,
                 'done_at' => now(),
                 'done_note' => $note,
                 'done_photo_path' => $path,
+                'done_moisture_pct' => $moisture,
+                'done_below_target' => $target === null || $moisture === null ? null : $moisture < $target,
             ]);
 
             $pumpNode = $task->park->pumpNode()->first();
@@ -182,7 +189,8 @@ class TaskService
 
             $this->logger->log('task.done', $task, [
                 'before' => ['status' => 'in_progress'],
-                'after' => ['status' => 'done', 'note' => $note, 'photo' => $path !== null],
+                'after' => ['status' => 'done', 'note' => $note, 'photo' => $path !== null]
+                    + ($target === null ? [] : ['watering_target_pct' => $target, 'moisture_pct' => $moisture, 'done_below_target' => $task->done_below_target]),
             ], user: $worker);
 
             // Verification follows on the schedule (namaa:verify-tasks): the alert's
@@ -253,7 +261,7 @@ class TaskService
             'due_at' => $task->due_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ]], companyId: $task->company_id);
 
-        Realtime::send(new TaskEscalated($task->company_id, self::payload($task)));
+        Realtime::send(new TaskEscalated($task->company_id, self::payload($task), toMunicipality: ! $task->park->is_test));
         $this->broadcastUpdated($task);
 
         return true;
@@ -262,7 +270,7 @@ class TaskService
     /** @param list<int|null> $alsoNotify e.g. the previous worker after a reassignment */
     public function broadcastUpdated(Task $task, array $alsoNotify = []): void
     {
-        Realtime::send(new TaskUpdated($task->company_id, self::payload($task), [$task->assigned_to, ...$alsoNotify]));
+        Realtime::send(new TaskUpdated($task->company_id, self::payload($task), [$task->assigned_to, ...$alsoNotify], ! $task->park->is_test));
     }
 
     /** The small task payload of task.created / task.updated. @return array<string, mixed> */

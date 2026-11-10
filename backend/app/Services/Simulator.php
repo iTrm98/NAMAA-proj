@@ -12,15 +12,17 @@ use Illuminate\Support\Carbon;
  * One tick of the simulated parks: one reading per simulated sensor node,
  * stored through the same ReadingIngestor as the device route (so the rules
  * engine and the broadcasts run exactly as for a real board). Each node
- * continues its story from its latest reading:
+ * continues from its soil moisture, in real time (per second elapsed since its
+ * last reading, so DEMO_MODE's 5 s readings do not dry the soil faster):
  *
- *  - "drying" (Al Adel, Sim 1): about -0.3 % per tick, small noise, floor about 8 %.
- *    Once the pump has watered it, it stops drying and drifts slowly toward the
- *    middle of the range until the next `dry` or `reset` scenario (so a fixed
- *    park stays fixed long enough for the task verification).
- *  - "healthy" (the others): a slow walk inside the park's range.
- *  - pump on (has_pump and pump_target): about +3 % per tick, flow 1.5-2.5 L/min
- *    (a third of that while the `blockage` scenario runs).
+ *  - not pumping: the soil dries at simulator.drying_per_hour, faster in the
+ *    afternoon heat (dryingPerHour), floor 8 %;
+ *  - pump on (has_pump and pump_target): +pump_rise_per_minute, flow 1.5-2.5 L/min
+ *    (a third of that while the `blockage` scenario runs);
+ *  - stage mode (the node `reset` or `dry` puts on stage, Al Adel): fast drying
+ *    and a fast pump (about 0.3 % and 3 % per 5 s), so the watering story fits in
+ *    a minute; once the pump has watered it and is off again, normal physics;
+ *  - the reported value is the soil value plus a little sensor noise.
  *  - Makkah in November: temperature about 27-38 °C (peak 14:00), humidity 20-55 %
  *    (inverse); about 42 °C while the `heat` scenario runs.
  *  - Field version (Sim 1-3): battery % about -1 % per 10 min, kept at or above
@@ -63,37 +65,39 @@ class Simulator
     /** @return array{moisture: int, flow: float, temperature: float, humidity: float, pump_on: bool, water_level: null, battery_pct: ?float} */
     public function next(Node $node): array
     {
-        $park = $node->park;
-        $story = config('namaa.simulator.stories')[$node->name] ?? 'healthy';
-        $pct = $this->scenario->takeMoisture($node) ?? $node->last_moisture_pct ?? 50.0;
+        $dt = $this->stepSeconds($node);
+        $forced = $this->scenario->takeMoisture($node);
+        $pct = $forced ?? $this->scenario->trueMoisture($node) ?? (float) ($node->last_moisture_pct ?? 50.0);
         $pumping = $node->has_pump && $node->pump_target;
+        $staged = $this->scenario->isStaged($node);
 
         if ($pumping) {
             $blocked = $this->scenario->isBlocked($node);
             $ratio = $blocked ? (float) config('namaa.scenario.blockage_flow_ratio') : 1.0;
-            $pct += (config('namaa.simulator.pump_rise_per_tick') + $this->noise(0.3)) * $ratio;
+            $rise = $staged
+                ? config('namaa.simulator.stage_pump_rise_per_second') * $dt
+                : config('namaa.simulator.pump_rise_per_minute') * $dt / 60;
+            $pct += $rise * $ratio;
             $expected = $node->expected_flow_l_min ?? (float) config('namaa.simulator.expected_flow_l_min');
             $flow = $blocked ? $expected * $ratio + $this->noise(0.05) : $this->between(1.5, 2.5);
             $this->scenario->markWatered($node);
         } else {
-            if ($story === 'drying' && ! $this->scenario->isWatered($node)) {
-                $pct -= config('namaa.simulator.drying_per_tick') + $this->noise(0.1);
-                if ($pct < 8.0) {
-                    $pct = 8.0 + abs($this->noise(0.6)); // soft floor
-                }
-            } elseif ($story === 'drying') {
-                // Watered: hold, drifting slowly toward the middle of the range (no jump).
-                $pct += $this->noise(0.2) + (($park->moisture_min + $park->moisture_max) / 2 - $pct) * 0.03;
-            } else {
-                // Healthy: wander, pulled gently toward the upper middle of the range.
-                $centre = ($park->moisture_min + $park->moisture_max) / 2 + 5;
-                $pct += $this->noise(0.6) + ($centre - $pct) * 0.05;
-                $pct = $this->softClamp($pct, $park->moisture_min + 5, $park->moisture_max - 5);
+            if ($staged && $this->scenario->isWatered($node)) {
+                // Watered and the pump is off again: the stage is over, real-time physics from here.
+                $this->scenario->unstage($node);
+                $staged = false;
             }
+            $pct -= $staged
+                ? config('namaa.simulator.stage_drying_per_second') * $dt
+                : self::dryingPerHour(now()) * $dt / 3600;
+            $pct = max($pct, 8.0); // very dry soil hardly loses more water
             $flow = $this->scenario->isLeaking($node) ? $this->between(0.6, 0.9) : 0.0;
         }
 
-        $pct = $this->softClamp($pct, 1.0, 97.0);
+        // The soil value changes smoothly; only the reported value carries sensor noise.
+        $pct = min(max($pct, 1.0), 97.0);
+        $this->scenario->setTrueMoisture($node, $pct);
+        $pct = $this->softClamp($pct + $this->noise((float) config('namaa.simulator.reading_noise_pct')), 1.0, 97.0);
 
         // Back to a raw ADC value with the node calibration, kept inside the valid range.
         $raw = (int) round($node->dry_value - $pct / 100 * ($node->dry_value - $node->wet_value));
@@ -114,6 +118,30 @@ class Simulator
             'water_level' => null,
             'battery_pct' => $this->nextBattery($node),
         ];
+    }
+
+    /**
+     * Drying rate (moisture points per hour) at this time of day in Makkah:
+     * the mean rate following the day's heat, highest at 14:00, lowest at 02:00.
+     */
+    public static function dryingPerHour(Carbon $at): float
+    {
+        $local = $at->copy()->setTimezone('Asia/Riyadh');
+        $hour = $local->hour + $local->minute / 60;
+
+        return (float) config('namaa.simulator.drying_per_hour')
+            * (1 + (float) config('namaa.simulator.drying_daily_swing') * cos(($hour - 14) / 24 * 2 * M_PI));
+    }
+
+    /** Real seconds since the node's last reading (one tick before the first), capped at max_step_seconds. */
+    private function stepSeconds(Node $node): float
+    {
+        if (! $node->last_seen_at) {
+            return (float) Namaa::timing('simulator_tick_seconds');
+        }
+        $seconds = $node->last_seen_at->diffInSeconds(now(), true);
+
+        return (float) min(max($seconds, 1), (int) config('namaa.simulator.max_step_seconds'));
     }
 
     /** Simulated field-version battery, or null for nodes without one. */

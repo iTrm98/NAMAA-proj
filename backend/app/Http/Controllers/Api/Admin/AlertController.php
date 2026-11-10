@@ -27,11 +27,12 @@ class AlertController extends Controller
         $status = $filters['status'] ?? 'open';
 
         $alerts = Alert::query()
-            ->whereHas('park', fn ($q) => $q->where('company_id', $request->user()->company_id))
+            ->whereHas('park', fn ($q) => $q->where('company_id', $request->user()->company_id)
+                ->unless($request->boolean('include_test'), fn ($p) => $p->withoutTest()))
             ->when($status !== 'all', fn ($q) => $q->where('status', $status))
             ->when($filters['park_id'] ?? null, fn ($q, $id) => $q->where('park_id', $id))
             ->when($filters['type'] ?? null, fn ($q, $type) => $q->where('type', $type))
-            ->with(['park', 'latestTask.assignee'])
+            ->with(['park', 'latestTask.assignee', 'detection'])
             ->byPriority()
             ->paginate($filters['per_page'] ?? 50);
 

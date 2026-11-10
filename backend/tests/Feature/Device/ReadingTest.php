@@ -3,11 +3,13 @@
 namespace Tests\Feature\Device;
 
 use App\Enums\ParkStatus;
+use App\Models\Alert;
 use App\Models\Node;
 use App\Models\Park;
 use App\Models\Reading;
 use App\Models\User;
 use App\Services\Calibration;
+use App\Support\DeviceRejections;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -41,7 +43,7 @@ class ReadingTest extends TestCase
             'moisture' => 2250, 'flow' => 1.25, 'temperature' => 31.5, 'humidity' => 22, 'pump_on' => true, 'water_level' => 1900,
         ]);
 
-        $response->assertCreated()->assertExactJson(['pump' => false, 'interval_s' => 30]);
+        $response->assertCreated()->assertJson(['pump' => false, 'interval_s' => 30, 'local_rule' => ['min' => 25, 'target' => 48, 'max_run_s' => 900]]);
 
         $reading = Reading::sole();
         $this->assertSame($node->park_id, $reading->park_id);
@@ -110,7 +112,7 @@ class ReadingTest extends TestCase
         $node = $this->node(['pump_target' => true]);
         config(['namaa.demo_mode' => true]);
 
-        $this->postReading($node, ['moisture' => 2000])->assertCreated()->assertExactJson(['pump' => true, 'interval_s' => 5]);
+        $this->postReading($node, ['moisture' => 2000])->assertCreated()->assertJson(['pump' => true, 'interval_s' => 5]);
     }
 
     public function test_a_node_without_a_pump_always_gets_false(): void
@@ -150,5 +152,161 @@ class ReadingTest extends TestCase
         $this->postReading($node, ['moisture' => 5000, 'humidity' => 120, 'flow' => -1, 'pump_on' => 'maybe'])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['moisture', 'humidity', 'flow', 'pump_on']);
+    }
+
+    // ---- Sprint 4, B: board status, buffered readings, local rule, rejections, health ----
+
+    public function test_the_reply_has_the_local_rule(): void
+    {
+        $node = $this->node(['dry_value' => 3100, 'wet_value' => 1200]);
+
+        $this->postReading($node, ['moisture' => 2000])->assertCreated()
+            ->assertJsonPath('local_rule.min', 25)
+            ->assertJsonPath('local_rule.target', 48) // middle of 25..70
+            ->assertJsonPath('local_rule.max_run_s', 900)
+            ->assertJsonPath('local_rule.dry_value', 3100)
+            ->assertJsonPath('local_rule.wet_value', 1200);
+    }
+
+    public function test_rssi_uptime_firmware_and_via_are_stored_on_the_node(): void
+    {
+        $node = $this->node();
+
+        $this->postReading($node, ['moisture' => 2000, 'rssi' => -67, 'uptime_s' => 3600, 'fw_version' => '1.0.3-esp32s3', 'via' => 'usb'])->assertCreated();
+
+        $node->refresh();
+        $this->assertSame(-67, $node->rssi);
+        $this->assertSame(3600, $node->uptime_s);
+        $this->assertSame('1.0.3-esp32s3', $node->fw_version);
+        $this->assertSame('usb', $node->via);
+
+        // A later post without them keeps what is known.
+        $this->postReading($node, ['moisture' => 2000])->assertCreated();
+        $this->assertSame(-67, $node->refresh()->rssi);
+    }
+
+    public function test_the_new_fields_are_validated(): void
+    {
+        $node = $this->node();
+
+        $this->postReading($node, ['rssi' => 5, 'uptime_s' => -1, 'fw_version' => str_repeat('x', 33), 'via' => 'bluetooth'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['rssi', 'uptime_s', 'fw_version', 'via']);
+    }
+
+    public function test_a_buffered_old_reading_is_stored_at_its_time_without_alerts_or_status_change(): void
+    {
+        $node = $this->node(['last_seen_at' => now()->subMinute(), 'last_moisture_pct' => 50]);
+        $node->park->update(['status' => ParkStatus::Ok]);
+
+        // Soil was very dry 10 minutes ago, while the board was offline.
+        $at = now()->subMinutes(10)->utc()->format('Y-m-d\TH:i:s\Z');
+        $this->postReading($node, ['moisture' => 3300, 'recorded_at' => $at, 'rssi' => -70])->assertCreated();
+
+        $reading = Reading::sole();
+        $this->assertSame($at, $reading->created_at->utc()->format('Y-m-d\TH:i:s\Z'));
+        $this->assertSame(0.0, $reading->moisture_pct);
+        $node->refresh();
+        $this->assertSame(50.0, $node->last_moisture_pct, 'the node cache keeps the newer state');
+        $this->assertTrue($node->last_seen_at->gt(now()->subMinutes(2)));
+        $this->assertSame(-70, $node->rssi, 'the board status is current');
+        $this->assertSame(0, Alert::count(), 'no alert from an old reading');
+        $this->assertSame(ParkStatus::Ok, $node->park->refresh()->status);
+    }
+
+    public function test_a_buffered_reading_newer_than_the_latest_updates_the_node_and_runs_the_rules(): void
+    {
+        $node = $this->node(['last_seen_at' => now()->subMinutes(10), 'last_moisture_pct' => 50]);
+
+        $this->postReading($node, ['moisture' => 3300, 'recorded_at' => now()->subMinutes(2)->utc()->format('Y-m-d\TH:i:s\Z')])->assertCreated();
+
+        $node->refresh();
+        $this->assertSame(0.0, $node->last_moisture_pct);
+        $this->assertTrue($node->last_seen_at->between(now()->subMinutes(3), now()->subMinute()));
+    }
+
+    public function test_recorded_at_in_the_future_or_older_than_24_hours_or_garbage_is_422(): void
+    {
+        $node = $this->node();
+
+        foreach ([now()->addHour(), now()->subHours(25)] as $bad) {
+            $this->postReading($node, ['moisture' => 2000, 'recorded_at' => $bad->utc()->format('Y-m-d\TH:i:s\Z')])
+                ->assertStatus(422)->assertJsonValidationErrors(['recorded_at']);
+        }
+        $this->postReading($node, ['moisture' => 2000, 'recorded_at' => 'yesterday-ish'])->assertStatus(422)->assertJsonValidationErrors(['recorded_at']);
+        $this->assertSame(0, Reading::count());
+
+        $this->postReading($node, ['moisture' => 2000, 'recorded_at' => now()->subHours(23)->utc()->format('Y-m-d\TH:i:s\Z')])->assertCreated();
+    }
+
+    public function test_rejected_requests_are_kept_per_node_without_token_or_body(): void
+    {
+        $node = $this->node();
+        $token = $node->createToken('device', ['device'])->plainTextToken;
+
+        $this->postReading($node, ['moisture' => 9999], $token)->assertStatus(422);
+        $this->withToken($token)->postJson('/api/device/readings', ['node_id' => $node->id + 99, 'moisture' => 2000])->assertForbidden();
+        $this->app['auth']->forgetGuards();
+        $this->withToken('999|wrongtokenvalue')->postJson('/api/device/readings', ['node_id' => $node->id])->assertUnauthorized();
+
+        $log = DeviceRejections::forNode($node->id);
+        $this->assertCount(2, $log);
+        $this->assertSame(403, $log[0]['status'], 'newest first');
+        $this->assertSame(422, $log[1]['status']);
+        $this->assertStringContainsString('moisture', $log[1]['message']);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', $log[0]['at']);
+        $encoded = json_encode([$log, DeviceRejections::last()]);
+        $this->assertStringNotContainsString(explode('|', $token)[1], $encoded);
+        $this->assertStringNotContainsString('9999', $encoded);
+        $this->assertNull(DeviceRejections::last()['node_id'], 'the unknown token is the latest, kept by prefix');
+        $this->assertSame('999|', DeviceRejections::last()['token_prefix']);
+    }
+
+    public function test_only_the_last_20_rejections_are_kept(): void
+    {
+        $node = $this->node();
+        $token = $node->createToken('device', ['device'])->plainTextToken;
+
+        for ($i = 0; $i < 22; $i++) {
+            $this->postReading($node, ['moisture' => 9999], $token)->assertStatus(422);
+        }
+
+        $this->assertCount(20, DeviceRejections::forNode($node->id));
+    }
+
+    public function test_the_rate_limit_answer_is_recorded(): void
+    {
+        config(['namaa.device_readings_per_minute' => 1]);
+        $node = $this->node();
+        $token = $node->createToken('device', ['device'])->plainTextToken;
+
+        $this->postReading($node, ['moisture' => 2000], $token)->assertCreated();
+        $this->postReading($node, ['moisture' => 2000], $token)->assertStatus(429);
+
+        $this->assertSame(429, DeviceRejections::forNode($node->id)[0]['status']);
+    }
+
+    public function test_admins_read_the_rejections_of_their_own_company_only(): void
+    {
+        $node = $this->node();
+        $other = $this->node();
+        $company = $node->park->company_id;
+        $this->postReading($node, ['moisture' => 9999])->assertStatus(422);
+        $this->postReading($other, ['moisture' => 9999])->assertStatus(422);
+        $admin = User::factory()->admin()->create(['company_id' => $company]);
+
+        $this->asUser($admin)->getJson('/api/admin/device-rejections')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.node_id', $node->id)
+            ->assertJsonPath('data.0.requests.0.status', 422);
+        $worker = User::factory()->worker()->create(['company_id' => $company]);
+        $this->asUser($worker)->getJson('/api/admin/device-rejections')->assertForbidden();
+    }
+
+    public function test_the_public_health_endpoint(): void
+    {
+        $this->getJson('/api/health')->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonStructure(['status', 'time']);
     }
 }

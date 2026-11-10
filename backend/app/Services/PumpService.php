@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\PumpReason;
 use App\Events\PumpChanged;
+use App\Jobs\EndRelayTest;
 use App\Models\Node;
 use App\Models\Park;
 use App\Models\PumpLog;
@@ -11,6 +12,8 @@ use App\Models\User;
 use App\Support\Namaa;
 use App\Support\Realtime;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -60,6 +63,35 @@ class PumpService
         ], $park->activeWorkerIds()));
 
         return true;
+    }
+
+    public static function relayTestKey(int $nodeId): string
+    {
+        return "namaa:relay_test:$nodeId";
+    }
+
+    /** End time of a running relay test (hardware page), else null. */
+    public static function relayTestUntil(int $nodeId): ?Carbon
+    {
+        $test = Cache::get(self::relayTestKey($nodeId));
+
+        return $test && Carbon::parse($test['until'])->isFuture() ? Carbon::parse($test['until']) : null;
+    }
+
+    /**
+     * Relay test: the pump runs relay_test_seconds through the normal pump path (the board
+     * gets pump:true in its next reply), then EndRelayTest switches it off. Returns the end time.
+     */
+    public function startRelayTest(Node $node, User $user): Carbon
+    {
+        $until = now()->addSeconds(Namaa::timing('relay_test_seconds'));
+        $id = (string) Str::uuid();
+
+        Cache::put(self::relayTestKey($node->id), ['id' => $id, 'until' => $until->toIso8601String()], $until->copy()->addMinute());
+        $this->set($node, true, PumpReason::Test, $user);
+        EndRelayTest::dispatch($node->id, $id)->delay($until);
+
+        return $until;
     }
 
     /** The newest pump log of a node (who switched it, why, when). */

@@ -18,6 +18,7 @@ abstract class NamaaBroadcast implements ShouldBroadcastNow
         public readonly int $companyId,
         public readonly array $payload,
         public readonly array $userIds = [],
+        public readonly bool $toMunicipality = true,
     ) {}
 
     abstract public function broadcastAs(): string;
@@ -25,10 +26,11 @@ abstract class NamaaBroadcast implements ShouldBroadcastNow
     /** @return list<PrivateChannel> */
     public function broadcastOn(): array
     {
-        $channels = [
-            new PrivateChannel('company.'.$this->companyId),
-            new PrivateChannel('municipality'),
-        ];
+        $channels = [new PrivateChannel('company.'.$this->companyId)];
+        // Events of test-bench parks (is_test) never go to the municipality.
+        if ($this->toMunicipality) {
+            $channels[] = new PrivateChannel('municipality');
+        }
 
         foreach (array_values(array_unique(array_filter($this->userIds))) as $userId) {
             $channels[] = new PrivateChannel('user.'.$userId);

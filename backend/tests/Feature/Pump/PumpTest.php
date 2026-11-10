@@ -129,12 +129,15 @@ class PumpTest extends TestCase
         $this->assertDatabaseHas('activity_logs', ['action' => 'pump.switched', 'subject_id' => $this->node->id]);
     }
 
-    public function test_safety_cut_off_uses_the_demo_time(): void
+    public function test_safety_cut_off_is_15_minutes_in_demo_mode_too(): void
     {
+        // Sprint 3.1: the simulated parks irrigate in real time (about 12.5 min a session).
         config(['namaa.demo_mode' => true]);
         app(PumpService::class)->set($this->node, true, PumpReason::Manual);
 
-        $this->travel(181)->seconds();
+        $this->travel(899)->seconds();
+        $this->assertSame(0, app(PumpService::class)->cutOffLongRuns());
+        $this->travel(2)->seconds();
         $this->assertSame(1, app(PumpService::class)->cutOffLongRuns());
     }
 

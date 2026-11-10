@@ -30,6 +30,7 @@ class CategoryPriorityTest extends TestCase
             'leak' => 'water', 'no_flow' => 'water', 'blockage' => 'water', 'over' => 'water',
             'dry' => 'plant', 'heat_stress' => 'plant', 'ndvi_drop' => 'plant',
             'litter' => 'cleanliness',
+            'litter_repeated' => 'cleanliness',
             'offline' => 'devices', 'sensor_fault' => 'devices', 'low_battery' => 'devices',
         ];
 
@@ -45,7 +46,7 @@ class CategoryPriorityTest extends TestCase
     {
         $expected = [
             'urgent' => ['leak', 'no_flow', 'heat_stress'],
-            'high' => ['dry', 'blockage'],
+            'high' => ['dry', 'blockage', 'litter_repeated'],
             'normal' => ['over', 'litter', 'offline', 'sensor_fault'],
             'low' => ['ndvi_drop', 'low_battery'],
         ];

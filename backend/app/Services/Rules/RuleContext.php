@@ -104,6 +104,24 @@ final class RuleContext
             || $r->moisture_raw >= Namaa::rule('fault_raw_high');
     }
 
+    /** Hysteresis margin (moisture points) between raising and resolving a moisture alert. */
+    public static function margin(): float
+    {
+        return (float) Namaa::rule('moisture_recovery_margin');
+    }
+
+    /** Moisture at which dry / heat_stress count as recovered (min + margin, capped at the middle). */
+    public static function dryRecovered(Park $park): float
+    {
+        return min($park->moisture_min + self::margin(), $park->moistureMid());
+    }
+
+    /** Moisture at which over counts as recovered (max - margin, floored at the middle). */
+    public static function overRecovered(Park $park): float
+    {
+        return max($park->moisture_max - self::margin(), $park->moistureMid());
+    }
+
     public static function flowing(Reading $r): bool
     {
         return $r->flow !== null && $r->flow >= Namaa::rule('flow_zero_lpm');

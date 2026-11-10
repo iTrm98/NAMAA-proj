@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AlertType;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use Database\Factories\TaskFactory;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'priority', 'status', 'started_at', 'done_at', 'note', 'photo_path',
     'done_note', 'done_photo_path', 'verified', 'verified_at', 'verify_reason',
     'time_to_resolve_min', 'water_used_l', 'due_at', 'escalated_at', 'escalation_count', 'overdue_at',
+    'done_moisture_pct', 'done_below_target',
 ])]
 class Task extends Model
 {
@@ -33,6 +35,8 @@ class Task extends Model
             'verified_at' => 'datetime',
             'time_to_resolve_min' => 'integer',
             'water_used_l' => 'float',
+            'done_moisture_pct' => 'float',
+            'done_below_target' => 'boolean',
             'due_at' => 'datetime',
             'escalated_at' => 'datetime',
             'escalation_count' => 'integer',
@@ -88,6 +92,18 @@ class Task extends Model
     }
 
     /** Active and past its due time. */
+    /**
+     * Watering target of a dry / heat-stress task: the middle of the park's
+     * range, where automatic irrigation stops. Null for other tasks.
+     * Needs `alert` and `park` (loaded or lazily).
+     */
+    public function wateringTarget(): ?float
+    {
+        $type = $this->alert?->type;
+
+        return in_array($type, [AlertType::Dry, AlertType::HeatStress], true) ? $this->park->moistureMid() : null;
+    }
+
     public function isOverdue(): bool
     {
         return $this->status->isActive() && $this->due_at !== null && $this->due_at->isPast();

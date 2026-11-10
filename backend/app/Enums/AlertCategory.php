@@ -18,7 +18,7 @@ enum AlertCategory: string
         return match ($type) {
             AlertType::Leak, AlertType::NoFlow, AlertType::Blockage, AlertType::Over => self::Water,
             AlertType::Dry, AlertType::HeatStress, AlertType::NdviDrop => self::Plant,
-            AlertType::Litter => self::Cleanliness,
+            AlertType::Litter, AlertType::LitterRepeated => self::Cleanliness,
             AlertType::Offline, AlertType::SensorFault, AlertType::LowBattery => self::Devices,
         };
     }

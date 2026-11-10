@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Worker;
 
 use App\Enums\PumpReason;
 use App\Enums\TaskStatus;
+use App\Http\Controllers\Api\Admin\DetectionController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Worker\DoneTaskRequest;
 use App\Http\Requests\Worker\TaskPumpRequest;
@@ -21,7 +22,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /** /api/worker/tasks: only the tasks assigned to the signed-in worker (others: 404). */
 class TaskController extends Controller
 {
-    private const WITH = ['park', 'alert', 'assignee', 'creator'];
+    private const WITH = ['park', 'alert.detection', 'assignee', 'creator'];
 
     public function __construct(
         private readonly TaskService $tasks,
@@ -71,6 +72,16 @@ class TaskController extends Controller
         $this->pump->set($node, $request->boolean('on'), PumpReason::Manual, $request->user());
 
         return response()->json(['data' => $this->detail($task)]);
+    }
+
+    /** The camera frame that raised the task's litter alert (people blurred). */
+    public function frame(Task $task): StreamedResponse
+    {
+        Gate::authorize('work', $task);
+        $detection = $task->alert?->detection;
+        abort_if($detection === null, 404);
+
+        return DetectionController::stream($detection);
     }
 
     public function photo(Task $task): StreamedResponse

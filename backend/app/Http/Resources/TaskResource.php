@@ -41,6 +41,9 @@ class TaskResource extends JsonResource
                 'priority' => $this->alert->priority->value,
                 'status' => $this->alert->status->value,
                 'data' => $this->alert->data,
+                'detection_id' => $this->alert->detection_id,
+                'detection' => $this->alert->relationLoaded('detection') && $this->alert->detection
+                    ? (new DetectionResource($this->alert->detection))->resolve() : null,
                 'recommended_action' => 'action.'.$this->alert->type->value,
                 'created_at' => $this->iso($this->alert->created_at),
             ] : null),
@@ -61,6 +64,10 @@ class TaskResource extends JsonResource
             'done_at' => $this->iso($this->done_at),
             'done_note' => $this->done_note,
             'has_photo' => $this->done_photo_path !== null,
+            // Dry / heat-stress tasks: water until this moisture % (null otherwise, or when park/alert are not loaded).
+            'watering_target_pct' => $this->relationLoaded('alert') && $this->relationLoaded('park') ? $this->wateringTarget() : null,
+            'done_moisture_pct' => $this->done_moisture_pct,
+            'done_below_target' => $this->done_below_target,
             'verified' => $this->verified,
             'verified_at' => $this->iso($this->verified_at),
             'verify_reason' => $this->verify_reason,

@@ -9,5 +9,6 @@ enum PumpReason: string
     case Task = 'task';       // legacy value, kept for old rows (workers now log "manual")
     case Rule = 'rule';       // automatic irrigation
     case System = 'system';   // demo scenario reset
+    case Test = 'test';       // relay test on the hardware page (10 s)
     case Safety = 'safety';   // safety cut-off (max run time) or the no_flow rule
 }

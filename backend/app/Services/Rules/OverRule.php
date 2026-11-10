@@ -14,7 +14,7 @@ use App\Support\Namaa;
  *    irrigation (rain, a neighbour) is not the operator's fault.
  *  - Nodes without pump and flow sensor (Model B): moisture > moisture_max
  *    for 6 readings.
- * Resolves after 2 readings at or below the maximum. Skipped while sensor_fault is open.
+ * Resolves after 2 readings at or below moisture_max - margin (hysteresis). Skipped while sensor_fault is open.
  */
 class OverRule implements Rule
 {
@@ -40,9 +40,9 @@ class OverRule implements Rule
 
     public function resolves(RuleContext $c): bool
     {
-        $max = $c->park->moisture_max;
+        $recovered = RuleContext::overRecovered($c->park);
 
-        return $c->lastAll(RuleContext::resolveCount(), fn (Reading $r) => ! RuleContext::faulty($r) && $r->moisture_pct <= $max);
+        return $c->lastAll(RuleContext::resolveCount(), fn (Reading $r) => ! RuleContext::faulty($r) && $r->moisture_pct <= $recovered);
     }
 
     public function confirmCount(RuleContext $c): int

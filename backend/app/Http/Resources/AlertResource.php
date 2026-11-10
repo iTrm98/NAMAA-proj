@@ -32,8 +32,13 @@ class AlertResource extends JsonResource
                 'name_en' => $this->park->name_en,
                 'source' => $this->park->source->value,
                 'auto_irrigation' => $this->park->auto_irrigation,
-            ]),
+            ] + ($this->park->relationLoaded('company')
+                ? ['company' => ['id' => $this->park->company->id, 'name' => $this->park->company->name]]
+                : [])),
             'node_id' => $this->node_id,
+            // Litter: the camera frame that raised (or upgraded) the alert.
+            'detection_id' => $this->detection_id,
+            'detection' => $this->whenLoaded('detection', fn () => $this->detection ? (new DetectionResource($this->detection))->resolve() : null),
             'type' => $this->type->value,
             'category' => $this->type->category()->value,
             'priority' => $this->priority->value,

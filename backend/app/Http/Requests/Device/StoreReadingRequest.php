@@ -2,7 +2,11 @@
 
 namespace App\Http\Requests\Device;
 
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
+use Throwable;
 
 /** POST /api/device/readings. The node_id = token node check is in the controller (403). */
 class StoreReadingRequest extends FormRequest
@@ -25,6 +29,27 @@ class StoreReadingRequest extends FormRequest
             'water_level' => ['nullable', 'integer', 'between:0,4095'],
             // Field version (solar + battery). The USB-powered boards never send it.
             'battery_pct' => ['nullable', 'numeric', 'between:0,100'],
+            // What the board says about itself (Sprint 4).
+            'rssi' => ['nullable', 'integer', 'between:-127,0'],
+            'uptime_s' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
+            'fw_version' => ['nullable', 'string', 'max:32'],
+            'via' => ['nullable', Rule::in(['wifi', 'usb'])],
+            // A buffered reading: when it was measured (UTC). Not in the future, at most 24 h old.
+            'recorded_at' => ['nullable', 'string', function (string $attribute, mixed $value, Closure $fail): void {
+                try {
+                    $at = Carbon::parse($value);
+                } catch (Throwable) {
+                    $fail('The recorded_at field must be a valid UTC date and time.');
+
+                    return;
+                }
+                // 60 s of tolerance for a board clock that runs a little fast.
+                if ($at->gt(now()->addSeconds(60))) {
+                    $fail('The recorded_at field must not be in the future.');
+                } elseif ($at->lt(now()->subHours(24))) {
+                    $fail('The recorded_at field must not be older than 24 hours.');
+                }
+            }],
         ];
     }
 }

@@ -10,12 +10,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable([
     'park_id', 'type', 'name', 'has_pump', 'pump_target', 'dry_value', 'wet_value',
     'last_seen_at', 'last_moisture_pct', 'last_flow', 'last_temperature',
-    'last_humidity', 'last_pump_on', 'last_battery_pct', 'expected_flow_l_min', 'source',
+    'last_humidity', 'last_pump_on', 'last_battery_pct', 'last_litter_count', 'expected_flow_l_min', 'source', 'rssi', 'uptime_s', 'fw_version', 'via', 'capture_mode', 'camera_url',
 ])]
 class Node extends Model
 {
@@ -37,7 +38,10 @@ class Node extends Model
             'last_humidity' => 'float',
             'last_pump_on' => 'boolean',
             'last_battery_pct' => 'float',
+            'last_litter_count' => 'integer',
             'expected_flow_l_min' => 'float',
+            'rssi' => 'integer',
+            'uptime_s' => 'integer',
             'source' => DataSource::class,
         ];
     }
@@ -46,6 +50,12 @@ class Node extends Model
     public function park(): BelongsTo
     {
         return $this->belongsTo(Park::class);
+    }
+
+    /** The newest stored reading (hardware page). @return HasOne<Reading, $this> */
+    public function latestReading(): HasOne
+    {
+        return $this->hasOne(Reading::class)->latestOfMany();
     }
 
     /** @return HasMany<Reading, $this> */

@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Enums\PumpReason;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\SaveOutlineRequest;
 use App\Http\Requests\Admin\SwitchPumpRequest;
 use App\Http\Requests\Admin\UpdateParkRequest;
 use App\Http\Resources\ParkResource;
 use App\Models\Park;
 use App\Services\ActivityLogger;
+use App\Services\ParkOutline;
 use App\Services\PumpService;
 use App\Services\ReadingSeries;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +26,8 @@ class ParkController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $parks = Park::forCompany($request->user()->company_id)
-            ->with('nodes')
+            ->unless($request->boolean('include_test'), fn ($q) => $q->withoutTest())
+            ->with(['nodes', 'latestNdvi'])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('id')
             ->get();
@@ -59,6 +62,17 @@ class ParkController extends Controller
         return $this->detail($park);
     }
 
+    /**
+     * PUT /api/admin/parks/{park}/outline: an outline drawn in the editor, with its
+     * source. The area is computed from it; NDVI is recomputed on the queue.
+     */
+    public function outline(SaveOutlineRequest $request, Park $park, ParkOutline $outline): ParkResource
+    {
+        $outline->save($park, $request->ring(), $request->source(), $request->validated('reference'), $request->user());
+
+        return $this->detail($park->refresh());
+    }
+
     /** POST /api/admin/parks/{park}/pump: manual switch by an admin. */
     public function pump(SwitchPumpRequest $request, Park $park): JsonResponse
     {
@@ -83,7 +97,7 @@ class ParkController extends Controller
 
     private function detail(Park $park): ParkResource
     {
-        $park->load(['nodes', 'openAlerts', 'activeTasks.assignee', 'activeTasks.alert'])
+        $park->load(['nodes', 'latestNdvi', 'openAlerts.detection', 'activeTasks.assignee', 'activeTasks.alert', 'outlineBy:id,name', 'areaBy:id,name'])
             ->loadCount(['openAlerts as open_alerts_count']);
 
         return (new ParkResource($park))->detailed()->withPump($this->pump->state($park));

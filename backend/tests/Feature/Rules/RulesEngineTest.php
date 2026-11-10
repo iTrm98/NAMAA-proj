@@ -112,7 +112,7 @@ class RulesEngineTest extends TestCase
         $this->assertEquals($createdAt, $alert->created_at);
     }
 
-    public function test_dry_resolves_after_two_readings_at_or_above_the_minimum(): void
+    public function test_dry_resolves_after_two_readings_at_or_above_the_minimum_plus_margin(): void
     {
         Event::fake([AlertResolved::class]);
         foreach ([20, 20, 20] as $pct) {
@@ -123,7 +123,7 @@ class RulesEngineTest extends TestCase
         $this->assertNotNull($this->open(AlertType::Dry), 'one good reading is not enough');
         $this->assertSame(ParkStatus::Dry, $this->park->refresh()->status);
 
-        $this->send(25);
+        $this->send(30); // min 25 + margin 5
         $alert = Alert::where('type', AlertType::Dry)->sole();
         $this->assertSame(AlertStatus::Resolved, $alert->status);
         $this->assertNotNull($alert->resolved_at);
@@ -153,6 +153,8 @@ class RulesEngineTest extends TestCase
 
         $this->send(70);
         $this->send(60);
+        $this->assertSame(AlertStatus::Open, $alert->refresh()->status, '70 is at the max, not max - margin');
+        $this->send(65);
         $this->assertSame(AlertStatus::Resolved, $alert->refresh()->status);
         $this->assertSame(ParkStatus::Ok, $this->park->refresh()->status);
     }

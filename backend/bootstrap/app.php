@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureDemoMode;
 use App\Http\Middleware\EnsureDeviceToken;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\RecordDeviceRejections;
 use App\Http\Middleware\EnsureUserToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -33,6 +34,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureRole::class,
             'demo' => EnsureDemoMode::class,
         ]);
+
+        // Laravel sorts auth and throttle middleware before route middleware; the rejection log
+        // must wrap them to see 401 and 429, so it sits in the api group (it only acts on api/device/*).
+        $middleware->prependToGroup('api', RecordDeviceRejections::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

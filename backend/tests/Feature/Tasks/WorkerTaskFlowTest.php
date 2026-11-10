@@ -79,8 +79,8 @@ class WorkerTaskFlowTest extends TestCase
         $this->asUser($this->ahmed)->postJson("/api/worker/tasks/{$taskId}/pump", ['on' => true])->assertOk()->assertJsonPath('data.pump.target', true);
         $this->assertDatabaseHas('pump_logs', ['node_id' => $this->node->id, 'user_id' => $this->ahmed->id, 'target' => true, 'reason' => 'manual']);
 
-        // Watering: moisture climbs, the dry alert resolves on its own.
-        foreach ([24, 27, 30] as $pct) {
+        // Watering: moisture climbs past min + margin (30), the dry alert resolves on its own.
+        foreach ([24, 27, 30, 32] as $pct) {
             $this->reading($pct, pump: true);
         }
         $this->assertSame(AlertStatus::Resolved, $alert->refresh()->status);

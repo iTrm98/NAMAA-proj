@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TaskController extends Controller
 {
-    private const WITH = ['park', 'alert', 'assignee', 'creator'];
+    private const WITH = ['park', 'alert.detection', 'assignee', 'creator'];
 
     public function __construct(private readonly TaskService $tasks) {}
 
@@ -39,6 +39,7 @@ class TaskController extends Controller
         ]);
 
         $query = Task::forCompany($request->user()->company_id)
+            ->unless($request->boolean('include_test'), fn ($q) => $q->whereHas('park', fn ($p) => $p->withoutTest()))
             ->when(! in_array($filters['status'] ?? 'all', ['all', 'overdue'], true), fn ($q) => $q->status($filters['status']))
             ->when(($filters['status'] ?? null) === 'overdue', fn ($q) => $q->overdue())
             ->when($filters['park_id'] ?? null, fn ($q, $id) => $q->where('park_id', $id))

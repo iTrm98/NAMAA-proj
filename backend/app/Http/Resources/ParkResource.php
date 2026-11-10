@@ -58,16 +58,29 @@ class ParkResource extends JsonResource
             'lat' => $this->lat,
             'lng' => $this->lng,
             'polygon' => $this->polygon,
+            'ndvi_recomputing' => $this->ndviRecomputing(),
             'status' => $this->status->value,
             'status_changed_at' => $this->iso($this->status_changed_at),
             'last_reading_at' => $this->iso($this->last_reading_at),
             'source' => $this->source->value,
+            'is_test' => (bool) $this->is_test,
             'moisture_min' => $this->moisture_min,
             'moisture_max' => $this->moisture_max,
             'has_pump' => $pumpNode !== null,
             'pump_target' => $pumpNode?->pump_target,
             'auto_irrigation' => $this->auto_irrigation,
             'open_alerts_count' => (int) ($this->open_alerts_count ?? 0),
+            // Parks with a camera node: its last frame (map popup). Null without a camera.
+            'camera' => ($camera = $nodes->first(fn (Node $n) => $n->type === NodeType::Camera)) ? [
+                'node_id' => $camera->id,
+                'name' => $camera->name,
+                'source' => $camera->source->value,
+                'capture_mode' => $camera->capture_mode,
+                'last_count' => $camera->last_litter_count,
+                'last_frame_at' => $this->iso($camera->last_seen_at),
+            ] : null,
+            // Newest Sentinel-2 value (map NDVI layer); null before the first fetch.
+            'ndvi' => $this->relationLoaded('latestNdvi') && $this->latestNdvi ? $this->latestNdvi->summary() : null,
             'latest' => $sensor?->last_seen_at ? [
                 'node_id' => $sensor->id,
                 'moisture_pct' => $sensor->last_moisture_pct,
@@ -98,6 +111,10 @@ class ParkResource extends JsonResource
                 'has_pump' => $n->has_pump,
                 'pump_target' => $n->pump_target,
                 'battery_pct' => $n->last_battery_pct,
+                'rssi' => $n->rssi,
+                'uptime_s' => $n->uptime_s,
+                'fw_version' => $n->fw_version,
+                'via' => $n->via,
                 'expected_flow_l_min' => $n->expected_flow_l_min,
             ])->all();
 
@@ -108,6 +125,10 @@ class ParkResource extends JsonResource
                 'category' => $a->type->category()->value,
                 'priority' => $a->priority->value,
                 'task_ready' => $a->isTaskReady(),
+                'detection_id' => $a->detection_id,
+                'detection' => $a->relationLoaded('detection') && $a->detection
+                    ? (new DetectionResource($a->detection))->resolve()
+                    : null,
                 'data' => $a->data,
                 'created_at' => $this->iso($a->created_at),
             ])->all();
@@ -117,6 +138,16 @@ class ParkResource extends JsonResource
                 : [];
 
             $data['pump'] = $this->pump;
+
+            // Where the outline and the area come from (Sprint 3.1, D1).
+            $source = fn (string $field) => [
+                'type' => $this->{"{$field}_source"},
+                'reference' => $this->{"{$field}_reference"},
+                'by' => $this->relationLoaded("{$field}By") && $this->{"{$field}By"}
+                    ? ['id' => $this->{"{$field}By"}->id, 'name' => $this->{"{$field}By"}->name] : null,
+                'at' => $this->iso($this->{"{$field}_at"}),
+            ];
+            $data['sources'] = ['outline' => $source('outline'), 'area' => $source('area')];
         }
 
         return $data;

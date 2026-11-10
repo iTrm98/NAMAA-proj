@@ -33,9 +33,13 @@ class DemoParksSeeder extends Seeder
         $tokens = [];
 
         foreach (self::parks() as $data) {
+            // Parks of the second demo company are created by php artisan namaa:demo:second-company.
+            if (($data['company'] ?? null) === 'second') {
+                continue;
+            }
             $source = DataSource::from($data['source']);
 
-            $park = Park::create([
+            $park = Park::create(self::dataSources($data) + [
                 'company_id' => $company->id,
                 'name_ar' => $data['name_ar'],
                 'name_en' => $data['name_en'],
@@ -63,6 +67,8 @@ class DemoParksSeeder extends Seeder
                     'has_pump' => (bool) ($nodeData['has_pump'] ?? false),
                     'pump_target' => false,
                     'source' => $source,
+                    // Camera 1 (King Abdullah): the laptop's camera feeds it from the browser.
+                    'capture_mode' => $source === DataSource::Real && $nodeData['type'] === 'camera' ? 'browser' : 'url',
                 ]);
 
                 // Only sensor nodes post readings. The camera is polled by Laravel.
@@ -79,6 +85,37 @@ class DemoParksSeeder extends Seeder
         }
 
         $this->reportTokens($tokens);
+    }
+
+    /**
+     * Data sources of the outline and the area (Sprint 3.1): from `outline_source` /
+     * `area_source` ({type, reference, by, at}) when the file has them, else from the
+     * older polygon_approximate / polygon_source. "by" is a name in the file; the
+     * seeded row keeps it in the reference (no user id on a fresh database).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function dataSources(array $data): array
+    {
+        $approximate = ($data['polygon_approximate'] ?? true) || empty($data['polygon']);
+        $fallback = $approximate
+            ? ['type' => 'approximate', 'reference' => 'Rectangle of the estimated area around the park centre (seed data), not verified']
+            : ['type' => str_starts_with((string) ($data['polygon_source'] ?? ''), 'OpenStreetMap') ? 'osm' : 'traced', 'reference' => $data['polygon_source'] ?? null];
+
+        $row = [];
+        foreach (['outline' => $fallback, 'area' => $approximate ? ['type' => 'approximate', 'reference' => 'Estimate (seed data), not verified'] : $fallback] as $field => $default) {
+            $s = ($data["{$field}_source"] ?? null) ?: $default;
+            $reference = $s['reference'] ?? null;
+            if (! empty($s['by'])) {
+                $reference = trim(($reference ? "$reference; " : '').'by '.$s['by']);
+            }
+            $row["{$field}_source"] = $s['type'] ?? 'approximate';
+            $row["{$field}_reference"] = $reference;
+            $row["{$field}_at"] = $s['at'] ?? null;
+        }
+
+        return $row;
     }
 
     /** @return list<array<string, mixed>> */

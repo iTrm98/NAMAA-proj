@@ -7,7 +7,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('namaa:scenario {name : reset | dry | heat | leak | blockage | battery | offline | escalate | recover}')]
+#[Signature('namaa:scenario {name : reset | dry | heat | leak | blockage | battery | offline | escalate | recover} {--full : with reset: also put the healthy parks back to the start}')]
 #[Description('Demo scenario on the simulated parks (never the real ones).')]
 class Scenario extends Command
 {
@@ -22,7 +22,7 @@ class Scenario extends Command
         }
 
         try {
-            $summary = $scenarios->run($name);
+            $summary = $scenarios->run($name, full: (bool) $this->option('full'));
         } catch (\InvalidArgumentException $e) {
             $this->error($e->getMessage());
 

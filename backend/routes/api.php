@@ -1,12 +1,18 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AlertController as AdminAlertController;
+use App\Http\Controllers\Api\Admin\DetectionController as AdminDetectionController;
+use App\Http\Controllers\Api\Admin\NodeController as AdminNodeController;
 use App\Http\Controllers\Api\Admin\ParkController as AdminParkController;
+use App\Http\Controllers\Api\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Api\Admin\TaskController as AdminTaskController;
 use App\Http\Controllers\Api\Admin\WorkerController as AdminWorkerController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DemoController;
+use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\Device\ReadingController as DeviceReadingController;
+use App\Http\Controllers\Api\Admin\ImpactController as AdminImpactController;
+use App\Http\Controllers\Api\Admin\NdviController as AdminNdviController;
 use App\Http\Controllers\Api\Municipality\ParkController as MunicipalityParkController;
 use App\Http\Controllers\Api\Worker\TaskController as WorkerTaskController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +24,7 @@ use Illuminate\Support\Facades\Route;
 | POST /api/broadcasting/auth is registered in bootstrap/app.php.
 */
 
+Route::get('health', HealthController::class);
 Route::get('demo/status', [DemoController::class, 'status']);
 
 Route::prefix('auth')->group(function () {
@@ -38,8 +45,13 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
     Route::get('parks', [AdminParkController::class, 'index']);
     Route::get('parks/{park}', [AdminParkController::class, 'show']);
     Route::patch('parks/{park}', [AdminParkController::class, 'update']);
+    Route::put('parks/{park}/outline', [AdminParkController::class, 'outline']);
     Route::get('parks/{park}/readings', [AdminParkController::class, 'readings']);
     Route::post('parks/{park}/pump', [AdminParkController::class, 'pump']);
+    Route::get('parks/{park}/detections', [AdminDetectionController::class, 'index']);
+    Route::get('parks/{park}/ndvi', [AdminNdviController::class, 'index']);
+    Route::get('impact', AdminImpactController::class);
+    Route::get('detections/{detection}/image', [AdminDetectionController::class, 'image']);
 
     Route::get('alerts', [AdminAlertController::class, 'index']);
 
@@ -51,7 +63,22 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
 
     Route::get('workers', [AdminWorkerController::class, 'index']);
 
+    Route::get('nodes', [AdminNodeController::class, 'index']);
+    Route::post('nodes/{node}/calibration', [AdminNodeController::class, 'calibrate']);
+    Route::post('nodes/{node}/relay-test', [AdminNodeController::class, 'relayTest']);
+    Route::post('nodes/{node}/token', [AdminNodeController::class, 'token']);
+    Route::patch('nodes/{node}/camera', [AdminNodeController::class, 'camera']);
+    Route::post('nodes/{node}/frame', [AdminNodeController::class, 'frame'])->middleware('throttle:30,1');
+    Route::post('nodes/{node}/camera-test', [AdminNodeController::class, 'cameraTest']);
+
+    Route::get('system/status', [AdminSystemController::class, 'status']);
+    Route::get('device-rejections', [AdminSystemController::class, 'rejections']);
+
     Route::post('demo/scenario', [DemoController::class, 'scenario'])->middleware('demo');
+    Route::post('demo/frame', [DemoController::class, 'frame'])->middleware('demo');
+    Route::post('demo/ndvi', [DemoController::class, 'ndvi'])->middleware('demo');
+    Route::get('demo/ndvi', [DemoController::class, 'ndviStatus'])->middleware('demo');
+    Route::get('demo/health', [DemoController::class, 'health'])->middleware('demo');
 });
 
 Route::prefix('worker')->middleware(['auth:sanctum', 'user.token', 'role:worker'])->group(function () {
@@ -61,8 +88,16 @@ Route::prefix('worker')->middleware(['auth:sanctum', 'user.token', 'role:worker'
     Route::post('tasks/{task}/done', [WorkerTaskController::class, 'done']);
     Route::post('tasks/{task}/pump', [WorkerTaskController::class, 'pump']);
     Route::get('tasks/{task}/photo', [WorkerTaskController::class, 'photo']);
+    Route::get('tasks/{task}/frame', [WorkerTaskController::class, 'frame']);
 });
 
 Route::prefix('municipality')->middleware(['auth:sanctum', 'user.token', 'role:municipality'])->group(function () {
     Route::get('parks', [MunicipalityParkController::class, 'index']);
+    Route::get('parks/{park}', [MunicipalityParkController::class, 'show']);
+    Route::get('parks/{park}/readings', [MunicipalityParkController::class, 'readings']);
+    Route::get('parks/{park}/ndvi', [MunicipalityParkController::class, 'ndvi']);
+    Route::get('parks/{park}/detections', [MunicipalityParkController::class, 'detections']);
+    Route::get('detections/{detection}/image', [MunicipalityParkController::class, 'detectionImage']);
+    Route::get('alerts', [MunicipalityParkController::class, 'alerts']);
+    Route::get('impact', [MunicipalityParkController::class, 'impact']);
 });

@@ -30,9 +30,13 @@ return [
         // How often done tasks are checked.
         'verify_check_seconds' => ['normal' => 60, 'demo' => 10],
         // Safety cut-off: a pump on for longer than this is switched off.
-        'pump_max_run_seconds' => ['normal' => 900, 'demo' => 180],
+        // Same in demo mode since Sprint 3.1: the simulated parks irrigate with the
+        // real-time pump model (a session takes about 12 min), which 180 s would cut off.
+        'pump_max_run_seconds' => ['normal' => 900, 'demo' => 900],
         // Simulator tick (one reading per simulated node).
         'simulator_tick_seconds' => ['normal' => 30, 'demo' => 5],
+        // Relay test on the hardware page: the pump runs this long (same in demo mode).
+        'relay_test_seconds' => ['normal' => 10, 'demo' => 10],
         // How often the pump safety check runs.
         'pump_check_seconds' => ['normal' => 30, 'demo' => 10],
 
@@ -58,6 +62,13 @@ return [
         'response_low_seconds' => ['normal' => 604800, 'demo' => 600],       // weekly review
         // How often overdue open tasks are escalated.
         'escalation_check_seconds' => ['normal' => 60, 'demo' => 10],
+
+        // Camera: a frame from CAMERA_URL/capture this often (only when CAMERA_URL is set).
+        'camera_capture_seconds' => ['normal' => 300, 'demo' => 10],
+        // litter_repeated: 3 litter frames within this window ...
+        'litter_repeat_window_seconds' => ['normal' => 3600, 'demo' => 180],
+        // ... or a litter alert still open after this long.
+        'litter_open_long_seconds' => ['normal' => 86400, 'demo' => 180],
     ],
 
     // Rules engine (see the decision table). Counts are readings of one node, newest included.
@@ -70,6 +81,11 @@ return [
         'over_no_pump_confirm_readings' => 6,
         // Readings in a row needed to resolve dry, over, leak, sensor_fault, low_battery, blockage.
         'resolve_readings' => 2,
+        // Hysteresis for noisy soil sensors (points of moisture %): dry / heat_stress
+        // resolve only at moisture_min + margin, over only at moisture_max - margin,
+        // and task verification starts its window there. They still raise / break
+        // at moisture_min / moisture_max, so noise around a limit cannot flap.
+        'moisture_recovery_margin' => 5,
         // Flow below this (L/min) counts as "no flow" (sensor noise floor, proposed).
         'flow_zero_lpm' => 0.1,
         // Raw moisture at or beyond these ADC values is a broken or unplugged sensor.
@@ -85,7 +101,81 @@ return [
         // expected flow; resolves above the second share.
         'blockage_low_ratio' => 0.5,
         'blockage_ok_ratio' => 0.7,
+        // Litter (camera frames of one camera, consecutive): raise after 2 litter
+        // frames, resolve after 2 clean frames. A frame has litter when /waste
+        // found at least 1 item above its confidence threshold.
+        'litter_confirm_frames' => 2,
+        'litter_resolve_frames' => 2,
+        // litter_repeated: this many litter frames within litter_repeat_window_seconds,
+        // or this many items in one frame (or the alert open for litter_open_long_seconds).
+        'litter_repeated_frames' => 3,
+        'litter_repeated_items' => 5,
+        // NDVI drop: the latest value this share below the average of the previous
+        // ndvi_baseline_days, with at least ndvi_min_history values; resolves within ndvi_recover_ratio.
+        'ndvi_drop_ratio' => 0.10,
+        'ndvi_recover_ratio' => 0.05,
+        'ndvi_baseline_days' => 28,
+        'ndvi_min_history' => 3,
     ],
+
+    // Impact, water (Sprint 3.1): NAMAA's pump time against a fixed irrigation
+    // schedule, over the same measured time.
+    //   ASSUMPTION, to confirm with the Amanah or the operator: a park on a
+    //   timer is watered 2 sessions a day of 20 minutes. Override per park id:
+    //   'parks' => [4 => ['sessions_per_day' => 3, 'minutes_per_session' => 15]].
+    'water_baseline' => [
+        'default' => ['sessions_per_day' => 2, 'minutes_per_session' => 20],
+        'parks' => [],
+    ],
+    // NDVI: below this many valid Sentinel-2 pixels (10 m, about 2000 m2) in the outline the
+    // value is "too small to measure reliably": shown as such, never used by ndvi_drop.
+    'ndvi' => ['min_pixels' => 20],
+
+    'impact' => [
+        // A gap between two readings of the pump node longer than this is not
+        // measured time (simulator stopped, laptop off, board down).
+        'max_gap_seconds' => 90,
+        // The water saving of a park is shown only with at least this many completed
+        // irrigation cycles (pump on, then off) and this many measured hours.
+        'min_cycles' => 1,
+        'min_measured_hours' => 24,
+        // Readings before this (UTC) are left out of the water comparison: before
+        // Sprint 3.1 the simulator never let the healthy parks dry, so they never
+        // needed water. Null = no limit.
+        'water_since' => env('IMPACT_WATER_SINCE', '2026-11-10 06:36:13'),
+    ],
+
+    // One-off cleanups (Sprint 3.1). The scheduler gap fix (RepeatsWithinMinute stops at :50)
+    // was saved at 02:56:10 UTC on Nov 10, 2026 and took effect on the next scheduler minute.
+    'cleanup' => [
+        'false_offline_before' => '2026-11-10 02:57:00',
+    ],
+
+    // Camera node (ESP32-S3-CAM running CameraWebServer). Empty URL = camera off.
+    // Park outlines (php artisan namaa:parks:outlines): OpenStreetMap through Overpass.
+    'overpass_url' => env('OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
+    'parks_seed_path' => base_path('../data/seed/parks.json'),
+
+    'camera' => [
+        'url' => env('CAMERA_URL', ''),
+        'timeout_seconds' => 5,
+        // Photos older than this are pruned daily, except frames attached to an alert.
+        'retention_days' => 7,
+        'disk' => 'local',
+        // Sample photos for the litter scenario: {path}/litter and {path}/clean
+        // (default data/samples, mounted read-only into the containers).
+        'samples_path' => null,
+    ],
+
+    // Vision service (Python, Docker). Only Laravel calls it.
+    'vision' => [
+        'url' => env('VISION_SERVICE_URL', 'http://vision:8001'),
+        'waste_timeout_seconds' => 30,
+        'ndvi_timeout_seconds' => 120,
+    ],
+
+    // Where node tokens are kept for the person setting up the boards (never committed).
+    'node_tokens_file' => storage_path('app/private/node-tokens.txt'),
 
     // Device route rate limit, per node.
     'device_readings_per_minute' => 120,
@@ -103,11 +193,28 @@ return [
 
     // Simulator and scenarios: simulated sensor nodes by name (fixed in the demo seed).
     'simulator' => [
-        // Story per node name; any other simulated sensor node is "healthy".
-        'stories' => ['Sim 1' => 'drying'],
-        // Moisture change per tick (%).
-        'drying_per_tick' => 0.3,
-        'pump_rise_per_tick' => 3.0,
+        // Soil physics in real time (per hour / minute, the same with or without
+        // DEMO_MODE; a reading every 5 s does not dry the soil faster). Sprint 3.1
+        // report, Phase C, has the reasoning. Proposed values for Makkah in November,
+        // sensor at about 10 cm in sandy park soil, in points of the sensor's 0-100 %:
+        //  - drying: mean 1.5 %/h (about 36 points a day), following the heat of
+        //    the day: rate = mean x (1 + swing x cos(2 pi (hour - 14) / 24)), so
+        //    0.3 %/h at 02:00 and 2.7 %/h at 14:00 (Asia/Riyadh);
+        //  - pump on: +1.8 % per minute (one automatic session from 25 % to the
+        //    middle of the range, 47.5 %, takes about 12.5 minutes).
+        'drying_per_hour' => 1.5,
+        'drying_daily_swing' => 0.8,
+        'pump_rise_per_minute' => 1.8,
+        // Stage mode: the node a scenario puts on stage (Al Adel after `reset` or
+        // `dry`) changes fast, so the watering story fits in a minute. It ends once
+        // the pump has watered the node and is off again.
+        'stage_drying_per_second' => 0.06,     // about -0.3 % per 5 s reading
+        'stage_pump_rise_per_second' => 0.6,   // about +3 % per 5 s reading
+        // A longer gap since the node's last reading (simulator stopped, laptop off)
+        // is not simulated: the soil continues from where it was.
+        'max_step_seconds' => 90,
+        // Sensor noise on each reported value (the soil itself changes smoothly).
+        'reading_noise_pct' => 0.3,
         // Simulated field version (solar + battery): battery % drops about 1 % per
         // 10 min and the "solar panel" keeps it at or above battery_floor_pct.
         'battery_nodes' => ['Sim 1', 'Sim 2', 'Sim 3'],

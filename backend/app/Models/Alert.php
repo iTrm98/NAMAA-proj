@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['park_id', 'node_id', 'type', 'severity', 'priority', 'status', 'task_ready_at', 'data', 'resolved_at'])]
+#[Fillable(['park_id', 'node_id', 'detection_id', 'type', 'severity', 'priority', 'status', 'task_ready_at', 'data', 'resolved_at'])]
 class Alert extends Model
 {
     /** @use HasFactory<AlertFactory> */
@@ -33,6 +33,12 @@ class Alert extends Model
             'data' => 'array',
             'resolved_at' => 'datetime',
         ];
+    }
+
+    /** The camera frame that raised (or last upgraded) a litter alert. @return BelongsTo<Detection, $this> */
+    public function detection(): BelongsTo
+    {
+        return $this->belongsTo(Detection::class);
     }
 
     /** @return BelongsTo<Park, $this> */

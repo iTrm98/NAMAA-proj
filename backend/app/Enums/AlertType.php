@@ -14,6 +14,7 @@ enum AlertType: string
     case SensorFault = 'sensor_fault';
     case LowBattery = 'low_battery';
     case Litter = 'litter';
+    case LitterRepeated = 'litter_repeated';
     case NdviDrop = 'ndvi_drop';
 
     public function category(): AlertCategory
@@ -32,7 +33,7 @@ enum AlertType: string
     {
         return match ($this) {
             self::Leak, self::NoFlow, self::HeatStress => TaskPriority::Urgent,
-            self::Dry, self::Blockage => TaskPriority::High,
+            self::Dry, self::Blockage, self::LitterRepeated => TaskPriority::High,
             self::Over, self::Litter, self::Offline, self::SensorFault => TaskPriority::Normal,
             self::NdviDrop, self::LowBattery => TaskPriority::Low,
         };
@@ -49,9 +50,15 @@ enum AlertType: string
     {
         return match ($this) {
             self::Dry, self::HeatStress, self::NoFlow, self::Leak => AlertSeverity::Critical,
-            self::Over, self::Blockage, self::Offline, self::SensorFault, self::Litter => AlertSeverity::Warning,
+            self::Over, self::Blockage, self::Offline, self::SensorFault, self::Litter, self::LitterRepeated => AlertSeverity::Warning,
             self::NdviDrop, self::LowBattery => AlertSeverity::Info,
         };
+    }
+
+    /** Litter seen by a camera: the camera-frame rules own these, not the reading rules. */
+    public function isLitter(): bool
+    {
+        return $this === self::Litter || $this === self::LitterRepeated;
     }
 
     /** Offline alerts wait (task-ready only after a delay); every other type can get a task at once. */

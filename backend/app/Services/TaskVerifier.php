@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Enums\AlertStatus;
 use App\Enums\AlertType;
+use App\Enums\NodeType;
 use App\Enums\TaskStatus;
 use App\Models\Alert;
+use App\Models\Detection;
 use App\Models\Node;
 use App\Models\Park;
 use App\Models\Reading;
@@ -21,11 +23,18 @@ use Illuminate\Support\Facades\DB;
  *
  *  - verified when the alert's condition has stayed cleared for a continuous
  *    window of readings after done_at (10 min, 1 min in demo mode). A bad
- *    reading, or a gap longer than the offline window, restarts the window;
+ *    reading, or a gap longer than the offline window, restarts the window.
+ *    Moisture tasks use hysteresis: the window starts only once the soil is
+ *    past the limit by the recovery margin (dry: >= min + 5), it is broken only
+ *    by a reading past the limit itself (dry: < min); readings in between keep
+ *    a running window going but do not start one;
  *  - not verified when the window is not reached within the timeout after
  *    Done (60 min, 3 min in demo mode): reason `condition_returned` when a
  *    reading after Done still showed the problem, else `no_data`. The alert
  *    then stays open.
+ *
+ * Litter tasks are checked on the camera's frames instead of readings: a
+ * frame without litter is good, a frame with litter breaks the window.
  *
  * verified = true: verified_at, time_to_resolve_min (alert raised -> verified,
  * or task created -> verified) and the alert resolved if still open.
@@ -70,36 +79,49 @@ class TaskVerifier
             $maxGap = Namaa::timing('offline_seconds');
             $deadline = $task->done_at->copy()->addSeconds(Namaa::timing('verify_timeout_seconds'));
 
-            $readings = Reading::query()
-                ->where('park_id', $task->park_id)
-                ->when($alert?->node_id, fn ($q, $nodeId) => $q->where('node_id', $nodeId))
-                ->where('created_at', '>', $task->done_at)
-                ->where('created_at', '<=', $deadline)
-                ->orderBy('created_at')->orderBy('id')
-                ->get();
+            // [time, state] samples after Done: camera frames for litter, readings otherwise.
+            if ($alert?->type?->isLitter()) {
+                $maxGap = OfflineChecker::offlineSeconds(NodeType::Camera);
+                $samples = Detection::query()
+                    ->where('node_id', $alert->node_id)
+                    ->where('captured_at', '>', $task->done_at)
+                    ->where('captured_at', '<=', $deadline)
+                    ->orderBy('captured_at')->orderBy('id')
+                    ->get(['id', 'count', 'captured_at'])
+                    ->map(fn (Detection $d) => [$d->captured_at, $d->hasLitter() ? self::BAD : self::GOOD]);
+            } else {
+                $samples = Reading::query()
+                    ->where('park_id', $task->park_id)
+                    ->when($alert?->node_id, fn ($q, $nodeId) => $q->where('node_id', $nodeId))
+                    ->where('created_at', '>', $task->done_at)
+                    ->where('created_at', '<=', $deadline)
+                    ->orderBy('created_at')->orderBy('id')
+                    ->get()
+                    ->map(fn (Reading $r) => [$r->created_at, $this->state($alert, $task->park, $r)]);
+            }
 
             $streakStart = null;
-            $previous = null;
+            $previousAt = null;
             $sawBad = false;
             $verified = false;
 
-            foreach ($readings as $reading) {
-                if ($previous && $previous->created_at->diffInSeconds($reading->created_at, true) > $maxGap) {
+            foreach ($samples as [$at, $state]) {
+                if ($previousAt && $previousAt->diffInSeconds($at, true) > $maxGap) {
                     $streakStart = null; // a gap is not "continuous"
                 }
 
-                if ($this->cleared($alert, $task->park, $reading)) {
-                    $streakStart ??= $reading->created_at;
-                    if ($streakStart->diffInSeconds($reading->created_at, true) >= $window) {
+                if ($state === self::BAD) {
+                    $streakStart = null;
+                    $sawBad = true;
+                } elseif ($state === self::GOOD || $streakStart !== null) {
+                    $streakStart ??= $at;
+                    if ($streakStart->diffInSeconds($at, true) >= $window) {
                         $verified = true;
                         break;
                     }
-                } else {
-                    $streakStart = null;
-                    $sawBad = true;
                 }
 
-                $previous = $reading;
+                $previousAt = $at;
             }
 
             if (! $verified && now()->lt($deadline)) {
@@ -131,22 +153,52 @@ class TaskVerifier
         });
     }
 
-    /** One reading shows the alert's condition cleared. */
-    private function cleared(?Alert $alert, Park $park, Reading $r): bool
+    /** Reading states: starts (or continues) the window, only continues a running one, breaks it. */
+    private const GOOD = 'good';
+
+    private const HOLD = 'hold';
+
+    private const BAD = 'bad';
+
+    /** What one reading means for the alert's condition (GOOD / HOLD / BAD). */
+    private function state(?Alert $alert, Park $park, Reading $r): string
     {
-        $node = $alert?->node;
+        $moisture = $r->moisture_pct;
 
         return match ($alert?->type) {
-            AlertType::Dry, AlertType::HeatStress => ! RuleContext::faulty($r) && $r->moisture_pct >= $park->moisture_min,
-            AlertType::Over => ! RuleContext::faulty($r) && $r->moisture_pct <= $park->moisture_max,
+            AlertType::Dry, AlertType::HeatStress => match (true) {
+                RuleContext::faulty($r) || $moisture < $park->moisture_min => self::BAD,
+                $moisture >= RuleContext::dryRecovered($park) => self::GOOD,
+                default => self::HOLD,
+            },
+            AlertType::Over => match (true) {
+                RuleContext::faulty($r) || $moisture > $park->moisture_max => self::BAD,
+                $moisture <= RuleContext::overRecovered($park) => self::GOOD,
+                default => self::HOLD,
+            },
+            // A task made from a park: within the range (with the margins to start).
+            null => match (true) {
+                RuleContext::faulty($r) || $moisture < $park->moisture_min || $moisture > $park->moisture_max => self::BAD,
+                $moisture >= RuleContext::dryRecovered($park) && $moisture <= RuleContext::overRecovered($park) => self::GOOD,
+                default => self::HOLD,
+            },
+            default => $this->cleared($alert, $r) ? self::GOOD : self::BAD,
+        };
+    }
+
+    /** One reading shows a non-moisture alert's condition cleared. */
+    private function cleared(Alert $alert, Reading $r): bool
+    {
+        $node = $alert->node;
+
+        return match ($alert->type) {
             AlertType::Leak => $r->flow !== null && ! RuleContext::flowing($r),
             AlertType::NoFlow => $r->pump_on !== true || RuleContext::flowing($r),
             AlertType::Blockage => $r->pump_on !== true || $this->flowOk($node, $r),
             AlertType::SensorFault => ! RuleContext::faulty($r),
             AlertType::LowBattery => $r->battery_pct !== null && $r->battery_pct > Namaa::rule('battery_ok_pct'),
-            AlertType::Offline, AlertType::Litter, AlertType::NdviDrop => true,
-            // A task made from a park: the soil is within the park's range.
-            null => ! RuleContext::faulty($r) && $r->moisture_pct >= $park->moisture_min && $r->moisture_pct <= $park->moisture_max,
+            // Offline: any reading. Litter is checked on camera frames, ndvi_drop has no readings check.
+            default => true,
         };
     }
 

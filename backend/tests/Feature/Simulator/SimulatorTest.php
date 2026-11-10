@@ -13,9 +13,12 @@ use App\Models\Node;
 use App\Models\Park;
 use App\Models\Reading;
 use App\Models\Task;
+use App\Models\User;
 use App\Services\ScenarioService;
 use App\Services\Simulator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class SimulatorTest extends TestCase
@@ -77,8 +80,9 @@ class SimulatorTest extends TestCase
         }
     }
 
-    public function test_al_adel_keeps_drying_and_raises_dry_while_healthy_parks_stay_ok(): void
+    public function test_al_adel_on_stage_dries_fast_and_raises_dry_while_healthy_parks_stay_ok(): void
     {
+        app(ScenarioService::class)->run('dry'); // 21 %, stage mode
         $this->tick(4);
 
         $moisture = Reading::where('node_id', $this->sim['Sim 1']->id)->orderBy('id')->pluck('moisture_pct')->all();
@@ -97,6 +101,7 @@ class SimulatorTest extends TestCase
 
     public function test_the_pump_raises_moisture_and_the_dry_alert_resolves_on_its_own(): void
     {
+        app(ScenarioService::class)->run('dry');
         $this->tick(3);
         $alert = Alert::open()->where('type', AlertType::Dry)->sole();
 
@@ -107,7 +112,7 @@ class SimulatorTest extends TestCase
         $this->assertGreaterThanOrEqual(1.5, $reading->flow);
         $this->assertLessThanOrEqual(2.5, $reading->flow);
 
-        $this->tick(4); // about +3 % per tick from ~21 %
+        $this->tick(5); // stage pump: about +3 % per 5 s from ~21 %
         $this->assertGreaterThan(25, $this->latest($this->sim['Sim 1'])->moisture_pct);
         $this->assertSame(AlertStatus::Resolved, $alert->refresh()->status);
         $this->assertSame(ParkStatus::Ok, $this->sim['Sim 1']->park->refresh()->status);
@@ -141,17 +146,19 @@ class SimulatorTest extends TestCase
         $this->assertSame(1, Reading::where('node_id', $this->sim['Sim 3']->id)->count());
     }
 
-    public function test_after_watering_al_adel_stops_drying_until_the_next_dry_scenario(): void
+    public function test_after_watering_the_stage_ends_and_al_adel_dries_in_real_time_until_the_next_dry_scenario(): void
     {
         $node = $this->sim['Sim 1'];
+        app(ScenarioService::class)->run('dry');
         $node->update(['pump_target' => true]);
-        $this->tick(3); // ~21.7 -> ~30 %
+        $this->tick(4); // ~21 -> ~33 %
         $node->update(['pump_target' => false]);
         $watered = $this->latest($node)->moisture_pct;
         $this->assertGreaterThan(25, $watered);
 
-        $this->tick(20); // would have lost ~6 % while drying
-        $this->assertGreaterThanOrEqual($watered - 1.5, $this->latest($node)->moisture_pct);
+        $this->tick(20); // on stage it would have lost ~6 %; in real time (100 s) under 0.1 %
+        $this->assertFalse(app(ScenarioService::class)->isStaged($node->refresh()));
+        $this->assertGreaterThanOrEqual($watered - 1.0, $this->latest($node)->moisture_pct);
         $this->assertNull(Alert::open()->where('node_id', $node->id)->where('type', AlertType::Dry)->first());
 
         $this->artisan('namaa:scenario dry')->assertSuccessful();
@@ -185,7 +192,7 @@ class SimulatorTest extends TestCase
         $realTask = Task::factory()->create(['park_id' => $this->real->park_id]);
         app(ScenarioService::class)->run('leak');
 
-        $summary = app(ScenarioService::class)->run('reset');
+        $summary = app(ScenarioService::class)->run('reset', full: true);
 
         $this->assertSame(1, $summary['alerts_resolved']);
         $this->assertSame(1, $summary['tasks_cancelled']);
@@ -202,10 +209,136 @@ class SimulatorTest extends TestCase
 
         $this->tick(1);
         $this->assertEqualsWithDelta(22, $this->latest($alAdel)->moisture_pct, 1.0);
-        $this->assertEqualsWithDelta(52, $this->latest($this->sim['Sim 2'])->moisture_pct, 2.0);
+        $this->assertEqualsWithDelta(50, $this->latest($this->sim['Sim 2'])->moisture_pct, 1.0, 'healthy parks keep their soil');
+        $this->assertTrue($this->sim['Sim 2']->park->refresh()->auto_irrigation, 'reset turns automatic irrigation on for healthy parks');
+        $this->assertTrue($this->sim['Sim 3']->park->refresh()->auto_irrigation);
         $this->assertSame(0.0, $this->latest($this->sim['Sim 2'])->flow, 'reset also ends a leak');
         $this->tick(2);
         $this->assertNotNull(Alert::open()->where('node_id', $alAdel->id)->where('type', AlertType::Dry)->first());
+    }
+
+    public function test_plain_reset_only_resets_the_demo_story_and_leaves_healthy_parks_alone(): void
+    {
+        $alAdel = $this->sim['Sim 1'];
+        $healthy = $this->sim['Sim 2'];
+        $healthy->park->update(['auto_irrigation' => false]);
+        $healthy->update(['last_moisture_pct' => 12, 'pump_target' => true]);
+        $alAdel->park->update(['auto_irrigation' => true]);
+        $simAlert = Alert::factory()->create(['park_id' => $healthy->park_id, 'node_id' => $healthy->id]);
+        $simTask = Task::factory()->create(['park_id' => $healthy->park_id]);
+        app(ScenarioService::class)->run('leak');
+
+        $summary = app(ScenarioService::class)->run('reset');
+
+        $this->assertFalse($summary['full']);
+        $this->assertSame(AlertStatus::Resolved, $simAlert->refresh()->status, 'open demo alerts are resolved');
+        $this->assertSame(TaskStatus::Cancelled, $simTask->refresh()->status, 'open demo tasks are cancelled');
+        $this->assertFalse($alAdel->park->refresh()->auto_irrigation, 'Al Adel is back to manual and dry');
+        $this->assertFalse((bool) $healthy->park->refresh()->auto_irrigation, 'the healthy park keeps its irrigation setting');
+        $this->assertTrue($healthy->refresh()->pump_target, 'the healthy pump is not switched off');
+        $this->assertNull(Cache::get("namaa:sim:{$healthy->id}:leak"), 'forced faults are cleared');
+        $this->assertDatabaseMissing('pump_logs', ['node_id' => $healthy->id, 'reason' => 'system']);
+
+        $this->tick(1);
+        $this->assertEqualsWithDelta(22, $this->latest($alAdel)->moisture_pct, 1.0);
+        $this->assertLessThan(20, $this->latest($healthy)->moisture_pct, 'its soil was not moved back to 52 %');
+    }
+
+    public function test_full_reset_through_the_api_and_the_command_option(): void
+    {
+        config(['namaa.demo_mode' => true]);
+        $admin = User::factory()->admin()->create(['company_id' => $this->company->id]);
+        $this->sim['Sim 2']->park->update(['auto_irrigation' => false]);
+
+        $this->asUser($admin)->postJson('/api/admin/demo/scenario', ['name' => 'reset'])->assertOk()->assertJsonPath('data.full', false);
+        $this->assertFalse((bool) $this->sim['Sim 2']->park->refresh()->auto_irrigation);
+
+        $this->asUser($admin)->postJson('/api/admin/demo/scenario', ['name' => 'reset', 'full' => 'maybe'])->assertUnprocessable();
+        $this->asUser($admin)->postJson('/api/admin/demo/scenario', ['name' => 'reset', 'full' => true])->assertOk()->assertJsonPath('data.full', true);
+        $this->assertTrue((bool) $this->sim['Sim 2']->park->refresh()->auto_irrigation);
+
+        $this->sim['Sim 3']->park->update(['auto_irrigation' => false]);
+        $this->artisan('namaa:scenario reset')->assertSuccessful();
+        $this->assertFalse((bool) $this->sim['Sim 3']->park->refresh()->auto_irrigation);
+        $this->artisan('namaa:scenario reset --full')->assertSuccessful();
+        $this->assertTrue((bool) $this->sim['Sim 3']->park->refresh()->auto_irrigation);
+    }
+
+    public function test_reset_brings_a_healthy_park_outside_its_range_back(): void
+    {
+        $this->sim['Sim 2']->update(['last_moisture_pct' => 12]);
+        app(ScenarioService::class)->run('reset', full: true);
+        $this->tick(1);
+        $this->assertEqualsWithDelta(52, $this->latest($this->sim['Sim 2'])->moisture_pct, 1.0);
+    }
+
+    // ---- Sprint 3.1: real-time soil physics ----
+
+    /** Simulates $seconds of real time for one node in steps of $step s (no readings stored). */
+    private function soilAfter(Node $node, int $seconds, int $step): float
+    {
+        $sim = app(Simulator::class);
+        $scenario = app(ScenarioService::class);
+        $scenario->setTrueMoisture($node, 50.0);
+        for ($t = 0; $t < $seconds; $t += $step) {
+            $node->last_seen_at = now();
+            $this->travel($step)->seconds();
+            $sim->next($node);
+        }
+
+        return $scenario->trueMoisture($node);
+    }
+
+    public function test_demo_mode_does_not_change_the_drying_rate(): void
+    {
+        $node = $this->sim['Sim 2'];
+        $this->travelTo(Carbon::parse('2026-11-10 10:30:00', 'UTC')); // 13:30 to 14:30 in Makkah
+        $normal = 50.0 - $this->soilAfter($node, 3600, 30);
+
+        config(['namaa.demo_mode' => true]);
+        $this->travelTo(Carbon::parse('2026-11-10 10:30:00', 'UTC'));
+        $demo = 50.0 - $this->soilAfter($node, 3600, 5);
+
+        $this->assertEqualsWithDelta($normal, $demo, 0.02, '5 s readings dry the soil as fast as 30 s readings');
+        $this->assertEqualsWithDelta(2.7, $normal, 0.05, 'about 2.7 %/h around 14:00');
+    }
+
+    public function test_drying_follows_the_day_and_averages_the_configured_rate(): void
+    {
+        $at = fn (string $local) => Carbon::parse("2026-11-10 $local", 'Asia/Riyadh');
+        $this->assertEqualsWithDelta(2.7, Simulator::dryingPerHour($at('14:00')), 0.001);
+        $this->assertEqualsWithDelta(0.3, Simulator::dryingPerHour($at('02:00')), 0.001);
+        $day = 0.0;
+        for ($h = 0; $h < 24; $h++) {
+            $day += Simulator::dryingPerHour($at(sprintf('%02d:00', $h)));
+        }
+        $this->assertEqualsWithDelta(36.0, $day, 0.01, 'mean 1.5 %/h');
+    }
+
+    public function test_the_real_time_pump_takes_about_12_minutes_from_the_minimum_to_the_middle(): void
+    {
+        $node = $this->sim['Sim 2'];
+        $this->travelTo(Carbon::parse('2026-11-10 08:00:00', 'UTC'));
+        $node->pump_target = true;
+        $scenario = app(ScenarioService::class);
+        $scenario->setTrueMoisture($node, 25.0);
+        $sim = app(Simulator::class);
+        for ($t = 0; $t < 750; $t += 30) {
+            $node->last_seen_at = now();
+            $this->travel(30)->seconds();
+            $sim->next($node);
+        }
+        $this->assertEqualsWithDelta(47.5, $scenario->trueMoisture($node), 0.5);
+    }
+
+    public function test_a_gap_longer_than_the_max_step_is_not_simulated(): void
+    {
+        $node = $this->sim['Sim 2'];
+        app(ScenarioService::class)->setTrueMoisture($node, 50.0);
+        $node->last_seen_at = now();
+        $this->travel(3)->hours(); // simulator stopped
+        app(Simulator::class)->next($node);
+        $this->assertGreaterThan(49.9, app(ScenarioService::class)->trueMoisture($node), 'at most 90 s of drying');
     }
 
     public function test_unknown_scenario_is_rejected(): void

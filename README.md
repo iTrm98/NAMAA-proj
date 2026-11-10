@@ -31,14 +31,16 @@ Goal: less wasted water, fewer dead plants, faster response, decisions based on 
 | **Back** | `backend/` | PHP 8.5, Laravel 13, Reverb (live updates) | Docker | http://localhost:8000 |
 | **Front** | `frontend/` | TypeScript, React 19, Vite · Arabic and English (RTL) | Node on your machine | http://localhost:5173 |
 | **AI** | `vision-service/` | Python 3.12, FastAPI (NDVI + waste detection) | Docker | http://localhost:8001 |
-| **Sensor nodes** | `firmware/node-sensor/` | C++ (Arduino) on ESP32-S3-DevKitC-1 | Model A, Model B | |
-| **Camera** | `firmware/node-cam/` | Stock CameraWebServer on ESP32-S3-CAM | Camera board | `http://<camera-IP>` |
+| **Sensor nodes** | `firmware/node-sensor/` | C++ (PlatformIO, Arduino framework) on a classic ESP32 DevKit or ESP32-S3-DevKitC-1 | Model A, Model B | |
+| **Camera** | `firmware/node-cam/` | Logitech C920 in the browser (main); optional ESP32 camera with stock CameraWebServer | Laptop / camera board | `http://<camera-IP>` |
+| **Tools** | `tools/` | Python and PowerShell helpers: fake board, USB bridge, network check, firewall | Laptop | |
 
 Also: `data/` (`data/seed/parks.json`: the five demo parks; `data/recorded/`: recorded data for the offline demo).
 
 ```
-Sensor nodes (ESP32-S3) ──POST readings──► Back (Laravel API) ──► Database (MySQL)
-Camera (ESP32-S3-CAM) ◄──GET /capture────┤
+Sensor nodes (ESP32) ────POST readings──► Back (Laravel API) ──► Database (MySQL)
+Camera (C920 in the browser) ──frames───►┤
+Camera (ESP32-CAM) ◄─────GET /capture────┤
                                          ├──► AI: waste detection (YOLO), NDVI (Sentinel-2)
                                          └──► Front (map dashboard, live updates)
 ```
@@ -158,7 +160,7 @@ docker compose exec backend php artisan migrate --seed   # NEW machine only: cre
 | `worker2@namaa.test` | Worker (Khalid) | `/worker` |
 | `municipality@namaa.test` | Municipality (read-only, all companies) | `/municipality` |
 
-**Node tokens:** the seed prints one token per sensor node (Model A, Model B and the three simulated nodes) once in the terminal and saves the same table to `backend/storage/app/private/node-tokens.txt`. That file is ignored by Git; never copy a token into a tracked file. The tokens go into `firmware/secrets.h` (step 2.6).
+**Node tokens:** the seed prints one token per sensor node (Model A, Model B and the three simulated nodes) once in the terminal and saves the same table to `backend/storage/app/private/node-tokens.txt`. That file is ignored by Git; never copy a token into a tracked file. The tokens go onto the boards over serial (`set node <id> <token>`) or into `firmware/node-sensor/include/secrets.h` (step 2.6 and `firmware/README.md`).
 
 **Check:** http://localhost:8000 shows the Laravel page.
 
@@ -215,50 +217,24 @@ docker compose up -d vision   # restart the AI service
 
 | Node | Board | What is wired | Code |
 |---|---|---|---|
-| **Model A** (irrigated park) | ESP32-S3-DevKitC-1 #1 | soil, DHT11, YF-S401 flow, relay + pump, water level (optional), LCD (optional) | `firmware/node-sensor/` |
-| **Model B** (monitoring park) | ESP32-S3-DevKitC-1 #2 | soil, DHT11 | same sketch, different `NODE_ID` |
-| Spare | ESP32-S3-DevKitC-1 #3 | nothing; pre-flashed with Model A | same sketch |
-| **Camera** | GOOUUU ESP32-S3-CAM v1.5 (OV3660) | built-in camera | stock CameraWebServer |
+| **Model A** (irrigated park) | ESP32 DevKit #1 (classic ESP32-WROOM-32 or ESP32-S3-DevKitC-1 N16R8) | soil, DHT11, flow, relay + pump, water level (optional), LCD (optional) | `firmware/node-sensor/` (PlatformIO) |
+| **Model B** (monitoring park) | ESP32 DevKit #2 | soil, DHT11 | same firmware, different node id and token |
+| **Camera 1** | Logitech C920 on the laptop (main) | browser camera, from the admin Hardware page | none |
+| Camera (optional) | ESP32-S3-CAM / ESP32-CAM | built-in camera | stock CameraWebServer (`firmware/node-cam/`) |
 
-**Once:**
+The full board guide is **[firmware/README.md](firmware/README.md)**: how to tell a classic ESP32 from an S3, the pin maps (from `firmware/node-sensor/include/config.h`), wiring per sensor, installing PlatformIO, flashing, every serial command, soil calibration, troubleshooting and which parts work as-is.
 
-1. Install the Arduino IDE and the board package **esp32 by Espressif Systems**.
-2. Libraries: **DHT sensor library**, **Adafruit Unified Sensor**, **ArduinoJson**, **LiquidCrystal_I2C** (WiFi and HTTPClient come with the board package).
-3. Allow port 8000 in the Windows firewall.
-4. Put the laptop and all boards on one **2.4 GHz** network (a phone hotspot; the ESP32-S3 has no 5 GHz). Test by opening `http://<laptop-IP>:8000` from a phone on that network.
+In short:
 
-### Sensor nodes (Model A and B)
-
-Arduino IDE settings: board **ESP32S3 Dev Module**, Flash Size **16MB**, PSRAM **OPI PSRAM**, **USB CDC On Boot: Enabled**. Upload through the port marked COM.
-
-| Pin | Part |
-|---|---|
-| GPIO4 | Soil moisture (analog) |
-| GPIO5 | HW-038 water level (analog, optional) |
-| GPIO16 | DHT11 data |
-| GPIO17 | YF-S401 flow pulses, through a 10K + 20K voltage divider (5 V to 3.3 V) |
-| GPIO18 | HW-482 relay (pump) |
-| GPIO8 / GPIO9 | LCD1602 I2C SDA / SCL (optional) |
-
-Analog reads only on GPIO1 to GPIO10 (ADC1); ADC2 does not work with Wi-Fi on. Avoid GPIO0, 3, 45, 46 (boot), 19, 20 (USB), 35 to 37 (PSRAM), 43, 44 (serial), 38 and 48 (RGB LED). The pump runs from its own battery pack through the relay, never from the board.
-
-```bash
-cp firmware/secrets.h.example firmware/secrets.h   # never committed
+```powershell
+pip install platformio
+cd firmware\node-sensor
+pio run -e esp32 -t upload -t monitor     # classic DevKit; -e esp32s3 for the S3
 ```
 
-In `secrets.h` set the Wi-Fi name and password, `SERVER_HOST` (the laptop's IP, from `ipconfig`), `SERVER_PORT` = 8000, `NODE_ID` and `NODE_TOKEN`. Take `NODE_ID` and `NODE_TOKEN` from `backend/storage/app/private/node-tokens.txt` (Model A = node 1, Model B = node 3 in a fresh seed; check the file). Upload `firmware/node-sensor/` once per board with its own values.
+Then in the serial monitor: `set wifi1 <ssid> <pass>`, `set host 192.168.137.1`, `set node <id> <token>`, `reboot`, `show`. Take the id and token from `backend/storage/app/private/node-tokens.txt` (Model A = node 1, Model B = node 3 in a fresh seed; check the file). Instead of serial you can copy `firmware/node-sensor/include/secrets.h.example` to `include/secrets.h` (git-ignored) before flashing.
 
-### Camera (ESP32-S3-CAM)
-
-See `firmware/node-cam/README.md`. In short: open **File > Examples > ESP32 > Camera > CameraWebServer**, choose `CAMERA_MODEL_ESP32S3_EYE`, set the Wi-Fi, upload through the **TTL (CH340)** port, then read its IP in the Serial Monitor and put it in the root `.env`:
-
-```bash
-CAMERA_URL=http://192.168.43.50   # the IP the Serial Monitor shows
-```
-
-Run `docker compose up -d` after editing `.env`. Check by opening `http://<camera-IP>/capture` in the browser: you should see a photo.
-
-The sensor sketch in `node-sensor/` is not written yet.
+The network (hotspot, firewall) and the order of steps are in **3.6 Hardware bring-up**. The ESP32 camera board is described in `firmware/node-cam/README.md`; its address goes into `CAMERA_URL` in the root `.env` (then `docker compose up -d`).
 
 ---
 
@@ -310,8 +286,8 @@ Besides the API, three containers keep the system running. If one is down, `dock
 
 | Container | Role | If it stops |
 |---|---|---|
-| `scheduler` | Every minute: the simulator (readings for the simulated parks), the offline check, the pump safety cut-off, the task verification and the task escalation. Each command repeats inside the minute (every 5 to 10 s in demo mode). | Simulated parks stop reporting; offline alerts, the safety cut-off, verification and escalation stop. Done tasks stay "Waiting". |
-| `queue` | Background jobs (camera photos, NDVI). | Photos and NDVI stop updating. |
+| `scheduler` | Every minute: the simulator (readings for the simulated parks), the offline check, the pump safety cut-off, the task verification, the task escalation and the camera capture (only when `CAMERA_URL` is set). Each command repeats inside the minute (every 5 to 10 s in demo mode). Daily (Makkah time): satellite NDVI at 03:10, camera photo clean-up at 03:30. | Simulated parks stop reporting; offline alerts, the safety cut-off, verification, escalation and camera frames stop. Done tasks stay "Waiting". |
+| `queue` | Background jobs (satellite NDVI, one job per park). | NDVI stops updating. |
 | `reverb` | Live updates to the browsers (WebSocket, port 8080): readings, alerts, tasks, pump. | The pages still refresh every minute; the "Live" dot turns amber. |
 
 ## 3.2 Demo mode
@@ -326,6 +302,8 @@ Demo mode makes everything fast enough to show live. It also turns on the demo h
 | Pump safety cut-off | 15 min | 3 min |
 | Verification after Done | 10 min of normal readings (gives up after 60 min) | 1 min (gives up after 3 min) |
 | Response time: urgent / high / normal / low | 1 h / 6 h / 48 h / 7 d | 2 / 4 / 6 / 10 min |
+| Camera frame (with `CAMERA_URL`) | every 5 min | every 10 s |
+| Litter keeps coming back (3 times) / litter not collected | within 1 h / after 24 h | within 3 min / after 3 min |
 
 A task that is not started by its response time goes up one priority level (and gets a new response time); an urgent one is marked **Overdue**. Admins get a notice each time. Tasks already in progress are not escalated. In demo mode the park page opens on the **1 hour** chart (24 hours otherwise).
 
@@ -350,7 +328,7 @@ In demo mode:
 - The same scenarios from the command line:
 
 ```bash
-docker compose exec backend php artisan namaa:scenario reset     # back to the start: Al Adel dry (pump off), others healthy, batteries full, alerts and tasks cleared
+docker compose exec backend php artisan namaa:scenario reset     # back to the start of the story: Al Adel dry (pump off, manual), forced faults ended, open alerts and tasks of the simulated parks cleared; healthy parks keep their state (add --full to reset them too)
 docker compose exec backend php artisan namaa:scenario dry       # Al Adel below its minimum: high-priority dry alert after 2 readings
 docker compose exec backend php artisan namaa:scenario heat      # Al Adel at about 42 °C: the open dry alert becomes heat stress (urgent), no second alert
 docker compose exec backend php artisan namaa:scenario escalate  # the newest open, not started task reaches its due time: priority up (or Overdue) within 10 s
@@ -358,12 +336,153 @@ docker compose exec backend php artisan namaa:scenario leak      # Alkhatateen: 
 docker compose exec backend php artisan namaa:scenario blockage  # Al Adel's pump runs but the flow drops to a third: blockage alert after 3 readings
 docker compose exec backend php artisan namaa:scenario battery   # Al Adel's battery drops to 15 %: low battery alert after 2 readings
 docker compose exec backend php artisan namaa:scenario offline   # Alhilal stops reporting: grey after 30 s, ready for a task after 2 min
-docker compose exec backend php artisan namaa:scenario recover   # ends heat, leak, blockage, low battery and the offline sensor; the alerts resolve on their own
+docker compose exec backend php artisan namaa:scenario litter    # Sim Cam (the simulated camera on Al Adel) "sees" the photos in data/samples/litter/: litter alert after 2 frames
+docker compose exec backend php artisan namaa:scenario recover   # ends heat, leak, blockage, low battery and the offline sensor; a running litter feed switches to data/samples/clean/
 ```
+
+One-time demo setup and data tools (all idempotent or read-only; deletions always with `--dry-run` first):
+
+```bash
+docker compose exec backend php artisan namaa:sim:camera                  # creates "Sim Cam" (simulated camera on Al Adel), the only target for demo frames
+docker compose exec backend php artisan namaa:demo:second-company         # "Al Safwa Gardens Co. (demo)" (admin2@, worker3@) with its own simulated park, Al Masfalah Park
+docker compose exec backend php artisan namaa:parks:audit                 # compares every park outline with OpenStreetMap green areas (overlap, verdict); changes nothing
+docker compose exec backend php artisan namaa:parks:export                # writes the parks (outlines, areas, data sources, nodes) back to data/seed/parks.json (via storage/app, see its output)
+docker compose exec backend php artisan namaa:cleanup:false-offline --dry-run
+docker compose exec backend php artisan namaa:cleanup:test-camera --dry-run
+```
+
+Park outlines: the admin park page shows where the outline and the area come from (**Data sources**), and **Edit outline** opens a satellite map to trace the green area. The area is computed from the outline, and the satellite data (NDVI) is recomputed after a save ("Recomputing satellite data…").
+
+**Water saved** (impact page) compares NAMAA's pump time with a fixed schedule of 2 × 20 min a day (an assumption, `config/namaa.php` → `water_baseline`), over measured time only, for parks with automatic irrigation. The ⓘ next to the figure explains the method; the figure settles after the first day.
 
 **Battery** and **blockage** are field-version alerts: they run on the **simulated parks only** (the real boards have no battery reading and no expected flow yet), and the UI labels them "Simulated".
 
+The demo page also has a **System health** panel (the `namaa:doctor` checks, every 10 s), a **Camera** card (laptop webcam or photo upload, see 3.3) and a **Satellite data** card ("Fetch satellite data now", see 3.4).
+
 A typical run: `reset` → the dry alert appears (high) → `heat` → the same alert becomes heat stress (urgent) → the admin creates a task for a worker → `escalate` → the task shows **Overdue** and the admin gets a notice → the worker taps Start, Pump on, then Done → after about a minute of normal readings the task shows **Verified ✓** on both screens. Finish with `recover` and `reset`.
+
+## 3.3 Camera and litter
+
+- **Camera 1** (King Abdullah Park) is a browser camera: the Logitech C920 on the laptop sends a frame from the admin Hardware page every 5 minutes (10 s in demo mode), see 3.6. A camera node in `url` mode is polled instead: with `CAMERA_URL` set in the root `.env` (or its own address on the Hardware page; an ESP32 camera, e.g. `http://192.168.137.50`), the scheduler takes a frame from `CAMERA_URL/capture` every 5 minutes (10 s in demo mode). People are blurred **before** the photo is saved (private disk, `camera/{node}/{date}/`), then the vision service looks for litter (YOLO). Photos older than 7 days are deleted every night, except those attached to an alert.
+- **Litter** (normal) after 2 litter frames in a row; resolved after 2 clean frames. It becomes **Repeated litter** (high) when litter comes back 3 times within an hour, when one frame shows 5 or more items, or when it is not collected for 24 hours. A litter task is verified by clean frames.
+- The park page shows the latest frame with boxes and the last 6 frames; alerts and the worker's task show the frame that raised them; the map popup shows the item count.
+- **Stage fallback** (no camera board or no Wi-Fi): the **Camera** card on `/admin/demo` sends a frame from the laptop webcam every 10 s, or one uploaded photo, to a **simulated** camera (Sim Cam on Al Adel, from `namaa:sim:camera`). Both go through the same pipeline. The real Camera 1 refuses demo frames (422): it only takes frames from its own Hardware page card. The `litter` scenario plays the photos in `data/samples/litter/` (and `recover` the ones in `data/samples/clean/`); this folder is not in Git, so add about 10 JPEG photos of each kind before the demo.
+- The model is COCO YOLO (`yolo26n`), downloaded when the vision image is built. A park-trained model in `vision-service/models/litter.pt` is used instead when present (see `vision-service/training/README.md`). Ultralytics is AGPL-3.0 (see `vision-service/README.md`).
+
+## 3.4 Satellite (NDVI)
+
+- Every night at 03:10 (Makkah time) the queue fetches the last 10 days of Sentinel-2 NDVI for each park outline. It needs the internet.
+- First fill or catch-up: `docker compose exec backend php artisan namaa:ndvi --days=90 --sync` (about 2 minutes for 5 parks). Without `--sync` the jobs go to the queue. `--park=3` does one park.
+- **Green cover dropping** (low) when the newest value is 10 % or more below the 4-week average (at least 3 values); it resolves within 5 %.
+- The map has a **Status / Vegetation (NDVI)** switch; the park page has a vegetation chart (source: Sentinel-2, Copernicus).
+- Park outlines come from OpenStreetMap: `docker compose exec backend php artisan namaa:parks:outlines` lists the candidates, `--write` saves them. Run `namaa:ndvi --days=90 --sync --park=<id>` afterwards for the changed parks.
+
+## 3.5 Impact and the municipality view
+
+- **`/admin/impact`**: water used against a fixed irrigation schedule, alerts by priority and category, tasks done, % verified by the sensors, median time to fix, escalated and overdue tasks, for the last 7 or 30 days, with a row per park. Figures of simulated parks are labelled as such.
+- **`/municipality`** (the `municipality` account): every company read-only: the same figures, a row per company, the map with both layers and all open alerts, updated live. `/municipality/parks/<id>` is the park page without any button that changes something.
+
+## 3.6 Hardware bring-up
+
+Board details (pins, wiring, flashing, serial commands) are in [firmware/README.md](firmware/README.md); this section is the laptop and network side.
+
+### Network
+
+- **Main: the laptop's Windows Mobile Hotspot.** Settings > Network & internet > Mobile hotspot: on, band **2.4 GHz** (ESP32 boards have no 5 GHz). The laptop is then always `192.168.137.1`, which is the boards' default `SERVER_HOST`.
+- **Backup: a phone hotspot.** Put the laptop and the boards on the phone's hotspot (the boards try `wifi2` when `wifi1` fails; set it with `set wifi2 <ssid> <pass>`). The laptop gets a new address there: read it with `ipconfig` and give it to each board over serial with `set host <laptop-ip>`, then `reboot`. Back on the laptop hotspot: `set host 192.168.137.1`.
+- **Check the network** (no admin needed). Lists the laptop's addresses (marks the Mobile Hotspot), tests `http://<ip>:8000/api/health` and port 8080, and checks the firewall rules, with a fix for each FAIL:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File tools\check-network.ps1
+  ```
+
+- **Open the firewall** once (run PowerShell **as administrator**): inbound rules "NAMAA backend" (TCP 8000) and "NAMAA reverb" (TCP 8080) on the Private profile. Safe to run again; it prints how to remove the rules.
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File tools\open-firewall.ps1
+  ```
+
+  It does **not** open port 5173 (the worker app on a phone, below); add that rule by hand only if you need it.
+
+### Order: bench first, then the real node
+
+1. **Test bench** (once, idempotent): creates the hidden test park "Workshop (test bench)" with nodes Bench A (sensor, pump, flow), Bench B (sensor) and Bench Cam (browser camera). New tokens are printed once and appended to `backend/storage/app/private/node-tokens.txt`.
+
+   ```powershell
+   docker compose exec backend php artisan namaa:bench:setup
+   ```
+
+   Test parks are hidden from the map, park list, impact, municipality and demo scenarios; on the admin **Hardware** page (`/admin/hardware`) switch on **Show test bench** to see them.
+2. **Fake board** against a bench node (Python 3.10+, no installs). Use the node id that `namaa:bench:setup` printed; `--token-file` reads the token from the token file without printing it:
+
+   ```powershell
+   python tools\fake-board\fake_board.py --node-id <bench-a-id> --token-file
+   python tools\fake-board\fake_board.py --node-id <bench-a-id> --token-file --dry --offline-after 3 --resume 60
+   ```
+
+   On the Hardware page the card goes online and shows the last payload live. This proves the backend, Reverb and the page before any board is involved. All options: `tools/README.md`.
+3. **Real board on a bench node.** Flash it, then set Wi-Fi, host and the bench node's id and token over serial (`firmware/README.md`, section 5). Check its card: online, RSSI, firmware version, connection "Wi-Fi". Calibrate the soil probe (**Use as dry** / **Use as wet**) and try **Test relay 10 s** with the pump on its own batteries.
+4. **Real node.** When the bench works, give the board the real node's id and token (`set node <id> <token>`, `reboot`): Model A or Model B. Do not press **New token** on a real node unless its token is lost: the board must then be updated.
+
+### USB bridge (backup data path)
+
+If no Wi-Fi works, the board reports over its USB cable through the laptop. On the board's serial console type `mode usb` (or it switches by itself after 10 failed Wi-Fi rounds), close the serial monitor, then:
+
+```powershell
+pip install -r tools\usb-bridge\requirements.txt
+python tools\usb-bridge\usb_bridge.py --auto --token-file      # or --port COM5
+```
+
+The bridge posts each reading with the node's token and `via: "usb"` and sends the reply (pump, interval) back to the board. The Hardware page shows the connection as "USB bridge". `mode wifi` on the board switches back.
+
+### Logitech C920 as Camera 1
+
+Camera 1 (King Abdullah Park) is a browser camera. On the demo laptop open the admin **Hardware** page at `http://localhost:5173` (browsers allow the camera only on `localhost` or HTTPS, not on `http://<ip>:5173`), find Camera 1's card, press **Use this computer's camera** and pick the C920 if several cameras are listed. The page shows a preview and sends a frame every 10 s in demo mode (5 min otherwise) through the full pipeline (people blurred, litter detection, alerts). Keep that tab open and visible: background tabs slow down their timers. The optional ESP32 camera is in `firmware/node-cam/README.md`.
+
+### Worker app on a phone
+
+To open the worker app at `http://<laptop-ip>:5173` from a phone on the same network:
+
+1. Let the backend accept that origin: in **`backend/.env`** set `CORS_ALLOWED_ORIGINS` (comma separated), for example `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://192.168.137.1:5173`, then `docker compose restart backend`. (The root `.env` does not pass this variable to the containers.)
+2. Let Vite listen on the network: `server.host: true` in `frontend/vite.config.ts`, keeping `port: 5173` and `strictPort: true` (another port breaks CORS and sign-in), or run `npm run dev -- --host`.
+3. In `frontend/.env`, point `VITE_API_URL` and `VITE_REVERB_HOST` at the laptop's IP instead of `localhost`, then restart `npm run dev`.
+4. Port 5173 needs its own inbound firewall rule: `tools\open-firewall.ps1` opens only 8000 and 8080.
+
+## 3.7 Before the demo
+
+**Power first.** In testing, the laptop slipped into Windows **Modern Standby** (a sleep state that can start on lid close or idle, even plugged in) and froze Docker, so the scheduler stopped for about 5 minutes: no simulated readings, no offline checks, no verification. On the demo laptop:
+
+- Plugged in, lid open. Control Panel > Power Options > "Choose what closing the lid does": **When I close the lid = Do nothing** (on battery and plugged in).
+- Turn off sleep and hibernate once (no admin needed; the display may still turn off, that is harmless):
+
+  ```powershell
+  powercfg /change standby-timeout-ac 0
+  powercfg /change standby-timeout-dc 0
+  powercfg /change hibernate-timeout-ac 0
+  powercfg /change hibernate-timeout-dc 0
+  ```
+
+- Screen lock off: Settings > Accounts > Sign-in options > "If you've been away, when should Windows require you to sign in again?" = **Never**, and no screen saver that shows the sign-in screen on resume.
+
+If it happens anyway, admin pages show a red **Scheduler stalled** banner while the scheduler heartbeat is older than 90 s; it disappears by itself after wake-up, and readings resume within a minute.
+
+Then run the checks and fix anything marked FAIL:
+
+```powershell
+docker compose exec backend php artisan namaa:doctor
+```
+
+It checks demo mode, `APP_DEBUG`, the database and migrations, the queue and scheduler heartbeats (including a stalled scheduler), Reverb, the vision service and its model, the camera, the real boards (posting in the last minute), the bench nodes, the last rejected device request, the node tokens and the free disk space. The same list is on `/admin/demo` (System health).
+
+1. Docker Desktop running; `start-namaa.bat` done; `namaa:doctor` shows no FAIL.
+2. Power settings above done; laptop plugged in, lid open, screen lock off.
+3. `DEMO_MODE=true`; `APP_DEBUG=false` for the event.
+4. Mobile Hotspot on (2.4 GHz); `tools\check-network.ps1` all OK; both sensor boards report (doctor: last reading a few seconds ago; Hardware page: online).
+5. Camera: the C920 running as Camera 1 on the Hardware page (camera access allowed in the browser), or `CAMERA_URL` set and `/capture` OK for an ESP32 camera.
+6. `data/samples/litter/` and `data/samples/clean/` have photos; try the `litter` scenario once.
+7. NDVI is filled (`namaa:ndvi --days=90 --sync`; the map's vegetation layer shows colours).
+8. Admin, worker and municipality accounts can sign in (worker on a phone or a second browser profile).
+9. **Reset** on `/admin/demo` (or `namaa:scenario reset`), then walk through the typical run once. Reset puts back only the demo story: Al Adel, forced faults, and the open alerts and tasks of the simulated parks; healthy parks keep their state. **Full reset** (a separate button with a confirmation, or `namaa:scenario reset --full`) also puts the healthy parks back to their start; use it only when the simulated data looks wrong.
 
 ---
 
@@ -379,7 +498,7 @@ A typical run: `reset` → the dry alert appears (high) → `heat` → the same 
 | Database client: `Access denied` | The database was created earlier with other passwords. `docker compose down -v` (deletes the data), `docker compose up -d`, then `migrate --seed` (new node tokens: re-flash the boards). |
 | DBeaver: `Public Key Retrieval is not allowed` | Driver properties: `allowPublicKeyRetrieval=true`, `useSSL=false`. |
 | `required variable ... is missing` | The root `.env` is missing or incomplete. |
-| CORS error in the browser | The backend must allow `http://localhost:5173`. |
+| CORS error in the browser | The backend must allow the page's origin: `http://localhost:5173` by default; for a phone add `http://<laptop-ip>:5173` to `CORS_ALLOWED_ORIGINS` in `backend/.env`, then `docker compose restart backend` (see 3.6). |
 | `Port 5173 is already in use` | The dashboard always uses 5173 (another port breaks CORS and sign-in), so a second `npm run dev` stops with this error. Find the old one in PowerShell: `Get-NetTCPConnection -LocalPort 5173 \| Select-Object OwningProcess`, then `Stop-Process -Id <pid>`, and run `npm run dev` again. If the page stays black after new libraries were installed: `npm run dev -- --force`. |
 | Everything slow | The project is inside OneDrive. Move it to `C:\dev`. |
 
@@ -390,7 +509,7 @@ When asking for help, share `docker compose ps` and `docker compose logs --tail 
 # 5. Working together
 
 - `main` must always work. Branch (`feat/your-feature`), merge through a pull request someone else reviews.
-- Never commit secrets: `.env`, `frontend/.env`, `backend/.env` and `firmware/secrets.h` are ignored by Git.
+- Never commit secrets: `.env`, `frontend/.env`, `backend/.env` and every `firmware/**/secrets.h` (e.g. `firmware/node-sensor/include/secrets.h`) are ignored by Git.
 - Large files (model weights, satellite images, videos) stay out of the repo; share a link.
 - Changes to the data sent between sensor, server and dashboard are agreed with the team before they are built.
 - Mark every park, sensor and reading as `real` or `simulated`.

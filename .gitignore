@@ -4,6 +4,9 @@
 !.env.example
 firmware/**/secrets.h
 
+# Firmware build output (PlatformIO)
+firmware/**/.pio/
+
 # Back (Laravel)
 backend/vendor/
 backend/node_modules/
@@ -28,6 +31,10 @@ vision-service/models/*.onnx
 data/recorded/*.mp4
 data/recorded/*.tif
 data/recorded/*.tiff
+# Sample camera photos for the litter scenario: photos of public places may show people.
+data/samples/
+# pytest cache of the vision service
+.pytest_cache/
 
 # OS and editors
 .DS_Store

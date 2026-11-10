@@ -4,7 +4,8 @@
     "Coordinates are WGS84. lat/lng is the map marker (park centre).",
     "polygon_approximate = true: the seeder builds a rectangle of area_m2 around the centre. To use a real outline, add a GeoJSON Polygon as \"polygon\" (coordinates [lng, lat], closed ring, e.g. drawn at geojson.io) and set polygon_approximate to false.",
     "area_m2 values are estimates. baseline_l_per_day is computed by the seeder as area_m2 x 4 (assumption: 4 L per m2 per day on a fixed schedule).",
-    "scenario: real = no seeded readings (history comes from the boards); healthy = normal irrigation history; drying_out = irrigation stopped 2 days ago."
+    "scenario: real = no seeded readings (history comes from the boards); healthy = normal irrigation history; drying_out = irrigation stopped 2 days ago.",
+    "outline_source / area_source: where the outline and the area come from: {type: official | traced | osm | approximate, reference, by (a name), at (date)}. \"company\": \"second\" = the park of the second demo company, created by php artisan namaa:demo:second-company (the seeder skips it). Written by php artisan namaa:parks:export."
   ],
   "parks": [
     {
@@ -15,10 +16,14 @@
       "lat": 21.3802586,
       "lng": 39.8770183,
       "park_type": "public_park",
-      "area_m2": 40000,
+      "area_m2": 46054,
       "source": "real",
       "scenario": "real",
-      "polygon_approximate": true,
+      "polygon_approximate": false,
+      "polygon_source": "OpenStreetMap way/1064734082 (ODbL)",
+      "outline_source": {"type": "osm", "reference": "OpenStreetMap way/1064734082 (ODbL)", "by": null, "at": "2026-11-10"},
+      "area_source": {"type": "osm", "reference": "Computed from the OpenStreetMap outline (way/1064734082)", "by": null, "at": "2026-11-10"},
+      "polygon": {"type": "Polygon", "coordinates": [[[39.8781102, 21.3770186], [39.8773142, 21.3783328], [39.8766147, 21.3798371], [39.8760851, 21.3812382], [39.8761084, 21.3812657], [39.8769677, 21.3822792], [39.8770589, 21.3823727], [39.8777999, 21.3831324], [39.8779296, 21.3832711], [39.8780822, 21.3833118], [39.8773124, 21.3817235], [39.8772115, 21.3810973], [39.8781102, 21.3770186]]]},
       "nodes": [
         { "name": "Model A", "type": "sensor", "has_pump": true },
         { "name": "Camera 1", "type": "camera", "has_pump": false }
@@ -36,6 +41,8 @@
       "source": "real",
       "scenario": "real",
       "polygon_approximate": true,
+      "outline_source": {"type": "approximate", "reference": "Rectangle of the estimated area around the park centre (seed data), not verified", "by": null, "at": null},
+      "area_source": {"type": "approximate", "reference": "Estimate (seed data), not verified", "by": null, "at": null},
       "nodes": [
         { "name": "Model B", "type": "sensor", "has_pump": false }
       ]
@@ -48,12 +55,17 @@
       "lat": 21.4374739,
       "lng": 39.8545572,
       "park_type": "public_park",
-      "area_m2": 20000,
+      "area_m2": 28697,
       "source": "simulated",
       "scenario": "drying_out",
-      "polygon_approximate": true,
+      "polygon_approximate": false,
+      "polygon_source": "OpenStreetMap way/457991451 (ODbL)",
+      "outline_source": {"type": "osm", "reference": "OpenStreetMap way/457991451 (ODbL)", "by": null, "at": "2026-11-10"},
+      "area_source": {"type": "osm", "reference": "Computed from the OpenStreetMap outline (way/457991451)", "by": null, "at": "2026-11-10"},
+      "polygon": {"type": "Polygon", "coordinates": [[[39.8535934, 21.4380042], [39.8534276, 21.4378556], [39.8533148, 21.4376679], [39.8532535, 21.4374224], [39.8532916, 21.4371283], [39.8534357, 21.4369438], [39.8537652, 21.4367687], [39.8543026, 21.4366382], [39.8545872, 21.4366237], [39.8548718, 21.4366895], [39.8551278, 21.4368769], [39.8552604, 21.4370837], [39.8552962, 21.4372925], [39.8552793, 21.4374968], [39.8548242, 21.438182], [39.8545375, 21.4381888], [39.8537642, 21.4380609], [39.8535934, 21.4380042]]]},
       "nodes": [
-        { "name": "Sim 1", "type": "sensor", "has_pump": true }
+        { "name": "Sim 1", "type": "sensor", "has_pump": true },
+        { "name": "Sim Cam", "type": "camera", "has_pump": false }
       ]
     },
     {
@@ -68,6 +80,8 @@
       "source": "simulated",
       "scenario": "healthy",
       "polygon_approximate": true,
+      "outline_source": {"type": "approximate", "reference": "Rectangle of the estimated area around the park centre (seed data), not verified", "by": null, "at": null},
+      "area_source": {"type": "approximate", "reference": "Estimate (seed data), not verified", "by": null, "at": null},
       "nodes": [
         { "name": "Sim 2", "type": "sensor", "has_pump": true }
       ]
@@ -84,8 +98,31 @@
       "source": "simulated",
       "scenario": "healthy",
       "polygon_approximate": true,
+      "outline_source": {"type": "approximate", "reference": "Rectangle of the estimated area around the park centre (seed data), not verified", "by": null, "at": null},
+      "area_source": {"type": "approximate", "reference": "Estimate (seed data), not verified", "by": null, "at": null},
       "nodes": [
         { "name": "Sim 3", "type": "sensor", "has_pump": true }
+      ]
+    },
+    {
+      "key": "al_masfalah",
+      "company": "second",
+      "name_en": "Al Masfalah Park",
+      "name_ar": "حديقة المسفلة",
+      "district": "Al Masfalah",
+      "lat": 21.40795,
+      "lng": 39.81945,
+      "park_type": "public_park",
+      "area_m2": 9936,
+      "source": "simulated",
+      "scenario": "healthy",
+      "polygon_approximate": false,
+      "polygon_source": "OpenStreetMap way/457991700 (ODbL)",
+      "outline_source": {"type": "osm", "reference": "OpenStreetMap way/457991700 (ODbL)", "by": null, "at": "2026-11-10"},
+      "area_source": {"type": "osm", "reference": "Computed from the OpenStreetMap outline (way/457991700)", "by": null, "at": "2026-11-10"},
+      "polygon": {"type": "Polygon", "coordinates": [[[39.8190998, 21.4083661], [39.8193399, 21.4083974], [39.8198344, 21.4081247], [39.819962, 21.4081362], [39.8200328, 21.407735], [39.8193831, 21.4073112], [39.8187877, 21.4076018], [39.8190998, 21.4083661]]]},
+      "nodes": [
+        { "name": "Sim 4", "type": "sensor", "has_pump": true }
       ]
     }
   ]

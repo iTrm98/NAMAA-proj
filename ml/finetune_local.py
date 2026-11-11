@@ -86,7 +86,7 @@ def build_dataset(repeat: int) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--weights", default=str(ML / "runs" / "litter-s640-all" / "weights" / "best.pt"),
+    ap.add_argument("--weights", default=str(ML / "runs" / "litter-s640-balanced" / "weights" / "best.pt"),
                     help="start from this trained model")
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--lr0", type=float, default=0.002, help="5x below the SGD default 0.01")

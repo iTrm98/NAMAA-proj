@@ -35,7 +35,17 @@ Multipart field `image`: JPEG or PNG, at most 5 MB.
 | Default | COCO model `yolo26n.pt` (the smallest Ultralytics YOLO26), downloaded **at image build time** to `/opt/namaa/weights/`. Only the litter-like COCO classes count: `bottle`, `cup`, `wine glass`, `fork`, `knife`, `spoon`, `bowl`, `banana`, `apple`, `orange`, `sandwich`, `hot dog`, `pizza`, `donut`, `cake`. Bags, balls and other things people carry are left out on purpose |
 | `vision-service/models/litter.pt` exists | That custom model is used for litter, with **all** its classes. The COCO model still runs for `person` (privacy blur) |
 
-Weights are never committed (`vision-service/models/*.pt` is git-ignored). See [training/README.md](training/README.md) to train `litter.pt` on your own park photos.
+Current `litter.pt`: YOLO11s, one class `litter`, trained on the balanced PlastOPol + TACO + BePLi set (`ml/runs/litter-s640-balanced/weights/best.pt`, see `ml/README.md`). Copy it to `vision-service/models/litter.pt` and restart `vision`.
+
+| Litter confidence | Value | Val precision / recall | Use |
+|---|---|---|---|
+| Best F1 (**default with a custom model**) | `0.1775` | 0.647 / 0.538 | Balanced alerts |
+| Recall 0.70 | `0.039` | 0.320 / 0.700 | Option: catch more, more false alarms. Set `WASTE_CONFIDENCE=0.039` |
+| COCO fallback (no custom model) | `0.35` | n/a | High precision, finds about 1 litter object in 170 on public-test (recall 0.006) |
+
+Both thresholds were picked on the balanced val split, never on public-test. Results on our own demo tray: not measured yet.
+
+Weights are never committed (`vision-service/models/*.pt` is git-ignored). The real training pipeline and results are in [../ml/README.md](../ml/README.md) and [../ml/MODEL_CARD.md](../ml/MODEL_CARD.md); [training/README.md](training/README.md) is the older generic guide.
 
 ### Settings (environment variables, all optional)
 
@@ -43,7 +53,7 @@ Weights are never committed (`vision-service/models/*.pt` is git-ignored). See [
 |---|---|---|
 | `WASTE_MODEL` | `models/litter.pt` if present | Path of a custom litter model |
 | `WASTE_COCO_MODEL` | `/opt/namaa/weights/yolo26n.pt` | COCO model (litter fallback + people) |
-| `WASTE_CONFIDENCE` | `0.35` | Minimum confidence for a litter item |
+| `WASTE_CONFIDENCE` | `0.1775` with a custom model, `0.35` without | Minimum confidence for a litter item |
 | `WASTE_PERSON_CONFIDENCE` | `0.25` | Minimum confidence for a person box (low on purpose: blurring too much is better than too little) |
 | `WASTE_CLASSES` | the list above | Comma-separated COCO class names that count as litter |
 | `WASTE_MAX_MB` | `5` | Largest accepted upload |

@@ -200,7 +200,7 @@ cd ..
 #    (--yolo <export.zip> instead of --json; --overwrite to replace an earlier export)
 
 # 4. score on the demo tray
-.\.venv\Scripts\python.exe evaluate.py --weights runs\litter-s640-all\weights\best.pt --test demo-tray --conf val
+.\.venv\Scripts\python.exe evaluate.py --weights runs\litter-s640-balanced\weights\best.pt --test demo-tray --conf val
 ```
 
 ## 6. Fine-tune on own photos (`finetune_local.py`)
@@ -216,7 +216,7 @@ cd C:\dev\NAMAA-proj\ml\weights
 ..\.venv\Scripts\python.exe ..\evaluate.py --weights ..\runs\litter-local-ft\weights\best.pt --test demo-tray --conf val
 ```
 
-Options: `--weights` (default `runs\litter-s640-all\weights\best.pt`), `--epochs 20`,
+Options: `--weights` (default `runs\litter-s640-balanced\weights\best.pt`; note it trains on the full public train split and validates on the full val split, both about 88% BePLi, not on the balanced lists), `--epochs 20`,
 `--lr0 0.002`, `--optimizer SGD` (with `auto` Ultralytics ignores lr0), `--imgsz 640`,
 `--batch 4`, `--repeat 10`, `--patience 10`, `--workers 2`, `--name litter-local-ft`.
 At ~190 s per epoch (run 1), 20 epochs take about an hour. Compare with the start

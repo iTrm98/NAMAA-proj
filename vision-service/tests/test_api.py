@@ -98,3 +98,51 @@ def test_ndvi_validation_unchanged(client):
     closed = {"type": "Polygon", "coordinates": [open_ring["coordinates"][0] + [[39.8, 21.4]]]}
     r = client.post("/ndvi", json={"polygon": closed, "date_from": "2026-11-05", "date_to": "2026-11-01"})
     assert r.status_code == 422
+
+
+def test_default_confidence_follows_the_model(tmp_path, monkeypatch):
+    from app.waste import WasteConfig, DEFAULT_CONFIDENCE_COCO, DEFAULT_CONFIDENCE_CUSTOM
+
+    weights = tmp_path / "litter.pt"
+    weights.write_bytes(b"x")  # only its existence matters here
+    monkeypatch.delenv("WASTE_CONFIDENCE", raising=False)
+    monkeypatch.setenv("WASTE_MODEL", str(weights))
+    assert WasteConfig.from_env().confidence == DEFAULT_CONFIDENCE_CUSTOM == 0.1775
+    monkeypatch.setenv("WASTE_MODEL", str(tmp_path / "missing.pt"))
+    assert WasteConfig.from_env().confidence == DEFAULT_CONFIDENCE_COCO == 0.35
+    monkeypatch.setenv("WASTE_MODEL", str(weights))
+    monkeypatch.setenv("WASTE_CONFIDENCE", "0.039")
+    assert WasteConfig.from_env().confidence == 0.039
+
+
+BUS = Path(__import__("ultralytics").__file__).parent / "assets" / "bus.jpg"
+CUSTOM = Path(__file__).resolve().parent.parent / "models" / "litter.pt"
+
+
+def _body(monkeypatch, model_env):
+    monkeypatch.setenv("WASTE_MODEL", model_env)
+    with TestClient(app) as c:
+        health = c.get("/health").json()["waste"]
+        body = c.post("/waste", files={"image": ("bus.jpg", BUS.read_bytes(), "image/jpeg")}).json()
+    return health, body
+
+
+def test_people_still_returned_with_the_custom_model(monkeypatch):
+    if not (BUS.exists() and CUSTOM.exists()):
+        pytest.skip("needs the ultralytics sample photo and models/litter.pt")
+    health, body = _body(monkeypatch, str(CUSTOM))
+    assert health["custom"] is True and health["classes"] == ["litter"]
+    assert len(body["people"]) >= 2, body  # COCO person pass runs next to litter.pt
+    assert body["model"] == "litter.pt"
+    assert all(i["label"] == "litter" for i in body["items"])
+
+
+def test_people_and_coco_litter_fallback_without_the_custom_model(monkeypatch, tmp_path):
+    if not BUS.exists():
+        pytest.skip("ultralytics sample photo not shipped")
+    health, body = _body(monkeypatch, str(tmp_path / "missing.pt"))
+    assert health["custom"] is False and "bottle" in health["classes"]
+    assert health["confidence"] == 0.35
+    assert len(body["people"]) >= 2, body
+    assert body["model"] != "litter.pt"
+    assert all(i["label"] != "person" and i["label"] != "litter" for i in body["items"])

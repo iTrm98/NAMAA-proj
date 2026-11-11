@@ -30,6 +30,17 @@ DEFAULT_LITTER_CLASSES = (
     "banana", "apple", "orange", "sandwich", "hot dog", "pizza", "donut", "cake",
 )
 
+# Default litter confidence. The COCO fallback keeps 0.35 (high precision, low
+# recall). The fine-tuned model (ml/runs/litter-s640-balanced, evaluated on its
+# balanced val split) uses its best-F1 threshold. The other measured option is
+# 0.039 (recall >= 0.70 on val, precision 0.32): set WASTE_CONFIDENCE=0.039.
+DEFAULT_CONFIDENCE_COCO = 0.35
+DEFAULT_CONFIDENCE_CUSTOM = 0.1775
+
+# The fine-tuned model was trained with its one class named "item"; the API
+# reports it as "litter" so boxes and alerts read correctly.
+CUSTOM_LABEL_ALIASES = {"item": "litter"}
+
 SERVICE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -54,10 +65,11 @@ class WasteConfig:
     def from_env(cls) -> "WasteConfig":
         classes = os.environ.get("WASTE_CLASSES", "")
         custom = os.environ.get("WASTE_MODEL") or str(SERVICE_DIR / "models" / "litter.pt")
+        has_custom = Path(custom).is_file()
         return cls(
             coco_model=os.environ.get("WASTE_COCO_MODEL", "/opt/namaa/weights/yolo26n.pt"),
-            custom_model=custom if Path(custom).is_file() else None,
-            confidence=_env_float("WASTE_CONFIDENCE", 0.35),
+            custom_model=custom if has_custom else None,
+            confidence=_env_float("WASTE_CONFIDENCE", DEFAULT_CONFIDENCE_CUSTOM if has_custom else DEFAULT_CONFIDENCE_COCO),
             person_confidence=_env_float("WASTE_PERSON_CONFIDENCE", 0.25),
             classes=tuple(c.strip() for c in classes.split(",") if c.strip()) or DEFAULT_LITTER_CLASSES,
             max_bytes=int(_env_float("WASTE_MAX_MB", 5) * 1024 * 1024),
@@ -106,9 +118,9 @@ class WasteDetector:
         return ImageOps.exif_transpose(image).convert("RGB")
 
     @staticmethod
-    def _boxes(result, keep_ids: list[int] | None) -> list[dict]:
+    def _boxes(result, keep_ids: list[int] | None, aliases: dict[str, str] | None = None) -> list[dict]:
         out = []
-        names = result.names
+        names = {i: (aliases or {}).get(n, n) for i, n in result.names.items()}
         for box in result.boxes:
             cls = int(box.cls[0])
             if keep_ids is not None and cls not in keep_ids:
@@ -133,7 +145,7 @@ class WasteDetector:
 
         if self.custom:
             result = self.custom.predict(image, imgsz=cfg.imgsz, conf=cfg.confidence, verbose=False)[0]
-            items = self._boxes(result, None)
+            items = self._boxes(result, None, CUSTOM_LABEL_ALIASES)
         else:
             items = [b for b in self._boxes(coco, self.litter_ids) if b["confidence"] >= cfg.confidence]
 
@@ -151,6 +163,6 @@ class WasteDetector:
         return {
             "model": self.model_name,
             "custom": self.custom is not None,
-            "classes": list(self.custom.names.values()) if self.custom else list(self.config.classes),
+            "classes": [CUSTOM_LABEL_ALIASES.get(n, n) for n in self.custom.names.values()] if self.custom else list(self.config.classes),
             "confidence": self.config.confidence,
         }

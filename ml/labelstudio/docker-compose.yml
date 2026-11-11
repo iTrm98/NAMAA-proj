@@ -1,0 +1,25 @@
+# Label Studio for labelling our own litter photos. Separate from the main NAMAA stack:
+# it is a local tool and never part of the demo.
+#
+#   cd C:\dev\NAMAA-proj\ml\labelstudio
+#   docker compose up -d        # then open http://localhost:8090
+#   docker compose down         # data stays in ml/data/labelstudio/
+#
+# Photos: ml/photos/ is mounted read-only at /label-studio/files/photos, served through
+# "local files". Task URLs look like /data/local-files/?d=photos/demo-tray/litter/x.jpg
+# (ml/prelabel.py writes them this way). The project also needs a Local Files storage
+# with path /label-studio/files/photos (see ml/LABELING_GUIDE.md).
+name: namaa-labelstudio
+
+services:
+  labelstudio:
+    image: heartexlabs/label-studio:1.18.0
+    ports:
+      - "127.0.0.1:8090:8080"   # this laptop only
+    environment:
+      LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
+      LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT: /label-studio/files
+    volumes:
+      - ../data/labelstudio:/label-studio/data
+      - ../photos:/label-studio/files/photos:ro
+    restart: "no"

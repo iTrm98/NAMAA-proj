@@ -1,0 +1,9 @@
+# One-class litter dataset without BePLi (non-commercial): PlastOPol + TACO only.
+# Image lists are written by prepare_data.py (absolute paths).
+# `test` is the public-test split: never train or tune thresholds on it.
+path: C:/dev/NAMAA-proj/ml/data/yolo
+train: lists/commercial_safe_train.txt
+val: lists/commercial_safe_val.txt
+test: lists/commercial_safe_test.txt
+names:
+  0: litter

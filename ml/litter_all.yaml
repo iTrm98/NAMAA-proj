@@ -1,0 +1,10 @@
+# One-class litter dataset: PlastOPol + TACO (official) + BePLi v1.
+# BePLi is CC BY-NC-SA 4.0 (non-commercial): fine for the hackathon, use
+# litter_commercial_safe.yaml for any commercial model. Built by prepare_data.py.
+# `test` is the public-test split: never train or tune thresholds on it.
+path: C:/dev/NAMAA-proj/ml/data/yolo
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: litter

@@ -1,0 +1,12 @@
+# One-class litter dataset with BePLi down-sampled: all PlastOPol + TACO images and a
+# random BePLi subset (seed 42) with just under as many boxes as PlastOPol + TACO together,
+# in train AND val (val decides best.pt, early stopping and the evaluate.py --conf val
+# thresholds). Both lists are written by make_balanced.py. Public-test is the full split,
+# the same as litter_all.yaml (so scores stay comparable). BePLi is CC BY-NC-SA 4.0 (non-commercial).
+# `test` is the public-test split: never train or tune thresholds on it.
+path: C:/dev/NAMAA-proj/ml/data/yolo
+train: lists/balanced_train.txt
+val: lists/balanced_val.txt
+test: images/test
+names:
+  0: litter

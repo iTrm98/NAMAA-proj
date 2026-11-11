@@ -44,7 +44,13 @@ Thumbs.db
 *.log
 
 # Training (local only, never committed)
+ml/.venv/
 ml/data/
 ml/runs/
+# Own photos for the demo tray / clean set (may show people)
+ml/photos/
+# Ultralytics downloads (fonts, weights) and caches
+ml/weights/
+*.cache
 runs/
 *.pt

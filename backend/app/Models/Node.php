@@ -6,6 +6,7 @@ use App\Enums\DataSource;
 use App\Enums\NodeType;
 use Database\Factories\NodeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -46,6 +47,21 @@ class Node extends Model
         ];
     }
 
+    /**
+     * Real node that has never reported (Sprint 6, B1): not installed yet, so neither offline
+     * nor alert-worthy. Every reading sets last_seen_at, so a null value means "no reading yet".
+     */
+    public function isAwaitingInstall(): bool
+    {
+        return $this->source === DataSource::Real && $this->last_seen_at === null;
+    }
+
+    /** @param Builder<Node> $query */
+    public function scopeAwaitingInstall(Builder $query): void
+    {
+        $query->where('source', DataSource::Real->value)->whereNull('last_seen_at')->whereDoesntHave('readings');
+    }
+
     /** @return BelongsTo<Park, $this> */
     public function park(): BelongsTo
     {
@@ -62,6 +78,12 @@ class Node extends Model
     public function readings(): HasMany
     {
         return $this->hasMany(Reading::class);
+    }
+
+    /** The newest pump switch (is the pump running because of automatic irrigation?). @return HasOne<PumpLog, $this> */
+    public function latestPumpLog(): HasOne
+    {
+        return $this->hasOne(PumpLog::class)->latestOfMany();
     }
 
     /** @return HasMany<PumpLog, $this> */

@@ -9,8 +9,8 @@ use App\Models\Park;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Services\CameraImages;
+use Symfony\Component\HttpFoundation\Response as BaseResponse;
 
 /** Camera frames of the admin's company (photos already blurred; never public URLs). */
 class DetectionController extends Controller
@@ -24,7 +24,7 @@ class DetectionController extends Controller
     }
 
     /** GET /api/admin/detections/{detection}/image: the stored JPEG. */
-    public function image(Detection $detection): StreamedResponse
+    public function image(Detection $detection): BaseResponse
     {
         Gate::authorize('view', $detection->park);
 
@@ -40,11 +40,33 @@ class DetectionController extends Controller
         );
     }
 
-    public static function stream(Detection $detection): StreamedResponse
+    /**
+     * The stored JPEG, or its `?size=display|thumb` variant (falls back to the original
+     * for frames stored before the variants existed). A frame never changes, so it is
+     * cached for a year (private: it needs the Bearer token) with an ETag; a repeat
+     * request with If-None-Match is answered 304 without reading the file.
+     */
+    public static function stream(Detection $detection): BaseResponse
     {
-        $disk = Storage::disk(config('namaa.camera.disk'));
-        abort_unless($disk->exists($detection->photo_path), 404);
+        $disk = CameraImages::disk();
+        $size = (string) request()->query('size', 'original');
+        abort_unless(in_array($size, ['original', ...array_keys(CameraImages::SIZES)], true), 422, 'size must be original, display or thumb.');
 
-        return $disk->response($detection->photo_path, null, ['Cache-Control' => 'private, max-age=86400']);
+        $path = CameraImages::variantPath($detection->photo_path, $size);
+        if ($path !== $detection->photo_path && ! $disk->exists($path)) {
+            $path = $detection->photo_path;
+        }
+        abort_unless($disk->exists($path), 404);
+
+        $headers = [
+            'Cache-Control' => 'private, max-age=31536000, immutable',
+            'ETag' => '"'.md5($detection->id.'|'.$path.'|'.$disk->lastModified($path)).'"',
+        ];
+
+        if (request()->header('If-None-Match') === $headers['ETag']) {
+            return response('', 304, $headers);
+        }
+
+        return $disk->response($path, null, $headers);
     }
 }

@@ -42,6 +42,7 @@ class NodeHardwareResource extends JsonResource
             ],
             'has_pump' => $this->has_pump,
             'online' => $seen !== null && $seen->gt(now()->subSeconds($offlineAfter)),
+            'status' => $this->isAwaitingInstall() ? 'awaiting_install' : ($seen !== null && $seen->gt(now()->subSeconds($offlineAfter)) ? 'online' : 'offline'),
             'last_seen_at' => $this->iso($seen),
             'seconds_since_seen' => $seen ? (int) $seen->diffInSeconds(now(), true) : null,
             'expected_interval_s' => Namaa::timing($isCamera ? 'camera_capture_seconds' : 'interval_s'),

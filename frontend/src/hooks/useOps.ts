@@ -58,6 +58,20 @@ export function useAdminTasks(filters: { status: string; parkId: string }) {
   })
 }
 
+export type TaskBoard = Record<'todo' | 'in_progress' | 'checking' | 'closed', Task[]>
+
+/** The kanban: the four columns in one request (Sprint 6, B4), with the full column sizes. */
+export function useTaskBoard(parkId: string) {
+  const params = new URLSearchParams({ grouped: '1', per_column: '50' })
+  if (parkId !== 'all') params.set('park_id', parkId)
+  return useQuery({
+    queryKey: ['admin', 'tasks', 'board', parkId],
+    queryFn: ({ signal }) => api<{ data: TaskBoard; counts: Record<keyof TaskBoard, number> }>(`/admin/tasks?${params}`, { signal }),
+    refetchInterval: POLL_MS,
+    placeholderData: keepPreviousData,
+  })
+}
+
 export function useWorkers(enabled = true) {
   return useQuery({
     queryKey: ['admin', 'workers'],
@@ -81,6 +95,8 @@ export interface NewTask {
   park_id?: number
   assigned_to: number | null
   title: string
+  /** A system title (taskTitle.dry...): the server then stores it for both languages. */
+  title_key?: string
   note: string | null
   priority: TaskPriority
 }

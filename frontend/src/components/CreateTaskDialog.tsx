@@ -43,7 +43,9 @@ function CreateTaskForm({ seed, onDone }: { seed: TaskSeed; onDone: () => void }
 
   const [workerId, setWorkerId] = useState<string>(NONE)
   const [priority, setPriority] = useState<TaskPriority>(seed.alert?.priority ?? 'normal')
-  const [title, setTitle] = useState(() => t(`taskTitle.${seed.alert?.type ?? 'manual'}`, { park: name }))
+  const titleKey = `taskTitle.${seed.alert?.type ?? 'manual'}`
+  const defaultTitle = t(titleKey, { park: name })
+  const [title, setTitle] = useState(defaultTitle)
   const [note, setNote] = useState('')
 
   function submit(event: FormEvent) {
@@ -53,6 +55,8 @@ function CreateTaskForm({ seed, onDone }: { seed: TaskSeed; onDone: () => void }
         ...(seed.alert ? { alert_id: seed.alert.id } : { park_id: seed.park.id }),
         assigned_to: workerId === NONE ? null : Number(workerId),
         title: title.trim(),
+        // Untouched system title: send its key, so it reads right in both languages.
+        ...(title.trim() === defaultTitle ? { title_key: titleKey } : {}),
         note: note.trim() || null,
         priority,
       },
@@ -129,10 +133,10 @@ function CreateTaskForm({ seed, onDone }: { seed: TaskSeed; onDone: () => void }
       </div>
 
       <DialogFooter>
-        <Button type="button" variant="ghost" onClick={onDone}>
+        <Button type="button" variant="ghost" className="min-h-11 rounded-full px-5" onClick={onDone}>
           {t('common.cancel')}
         </Button>
-        <Button type="submit" disabled={create.isPending || !title.trim()}>
+        <Button type="submit" className="min-h-11 rounded-full bg-[var(--accent-lime)] px-6 text-[var(--on-accent)] hover:bg-[var(--accent-lime)] hover:brightness-95" disabled={create.isPending || !title.trim()}>
           {create.isPending ? t('createTask.submitting') : t('createTask.submit')}
         </Button>
       </DialogFooter>

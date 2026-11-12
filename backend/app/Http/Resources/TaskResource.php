@@ -42,12 +42,28 @@ class TaskResource extends JsonResource
                 'status' => $this->alert->status->value,
                 'data' => $this->alert->data,
                 'detection_id' => $this->alert->detection_id,
+                // Worker route of the litter frame: append ?size=thumb|display (default: original).
+                'frame_url' => $this->alert->detection_id ? "/worker/tasks/{$this->id}/frame" : null,
+                'node' => $this->alert->relationLoaded('node') && $this->alert->node ? [
+                    'id' => $this->alert->node->id,
+                    'name' => $this->alert->node->name,
+                    'type' => $this->alert->node->type->value,
+                    'source' => $this->alert->node->source->value,
+                    'last_seen_at' => $this->iso($this->alert->node->last_seen_at),
+                ] : null,
                 'detection' => $this->alert->relationLoaded('detection') && $this->alert->detection
                     ? (new DetectionResource($this->alert->detection))->resolve() : null,
                 'recommended_action' => 'action.'.$this->alert->type->value,
                 'created_at' => $this->iso($this->alert->created_at),
             ] : null),
             'title' => $this->title,
+            'title_key' => $this->title_key,
+            'title_park_id' => $this->title_park_id,
+            // Names for rendering the title per language (only the task's own park, no extra query).
+            'title_park' => $this->whenLoaded('park', fn () => $this->title_park_id !== null && $this->title_park_id === $this->park_id ? [
+                'id' => $this->park->id, 'name_ar' => $this->park->name_ar, 'name_en' => $this->park->name_en,
+            ] : null),
+            'board' => $this->board(),
             'note' => $this->note,
             // The task's category is its alert's (null for a task made from a park).
             'category' => $this->whenLoaded('alert', fn () => $this->alert?->type->category()->value),
@@ -75,9 +91,9 @@ class TaskResource extends JsonResource
         ];
     }
 
-    /** @return array{id: int, name: string}|null */
+    /** @return array{id: int, name: string, name_ar: ?string}|null */
     private function person(?User $user): ?array
     {
-        return $user ? ['id' => $user->id, 'name' => $user->name] : null;
+        return $user ? ['id' => $user->id, 'name' => $user->name, 'name_ar' => $user->name_ar] : null;
     }
 }

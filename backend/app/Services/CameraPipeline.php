@@ -15,7 +15,6 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -24,7 +23,8 @@ use Throwable;
  *
  *  1. POST /waste (litter items + person boxes);
  *  2. blur the people (the raw photo is never stored);
- *  3. save the JPEG on the private disk: camera/{node_id}/{Y-m-d}/{timestamp}.jpg;
+ *  3. save the JPEG on the private disk: camera/{node_id}/{Y-m-d}/{timestamp}.jpg,
+ *     plus a display and a thumbnail variant (CameraImages);
  *  4. a detections row, the camera node's last_seen_at;
  *  5. the litter rules; broadcast detection.created.
  *
@@ -38,6 +38,7 @@ class CameraPipeline
         private readonly ImageBlur $blur,
         private readonly LitterRules $litter,
         private readonly AlertService $alerts,
+        private readonly CameraImages $images,
     ) {}
 
     public static function cameraUrl(): string
@@ -100,7 +101,7 @@ class CameraPipeline
         return $first;
     }
 
-    public function process(Node $node, string $bytes, string $origin): Detection
+    public function process(Node $node, string $bytes, string $origin, ?string $sample = null): Detection
     {
         $result = $this->vision->waste($bytes);
         $people = $result['people'] ?? [];
@@ -113,7 +114,7 @@ class CameraPipeline
 
         $capturedAt = now();
         $path = sprintf('camera/%d/%s/%s.jpg', $node->id, $capturedAt->format('Y-m-d'), $capturedAt->format('His_v'));
-        Storage::disk(config('namaa.camera.disk'))->put($path, $jpeg);
+        $this->images->store($path, $jpeg);
 
         $detection = Detection::create([
             'park_id' => $node->park_id,
@@ -127,6 +128,7 @@ class CameraPipeline
             'image_w' => $result['image_w'] ?? null,
             'image_h' => $result['image_h'] ?? null,
             'origin' => $origin,
+            'sample' => $sample,
             'captured_at' => $capturedAt,
         ]);
 
@@ -145,7 +147,7 @@ class CameraPipeline
             'node_id' => $node->id,
             'detection' => (new DetectionResource($detection))->resolve(),
             'count' => $detection->count,
-            'thumbnail_url' => $detection->imagePath(),
+            'thumbnail_url' => $detection->imagePath().'?size=thumb',
             'alert_id' => $alert?->id,
         ]));
 
@@ -161,15 +163,14 @@ class CameraPipeline
     public function prune(): int
     {
         $before = now()->subDays((int) config('namaa.camera.retention_days'));
-        $disk = Storage::disk(config('namaa.camera.disk'));
         $deleted = 0;
 
         Detection::where('captured_at', '<', $before)
             ->whereNotIn('id', fn ($q) => $q->select('detection_id')->from('alerts')->whereNotNull('detection_id'))
             ->orderBy('id')
-            ->chunkById(200, function ($frames) use ($disk, &$deleted) {
+            ->chunkById(200, function ($frames) use (&$deleted) {
                 foreach ($frames as $frame) {
-                    $disk->delete($frame->photo_path);
+                    $this->images->delete($frame);
                     $frame->delete();
                     $deleted++;
                 }

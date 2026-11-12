@@ -3,13 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#10120e" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NAMAA</title>
+    <title>NAMAA · نماء</title>
+    <meta name="color-scheme" content="dark" />
     <script>
       // Apply the saved theme and language before the first paint (no flash).
       try {
-        var theme = localStorage.getItem('namaa.theme') || 'dark';
-        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.classList.add('dark'); // dark theme only for now
         var lang = localStorage.getItem('namaa.lang') || 'ar';
         document.documentElement.lang = lang;
         document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';

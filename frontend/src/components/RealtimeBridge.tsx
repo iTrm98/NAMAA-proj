@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
 import { connectEcho, disconnectEcho, type LiveEvent, onLive, releaseEcho } from '@/lib/echo'
 import { appendToCachedSeries, type LiveReading } from '@/lib/liveSeries'
+import { taskTitle } from '@/lib/names'
 import { beep, vibrate } from '@/lib/notify'
 import type { HardwareNode, Park, User } from '@/types'
 
@@ -18,7 +19,7 @@ import type { HardwareNode, Park, User } from '@/types'
 export function RealtimeBridge() {
   const { token, user } = useAuth()
   const queryClient = useQueryClient()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -29,8 +30,8 @@ export function RealtimeBridge() {
     connectEcho(user, token)
     return onLive((event, payload) => {
       handle(queryClient, user, event, payload)
-      if (event === 'task.created' && user.role === 'worker') notifyNewTask(t, payload, (id) => navigate(`/worker/tasks/${id}`))
-      if (event === 'task.escalated' && user.role === 'admin') notifyEscalated(t, payload, () => navigate('/admin/tasks?status=overdue'))
+      if (event === 'task.created' && user.role === 'worker') notifyNewTask(t, i18n.language, payload, (id) => navigate(`/worker/tasks/${id}`))
+      if (event === 'task.escalated' && user.role === 'admin') notifyEscalated(t, i18n.language, payload, () => navigate('/admin/tasks?status=overdue'))
     })
   }, [token, user, queryClient, t, navigate])
 
@@ -81,21 +82,21 @@ function handle(queryClient: QueryClient, user: User, event: LiveEvent, payload:
     }
     case 'node.updated':
       // Calibration, camera mode or relay test changed (hardware page).
-      invalidate(queryClient, [scope, 'nodes'])
+      invalidate(queryClient, [scope, 'nodes'], [scope, 'overview'])
       break
     case 'park.status_changed':
     case 'pump.changed':
-      invalidate(queryClient, [scope, 'parks'])
+      invalidate(queryClient, [scope, 'parks'], [scope, 'overview'])
       break
     case 'alert.raised':
     case 'alert.resolved':
     case 'alert.updated':
-      invalidate(queryClient, [scope, 'alerts'], [scope, 'parks'], [scope, 'impact'])
+      invalidate(queryClient, [scope, 'alerts'], [scope, 'parks'], [scope, 'impact'], [scope, 'overview'])
       break
     case 'task.created':
     case 'task.updated':
     case 'task.escalated':
-      invalidate(queryClient, [scope, 'tasks'], [scope, 'alerts'], [scope, 'workers'], [scope, 'parks', parkId], [scope, 'impact'])
+      invalidate(queryClient, [scope, 'tasks'], [scope, 'alerts'], [scope, 'workers'], [scope, 'parks', parkId], [scope, 'impact'], [scope, 'overview'])
       break
     case 'ndvi.updated':
       invalidate(queryClient, [scope, 'parks'])
@@ -146,26 +147,30 @@ function patchHardwareNode(queryClient: QueryClient, nodeId: number, reading: Re
   )
 }
 
+type TaskLike = Parameters<typeof taskTitle>[2]
+
 /** Admin notice: a task passed its due time (raised one level, or overdue when already urgent). */
-function notifyEscalated(t: TFunction, payload: Record<string, unknown>, open: () => void) {
-  const task = payload.task as { title: string; priority: string; overdue: boolean } | undefined
+function notifyEscalated(t: TFunction, language: string, payload: Record<string, unknown>, open: () => void) {
+  const task = payload.task as (TaskLike & { priority: string; overdue: boolean }) | undefined
   if (!task) return
+  const title = taskTitle(t, language, task)
   const message = task.overdue && task.priority === 'urgent'
-    ? t('tasks.overdueToast', { title: task.title })
-    : t('tasks.escalatedToast', { title: task.title, priority: t(`priority.${task.priority}`) })
+    ? t('tasks.overdueToast', { title })
+    : t('tasks.escalatedToast', { title, priority: t(`priority.${task.priority}`) })
   toast.warning(message, { duration: 10_000, action: { label: t('worker.open'), onClick: open } })
 }
 
 function notifyNewTask(
   t: TFunction,
+  language: string,
   payload: Record<string, unknown>,
   open: (id: number) => void,
 ) {
-  const task = payload.task as { id: number; title: string; priority: string } | undefined
+  const task = payload.task as (TaskLike & { id: number }) | undefined
   beep()
   vibrate()
   toast(t('worker.newTask'), {
-    description: task?.title,
+    description: task ? taskTitle(t, language, task) : undefined,
     duration: 8000,
     action: task ? { label: t('worker.open'), onClick: () => open(task.id) } : undefined,
   })

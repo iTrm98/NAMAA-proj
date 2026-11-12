@@ -44,9 +44,13 @@ function useFrameUrl(path: string | null) {
  * One camera frame with the litter boxes drawn over it (SVG in photo pixels,
  * so it scales with the image). People are already blurred by the server.
  */
-export function FrameImage({ detection, className, labels = true }: { detection: Detection; className?: string; labels?: boolean }) {
+export function FrameImage({ detection, className, labels = true, thumbOnly = false }: { detection: Detection; className?: string; labels?: boolean; thumbOnly?: boolean }) {
   const { t } = useTranslation()
-  const { url, failed } = useFrameUrl(detection.image_url)
+  // The small version shows first (under a second), the display size replaces it when loaded; the full original is only the fallback.
+  const thumb = useFrameUrl(detection.thumb_url ?? null)
+  const display = useFrameUrl(thumbOnly && detection.thumb_url ? null : (detection.display_url ?? detection.image_url))
+  const url = display.url ?? thumb.url
+  const failed = display.failed && !thumb.url
   const w = detection.image_w ?? 640
   const h = detection.image_h ?? 480
   const stroke = Math.max(2, Math.round(Math.min(w, h) / 220))
@@ -76,7 +80,7 @@ export function FrameImage({ detection, className, labels = true }: { detection:
               {labels && (
                 <>
                   <rect x={x1} y={above ? y1 - font - 6 : y1} width={labelW} height={font + 6} fill={BOX} />
-                  <text x={x1 + 4} y={(above ? y1 - 6 : y1 + font) - 1} fontSize={font} fill="#111" fontFamily="ui-sans-serif, system-ui" fontWeight={600}>
+                  <text x={x1 + 4} y={(above ? y1 - 6 : y1 + font) - 1} fontSize={font} fill="#111" fontFamily="inherit" fontWeight={600}>
                     {text}
                   </text>
                 </>
@@ -163,7 +167,7 @@ export function CameraCard({ parkId, scope }: { parkId: number; scope?: ApiScope
                     className={cn('relative rounded-md ring-offset-background focus-visible:ring-2', d.id === shown.id && 'ring-2 ring-primary')}
                     aria-label={t('camera.frameAt', { time: formatDateTime(d.captured_at), count: d.count })}
                   >
-                    <FrameImage detection={d} labels={false} className="rounded-md" />
+                    <FrameImage detection={d} labels={false} thumbOnly className="rounded-md" />
                     <LitterCount count={d.count} className="absolute end-1 bottom-1 px-1.5 text-[10px]" />
                   </button>
                 ))}

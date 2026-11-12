@@ -13,6 +13,7 @@ use App\Models\Park;
 use App\Models\Task;
 use App\Models\User;
 use App\Support\Realtime;
+use App\Support\TaskTitles;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -33,9 +34,10 @@ class TaskService
     public function __construct(
         private readonly ActivityLogger $logger,
         private readonly PumpService $pump,
+        private readonly DemoRepair $repair,
     ) {}
 
-    /** @param array{alert_id?: ?int, park_id?: ?int, assigned_to?: ?int, title: string, note?: ?string, priority?: ?string} $data */
+    /** @param array{alert_id?: ?int, park_id?: ?int, assigned_to?: ?int, title?: ?string, title_key?: ?string, note?: ?string, priority?: ?string} $data */
     public function create(User $admin, array $data): Task
     {
         return DB::transaction(function () use ($admin, $data) {
@@ -53,7 +55,9 @@ class TaskService
                 'alert_id' => $alert?->id,
                 'assigned_to' => $data['assigned_to'] ?? null,
                 'created_by' => $admin->id,
-                'title' => $data['title'],
+                'title' => ($data['title'] ?? null) ?: TaskTitles::english($data['title_key'], $park->name_en),
+                'title_key' => $data['title_key'] ?? null,
+                'title_park_id' => isset($data['title_key']) ? $park->id : null,
                 'note' => $data['note'] ?? null,
                 'priority' => $priority,
                 'status' => TaskStatus::Open,
@@ -108,6 +112,10 @@ class TaskService
                     'due_at' => now()->addSeconds(TaskPriority::from($after['priority'])->responseSeconds()),
                     'overdue_at' => null,
                 ];
+            }
+            if (array_key_exists('title', $after)) {
+                // An edited title is free text: it no longer follows the language.
+                $changes += ['title_key' => null, 'title_park_id' => null];
             }
             $task->update($changes);
 
@@ -192,6 +200,10 @@ class TaskService
                 'after' => ['status' => 'done', 'note' => $note, 'photo' => $path !== null]
                     + ($target === null ? [] : ['watering_target_pct' => $target, 'moisture_pct' => $moisture, 'done_below_target' => $task->done_below_target]),
             ], user: $worker);
+
+            // Simulated fault: the repair ends it (the simulator stops the forced leak /
+            // blockage; the demo camera sends clean frames), so verification sees the fix.
+            $this->repair->afterDone($task);
 
             // Verification follows on the schedule (namaa:verify-tasks): the alert's
             // condition must stay cleared for a continuous window of readings.
@@ -282,6 +294,8 @@ class TaskService
             'alert_id' => $task->alert_id,
             'assigned_to' => $task->assigned_to,
             'title' => $task->title,
+            'title_key' => $task->title_key,
+            'title_park_id' => $task->title_park_id,
             'status' => $task->status->value,
             'priority' => $task->priority->value,
             'due_at' => $task->due_at?->utc()->format('Y-m-d\TH:i:s\Z'),

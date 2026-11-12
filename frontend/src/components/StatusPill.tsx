@@ -4,10 +4,11 @@ import type { ParkStatus, Source } from '@/types'
 
 /** Map/pill colours: ok green, dry orange, over blue, offline grey. */
 export const STATUS_COLORS: Record<ParkStatus, string> = {
-  ok: '#22c55e',
-  dry: '#f97316',
-  over: '#3b82f6',
-  offline: '#9ca3af',
+  ok: '#8BE36B',
+  dry: '#FF9A62',
+  over: '#7CB8FF',
+  offline: '#C9C5B8',
+  awaiting_install: '#C9C5B8', // drawn as a grey ring where the shape allows
 }
 
 const PILL: Record<ParkStatus, string> = {
@@ -15,6 +16,7 @@ const PILL: Record<ParkStatus, string> = {
   dry: 'bg-status-dry/15 text-status-dry ring-status-dry/30',
   over: 'bg-status-over/15 text-status-over ring-status-over/30',
   offline: 'bg-status-offline/15 text-status-offline ring-status-offline/30',
+  awaiting_install: 'bg-transparent text-status-offline ring-status-offline/60',
 }
 
 export function StatusPill({ status, className }: { status: ParkStatus; className?: string }) {

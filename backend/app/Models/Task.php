@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'company_id', 'park_id', 'alert_id', 'assigned_to', 'created_by', 'title',
+    'company_id', 'park_id', 'alert_id', 'assigned_to', 'created_by', 'title', 'title_key', 'title_park_id',
     'priority', 'status', 'started_at', 'done_at', 'note', 'photo_path',
     'done_note', 'done_photo_path', 'verified', 'verified_at', 'verify_reason',
     'time_to_resolve_min', 'water_used_l', 'due_at', 'escalated_at', 'escalation_count', 'overdue_at',
@@ -72,6 +72,29 @@ class Task extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Kanban column (Sprint 6, B4): todo | in_progress | checking | closed. */
+    public function board(): string
+    {
+        return match (true) {
+            $this->status === TaskStatus::Open => 'todo',
+            $this->status === TaskStatus::InProgress => 'in_progress',
+            $this->status === TaskStatus::Done && $this->verified === null => 'checking',
+            default => 'closed', // done and verified / not verified, or cancelled
+        };
+    }
+
+    /** @param Builder<Task> $query */
+    public function scopeBoard(Builder $query, string $column): void
+    {
+        match ($column) {
+            'todo' => $query->where('status', TaskStatus::Open->value),
+            'in_progress' => $query->where('status', TaskStatus::InProgress->value),
+            'checking' => $query->where('status', TaskStatus::Done->value)->whereNull('verified'),
+            default => $query->where(fn ($q) => $q->where('status', TaskStatus::Cancelled->value)
+                ->orWhere(fn ($d) => $d->where('status', TaskStatus::Done->value)->whereNotNull('verified'))),
+        };
     }
 
     /** @param Builder<Task> $query */

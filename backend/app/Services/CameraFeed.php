@@ -41,6 +41,25 @@ class CameraFeed
         return array_values($files);
     }
 
+    /** Id a frame keeps in detections.sample: "litter/01.jpg@<sha1 prefix>" (changes when the photo is replaced). */
+    public static function sampleId(string $kind, string $file): string
+    {
+        return $kind.'/'.basename($file).'@'.substr((string) sha1_file($file), 0, 10);
+    }
+
+    /** @return list<string> sample ids of every photo currently in data/samples */
+    public static function currentSampleIds(): array
+    {
+        $ids = [];
+        foreach (array_keys(self::LIMITS) as $kind) {
+            foreach (self::photos($kind) as $file) {
+                $ids[] = self::sampleId($kind, $file);
+            }
+        }
+
+        return $ids;
+    }
+
     /**
      * The company's first simulated (test) camera, e.g. "Sim Cam". Demo frames
      * never go to a real camera: real cameras only get frames from the capture job.
@@ -72,6 +91,23 @@ class CameraFeed
         return ['camera_node_id' => $camera->id, 'feed' => $kind, 'photos' => count($photos)];
     }
 
+    /**
+     * A worker marked a litter task on a simulated camera Done (demo mode): the
+     * "litter was picked up". The camera sends the clean photos for its next
+     * captures, so the cleanup verification passes on real frames. The `litter`
+     * scenario starts litter frames again. No-op without clean photos.
+     */
+    public function repaired(Node $camera): bool
+    {
+        if ($camera->source !== DataSource::Simulated || self::photos('clean') === []) {
+            return false;
+        }
+
+        Cache::forever(self::KEY, ['kind' => 'clean', 'node_id' => $camera->id, 'sent' => 0, 'last' => 0.0]);
+
+        return true;
+    }
+
     public function stop(): void
     {
         Cache::forget(self::KEY);
@@ -86,7 +122,7 @@ class CameraFeed
     /**
      * The next frame when one is due (one per capture interval), else null.
      *
-     * @return array{node: Node, bytes: string}|null
+     * @return array{node: Node, bytes: string, sample: string}|null
      */
     public function next(int $everySeconds): ?array
     {
@@ -106,6 +142,6 @@ class CameraFeed
         $file = $photos[$feed['sent'] % count($photos)];
         Cache::forever(self::KEY, ['sent' => $feed['sent'] + 1, 'last' => now()->getTimestampMs() / 1000] + $feed);
 
-        return ['node' => $node, 'bytes' => (string) file_get_contents($file)];
+        return ['node' => $node, 'bytes' => (string) file_get_contents($file), 'sample' => self::sampleId($feed['kind'], $file)];
     }
 }

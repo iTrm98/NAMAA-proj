@@ -13,6 +13,7 @@ use App\Services\ActivityLogger;
 use App\Services\ParkOutline;
 use App\Services\PumpService;
 use App\Services\ReadingSeries;
+use App\Services\TimelineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -27,7 +28,7 @@ class ParkController extends Controller
     {
         $parks = Park::forCompany($request->user()->company_id)
             ->unless($request->boolean('include_test'), fn ($q) => $q->withoutTest())
-            ->with(['nodes', 'latestNdvi'])
+            ->with(['nodes.latestPumpLog', 'latestNdvi'])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('id')
             ->get();
@@ -93,6 +94,15 @@ class ParkController extends Controller
         ])['range'] ?? '24h';
 
         return response()->json($series->forPark($park, $range));
+    }
+
+    /** GET /api/admin/parks/{id}/timeline?alert_id=: the chain of the latest problem (api.md, Timeline). */
+    public function timeline(Request $request, Park $park, TimelineService $timeline): JsonResponse
+    {
+        Gate::authorize('view', $park);
+        $alertId = $request->validate(['alert_id' => ['sometimes', 'integer']])['alert_id'] ?? null;
+
+        return response()->json(['data' => $timeline->forPark($park, $alertId)]);
     }
 
     private function detail(Park $park): ParkResource

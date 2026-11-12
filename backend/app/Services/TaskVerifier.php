@@ -34,7 +34,8 @@ use Illuminate\Support\Facades\DB;
  *    then stays open.
  *
  * Litter tasks are checked on the camera's frames instead of readings: a
- * frame without litter is good, a frame with litter breaks the window.
+ * frame without litter is good, a frame with litter breaks the window. In demo
+ * mode (verify_clean_frames) 3 clean frames in a row verify it instead of the window.
  *
  * verified = true: verified_at, time_to_resolve_min (alert raised -> verified,
  * or task created -> verified) and the alert resolved if still open.
@@ -84,7 +85,7 @@ class TaskVerifier
                 $maxGap = OfflineChecker::offlineSeconds(NodeType::Camera);
                 $samples = Detection::query()
                     ->where('node_id', $alert->node_id)
-                    ->where('captured_at', '>', $task->done_at)
+                    ->where('captured_at', '>=', $task->done_at) // the first demo frame can land in the same second as Done
                     ->where('captured_at', '<=', $deadline)
                     ->orderBy('captured_at')->orderBy('id')
                     ->get(['id', 'count', 'captured_at'])
@@ -100,6 +101,9 @@ class TaskVerifier
                     ->map(fn (Reading $r) => [$r->created_at, $this->state($alert, $task->park, $r)]);
             }
 
+            // Litter in demo mode: N clean frames in a row instead of the time window.
+            $cleanFrames = $alert?->type?->isLitter() ? Namaa::timing('verify_clean_frames') : 0;
+            $goodRun = 0;
             $streakStart = null;
             $previousAt = null;
             $sawBad = false;
@@ -108,6 +112,19 @@ class TaskVerifier
             foreach ($samples as [$at, $state]) {
                 if ($previousAt && $previousAt->diffInSeconds($at, true) > $maxGap) {
                     $streakStart = null; // a gap is not "continuous"
+                    $goodRun = 0;
+                }
+
+                if ($cleanFrames > 0) {
+                    $goodRun = $state === self::GOOD ? $goodRun + 1 : 0;
+                    $sawBad = $sawBad || $state === self::BAD;
+                    $previousAt = $at;
+                    if ($goodRun >= $cleanFrames) {
+                        $verified = true;
+                        break;
+                    }
+
+                    continue;
                 }
 
                 if ($state === self::BAD) {

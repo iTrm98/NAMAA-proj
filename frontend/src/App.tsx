@@ -1,14 +1,18 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
+import { RouteTitle } from '@/hooks/useDocumentTitle'
 import { RealtimeBridge } from '@/components/RealtimeBridge'
 import { RequireRole } from '@/components/RequireRole'
-import { Toaster } from '@/components/ui/sonner'
+import { Toast } from '@/components/ds'
 import { homeFor, useAuth } from '@/lib/auth'
 import { LoginPage } from '@/pages/LoginPage'
 
 // Admin pages load on demand (MapLibre and Recharts are large).
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'))
 const ParkMap = lazy(() => import('@/pages/admin/ParkMap'))
+const AdminOverviewPage = lazy(() => import('@/pages/admin/OverviewPage'))
+const ParksListPage = lazy(() => import('@/pages/ParksListPage'))
+const CompaniesPage = lazy(() => import('@/pages/municipality/CompaniesPage'))
 const ParkPage = lazy(() => import('@/pages/admin/ParkPage'))
 const TasksPage = lazy(() => import('@/pages/admin/TasksPage'))
 const DemoPage = lazy(() => import('@/pages/admin/DemoPage'))
@@ -32,8 +36,9 @@ function Home() {
 export default function App() {
   return (
     <>
+      <RouteTitle />
       <RealtimeBridge />
-      <Toaster position="top-center" richColors closeButton />
+      <Toast />
       <AppRoutes />
     </>
   )
@@ -53,7 +58,9 @@ function AppRoutes() {
           </RequireRole>
         }
       >
-        <Route index element={<Suspense fallback={null}><ParkMap /></Suspense>} />
+        <Route index element={<Suspense fallback={null}><AdminOverviewPage /></Suspense>} />
+        <Route path="map" element={<Suspense fallback={null}><ParkMap /></Suspense>} />
+        <Route path="parks" element={<Suspense fallback={null}><ParksListPage /></Suspense>} />
         <Route path="parks/:id" element={<Suspense fallback={null}><ParkPage /></Suspense>} />
         <Route path="tasks" element={<Suspense fallback={null}><TasksPage /></Suspense>} />
         <Route path="demo" element={<Suspense fallback={null}><DemoPage /></Suspense>} />
@@ -86,6 +93,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<Suspense fallback={null}><OverviewPage /></Suspense>} />
+        <Route path="companies" element={<Suspense fallback={null}><CompaniesPage /></Suspense>} />
+        <Route path="parks" element={<Suspense fallback={null}><ParksListPage /></Suspense>} />
         <Route path="parks/:id" element={<Suspense fallback={null}><ParkPage /></Suspense>} />
         <Route path="*" element={<Navigate to="/municipality" replace />} />
       </Route>

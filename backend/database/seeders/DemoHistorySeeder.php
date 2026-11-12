@@ -206,6 +206,8 @@ class DemoHistorySeeder extends Seeder
             'assigned_to' => $worker?->id,
             'created_by' => $this->admin->id,
             'title' => $title,
+            'title_key' => ($key = \App\Support\TaskTitles::keyFor($title, $park->name_en)),
+            'title_park_id' => $key ? $park->id : null,
             'priority' => $priority,
             'created_at' => $createdAt,
             'updated_at' => $createdAt,

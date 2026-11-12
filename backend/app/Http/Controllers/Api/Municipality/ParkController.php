@@ -13,6 +13,8 @@ use App\Models\Company;
 use App\Models\Detection;
 use App\Models\Park;
 use App\Services\ImpactService;
+use App\Services\OverviewService;
+use App\Services\TimelineService;
 use App\Services\PumpService;
 use App\Services\ReadingSeries;
 use Illuminate\Http\JsonResponse;
@@ -29,7 +31,7 @@ class ParkController extends Controller
 {
     public function index(): AnonymousResourceCollection
     {
-        $parks = Park::withoutTest()->with(['nodes', 'company', 'latestNdvi'])
+        $parks = Park::withoutTest()->with(['nodes.latestPumpLog', 'company', 'latestNdvi'])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('company_id')
             ->orderBy('id')
@@ -78,11 +80,28 @@ class ParkController extends Controller
     }
 
     /** GET /api/municipality/detections/{detection}/image (people already blurred). */
-    public function detectionImage(Detection $detection): StreamedResponse
+    public function detectionImage(Detection $detection): \Symfony\Component\HttpFoundation\Response
     {
         abort_if($detection->park->is_test, 404);
 
         return DetectionController::stream($detection);
+    }
+
+    /** GET /api/municipality/overview: the admin overview across all companies. */
+    public function overview(OverviewService $overview): JsonResponse
+    {
+        $parks = Park::withoutTest()->with(['nodes', 'company'])->orderBy('company_id')->orderBy('id')->get();
+
+        return response()->json(['data' => $overview->build($parks, withCompany: true)]);
+    }
+
+    /** GET /api/municipality/parks/{park}/timeline?alert_id= */
+    public function timeline(Request $request, Park $park, TimelineService $timeline): JsonResponse
+    {
+        abort_if($park->is_test, 404);
+        $alertId = $request->validate(['alert_id' => ['sometimes', 'integer']])['alert_id'] ?? null;
+
+        return response()->json(['data' => $timeline->forPark($park, $alertId)]);
     }
 
     /** GET /api/municipality/alerts?status=open&company_id= */

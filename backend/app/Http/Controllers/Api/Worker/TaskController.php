@@ -22,7 +22,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /** /api/worker/tasks: only the tasks assigned to the signed-in worker (others: 404). */
 class TaskController extends Controller
 {
-    private const WITH = ['park', 'alert.detection', 'assignee', 'creator'];
+    private const WITH = ['park', 'alert.detection', 'alert.node', 'assignee', 'creator'];
 
     public function __construct(
         private readonly TaskService $tasks,
@@ -75,7 +75,7 @@ class TaskController extends Controller
     }
 
     /** The camera frame that raised the task's litter alert (people blurred). */
-    public function frame(Task $task): StreamedResponse
+    public function frame(Task $task): \Symfony\Component\HttpFoundation\Response
     {
         Gate::authorize('work', $task);
         $detection = $task->alert?->detection;

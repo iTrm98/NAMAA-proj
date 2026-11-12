@@ -55,7 +55,7 @@ class AlertResource extends JsonResource
                 'due_at' => $this->iso($task->due_at),
                 'overdue' => $task->isOverdue(),
                 'verified' => $task->verified,
-                'assigned_to' => $task->assignee ? ['id' => $task->assignee->id, 'name' => $task->assignee->name] : null,
+                'assigned_to' => $task->assignee ? ['id' => $task->assignee->id, 'name' => $task->assignee->name, 'name_ar' => $task->assignee->name_ar] : null,
             ] : null,
             'created_at' => $this->iso($this->created_at),
             'resolved_at' => $this->iso($this->resolved_at),

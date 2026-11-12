@@ -1,5 +1,7 @@
 {
   "app": {
+    "titleDefault": "NAMAA · نماء",
+    "titleFormat": "{{page}} · NAMAA",
     "name": "NAMAA",
     "tagline": "Smart monitoring for Makkah's parks"
   },
@@ -46,7 +48,15 @@
     "demoDivider": "Demo",
     "enterAdmin": "Enter as Admin",
     "enterWorker": "Enter as Worker",
-    "demoFailed": "Demo sign-in failed."
+    "demoFailed": "Demo sign-in failed.",
+    "headline": "Every park in Makkah, watched live. Every fix, proven by data.",
+    "b1": "Water only when the soil needs it",
+    "b1s": "Soil sensors replace fixed schedules.",
+    "b2": "Problems reach a worker's phone in seconds",
+    "b2s": "Dry soil, leaks, litter, offline sensors.",
+    "b3": "A task closes only when sensors confirm it",
+    "b3s": "The municipality sees verified work from every contractor.",
+    "emailPlaceholder": "name@company.sa"
   },
   "placeholder": {
     "municipalityTitle": "Municipality overview",
@@ -56,7 +66,8 @@
     "ok": "OK",
     "dry": "Dry",
     "over": "Over-watered",
-    "offline": "Offline"
+    "offline": "Offline",
+    "awaiting_install": "Awaiting installation"
   },
   "source": {
     "real": "Real",
@@ -99,6 +110,7 @@
     "noReadingYet": "No reading yet"
   },
   "park": {
+    "wateringTarget": "Watering target {{value}} %",
     "moisture": "Soil moisture",
     "temperature": "Temperature",
     "humidity": "Humidity",
@@ -150,7 +162,13 @@
     "tasks": "Tasks",
     "demo": "Demo",
     "impact": "Impact",
-    "hardware": "Hardware"
+    "hardware": "Hardware",
+    "main": "Main navigation",
+    "overview": "Overview",
+    "parks": "Parks",
+    "tools": "Tools",
+    "city": "City",
+    "companies": "Companies"
   },
   "priority": {
     "low": "Low",
@@ -324,7 +342,7 @@
     "scenario": {
       "reset": {
         "title": "Reset",
-        "body": "Back to the start of the story: Al Adel dry (about 22 %, pump off), the other parks healthy, batteries near 100 %, alerts and tasks cleared."
+        "body": "Back to the start of the story: Al Adel healthy at about 35 % (pump ready, automatic irrigation on), the other parks healthy, batteries near 100 %, alerts and tasks cleared."
       },
       "dry": {
         "title": "Dry soil",
@@ -369,6 +387,32 @@
     "fullResetHint": "Full reset also restores the healthy parks to their start."
   },
   "worker": {
+    "flowLive": "Water flow, live",
+    "flowUnit": "L/min",
+    "pumpIsOn": "Pump on",
+    "pumpIsOff": "Pump off",
+    "flowExpected": "Expected about {{value}} L/min",
+    "deviceTitle": "Device to check",
+    "deviceNode": "Sensor node",
+    "lastSeen": "Last seen {{time}}",
+    "whatToCheck": "What to check",
+    "whatToCollect": "What to collect",
+    "collectAll": "Collect the litter you see in the photo.",
+    "check_leakNear": "Find the leak near {{place}}: look for wet ground or a broken fitting.",
+    "check_leakLine": "Walk the pipe from the tank to the drippers and close the valve if you find it.",
+    "check_tank": "The water tank level.",
+    "check_pipe": "Pipes for kinks, crushing or breaks.",
+    "check_pumpPower": "The pump power and its cable.",
+    "check_filter": "Clean the filter.",
+    "check_drippers": "Drippers that look blocked.",
+    "check_power": "The node has power (battery or solar panel).",
+    "check_wifi": "The Wi-Fi hotspot is on and in range.",
+    "check_restart": "Restart the board.",
+    "check_cable": "The sensor cable and its connector.",
+    "check_probe": "The soil probe is pushed in firmly.",
+    "check_restartSensor": "Restart the board and watch the reading.",
+    "check_panel": "Clean the solar panel.",
+    "check_battery": "The battery and its cable.",
     "myTasks": "My tasks",
     "empty": "No tasks right now. New tasks appear here by themselves.",
     "recent": "Recently finished",
@@ -412,7 +456,17 @@
     "belowTargetTitle": "Moisture is still below the target",
     "belowTargetBody": "Moisture is still below the target ({{target}} %). Mark as done anyway?",
     "doneAnyway": "Mark as done anyway",
-    "doneBelowTarget": "Marked done below the target ({{moisture}} % of {{target}} %)."
+    "doneBelowTarget": "Marked done below the target ({{moisture}} % of {{target}} %).",
+    "greeting": "Hello, {{name}}",
+    "continue": "Continue",
+    "moistureShort": "Moisture {{value}}%",
+    "moistureLive": "Soil moisture, live",
+    "minimum": "Minimum {{min}}%",
+    "openInMaps": "Open in Maps",
+    "waitingTitle": "Waiting for the sensors…",
+    "waitingHint": "The task closes when the soil stays above the minimum.",
+    "verifiedBySensors": "Verified by sensors",
+    "goodWork": "Good work, {{name}}"
   },
   "category": {
     "water": "Water & irrigation",
@@ -526,7 +580,8 @@
     "notCompared": {
       "no_pump": "No pump",
       "manual_irrigation": "Manual irrigation",
-      "no_readings": "No readings"
+      "no_readings": "No readings",
+      "not_enough_data": "Not enough data yet"
     },
     "notEnoughData": "Not enough data yet",
     "needs": "Needs {{what}}",
@@ -571,7 +626,9 @@
       "camera": "Camera",
       "real_nodes": "Real sensor boards",
       "node_tokens": "Node tokens",
-      "disk": "Disk space"
+      "disk": "Disk space",
+      "bench_nodes": "Bench boards",
+      "rejected": "Rejected device requests"
     }
   },
   "sources": {
@@ -611,6 +668,7 @@
     "stalledBody": "Scheduled jobs (simulator, offline checks, verification) are not running. Check the scheduler container."
   },
   "hardware": {
+    "awaitingLine": "Sensor awaiting installation",
     "title": "Hardware",
     "intro": "Every node of your company: live status, calibration, relay test, tokens and camera feeds.",
     "showBench": "Show test bench",
@@ -709,5 +767,406 @@
       "sentAt": "last sent {{ago}}",
       "noFrameYet": "No frame sent yet."
     }
+  },
+  "rail": {
+    "label": "Quick actions",
+    "search": "Search parks",
+    "createTask": "Create task",
+    "layers": "Map layers",
+    "cameras": "Cameras"
+  },
+  "quick": {
+    "pickParkForTask": "Pick the park for the task",
+    "searchTitle": "Search parks",
+    "searchPlaceholder": "Park or district name",
+    "noMatch": "No matching parks"
+  },
+  "bell": {
+    "label": "Open alerts: {{count}}",
+    "title": "Open alerts",
+    "empty": "No open alerts"
+  },
+  "account": {
+    "label": "Account: {{name}}"
+  },
+  "parksList": {
+    "title": "Parks",
+    "empty": "No parks yet"
+  },
+  "companies": {
+    "title": "Companies",
+    "empty": "No companies yet",
+    "parkCount_one": "{{count}} park",
+    "parkCount_other": "{{count}} parks"
+  },
+  "parkCard": {
+    "awaiting": "Awaiting installation",
+    "moisture": "Moisture",
+    "lastReading": "Last reading",
+    "open": "Open",
+    "greenCover": "Green cover (satellite)",
+    "tooSmall": "Too small to measure"
+  },
+  "taskCard": {
+    "escalated": "Escalated",
+    "overdue": "Overdue"
+  },
+  "overview": {
+    "countAlerts_one": "{{count}} alert",
+    "countAlerts_other": "{{count}} alerts",
+    "countTasks_one": "{{count}} task",
+    "countTasks_other": "{{count}} tasks",
+    "countSetup_one": "{{count}} setup",
+    "countSetup_other": "{{count}} setup",
+    "wateringAuto": "Watering automatically",
+    "chartFor": "Soil moisture: {{name}}",
+    "mostUrgent": "Most urgent: {{name}}",
+    "pickPark": "Choose a park",
+    "noSensorYet": "No sensor installed yet",
+    "noSensorHint": "The chart appears once the sensor reports.",
+    "title": "Parks Overview",
+    "kpiParks": "Parks monitored",
+    "kpiAlerts": "Open alerts",
+    "kpiVerified": "Fixes verified by sensors",
+    "kpiMedian": "Median time to fix",
+    "nReal_one": "{{count}} real",
+    "nReal_other": "{{count}} real",
+    "ofDecided": "{{done}} of {{total}}",
+    "notEnough": "Not enough data yet",
+    "minShort": "min",
+    "createTask": "Create task",
+    "rightNow": "Right now",
+    "needWater_one": "{{count}} park needs water now",
+    "needWater_other": "{{count}} parks need water now",
+    "noWaterNeeded": "No park needs water",
+    "leaks_one": "{{count}} open leak",
+    "leaks_other": "{{count}} open leaks",
+    "noLeaks": "No leaks",
+    "litter_one": "{{count}} litter report",
+    "litter_other": "{{count}} litter reports",
+    "noLitter": "No litter reported",
+    "awaitingSensors_one": "{{count}} sensor awaiting installation",
+    "awaitingSensors_other": "{{count}} sensors awaiting installation",
+    "liveMap": "Live map",
+    "mapHint": "Tap a park. Scroll or use + and - to zoom",
+    "vegetation": "Vegetation",
+    "baseMap": "Base map",
+    "needsWater": "Needs water",
+    "awaitingShort": "Awaiting install",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fitAll": "Fit all parks",
+    "openPark": "Open park",
+    "noOpenAlerts": "No open alerts",
+    "detailMoisture": "Moisture {{value}}% (minimum {{min}}%)",
+    "lastReadingAgo": "last reading {{time}}",
+    "detailAwaiting": "The sensor is not installed yet. The satellite already watches this park.",
+    "detailAwaitingNdvi": "The sensor is not installed yet. The satellite already watches it: NDVI {{ndvi}}.",
+    "needsAttention": "Needs attention",
+    "allGood": "Nothing needs attention",
+    "allGoodHint": "New alerts and tasks appear here by themselves.",
+    "sendWorker": "Send a worker",
+    "watching": "Watching",
+    "unassigned": "Not assigned",
+    "wateringMeta": "Moisture {{from}}% of {{to}}%",
+    "openTasks": "Open tasks",
+    "setup": "Setup",
+    "setupAwaiting": "Install the sensor ({{node}})",
+    "setupOutline": "Confirm the park outline",
+    "moistureTitle": "Soil moisture",
+    "range": "Range",
+    "r_1h": "1H",
+    "r_24h": "24H",
+    "r_7d": "7D",
+    "range_1h": "last hour",
+    "range_24h": "last 24 hours",
+    "range_7d": "last 7 days",
+    "moistureLegend": "now, minimum {{min}}%, watering target {{target}}%",
+    "noParkForChart": "No park to show yet",
+    "byCategory": "Alerts by category",
+    "last30": "Last 30 days",
+    "noAlerts30": "No alerts in the last 30 days",
+    "notCountedNote": "Sensors not installed yet are not counted as alerts.",
+    "footer": "Simulated parks are labelled on their pages. Satellite data: Sentinel-2, Copernicus."
+  },
+  "parksPage": {
+    "kpiTotal": "Parks under contract",
+    "kpiReal": "{{n}} real",
+    "kpiAttention": "Need attention",
+    "kpiAwaiting": "Sensors awaiting installation",
+    "search": "Search park or district",
+    "searchLabel": "Search parks",
+    "filterLabel": "Filter parks",
+    "filterAll": "All",
+    "filterAttention": "Needs attention",
+    "filterReal": "Real",
+    "filterSimulated": "Simulated",
+    "viewLabel": "View",
+    "grid": "Grid",
+    "table": "Table",
+    "colPark": "Park",
+    "colDistrict": "District",
+    "colStatus": "Status",
+    "colMoisture": "Moisture",
+    "colLastReading": "Last reading",
+    "colCover": "Green cover",
+    "colKind": "Kind",
+    "colAlerts": "Open alerts",
+    "noMatch": "No parks match your search"
+  },
+  "parkPage": {
+    "back": "All parks",
+    "sendWorker": "Send a worker",
+    "tabsLabel": "Park sections",
+    "tabLive": "Live",
+    "tabCamera": "Camera",
+    "tabSatellite": "Satellite",
+    "tabHistory": "History",
+    "tabSettings": "Settings",
+    "minChip": "min {{min}}%",
+    "greenCover": "Green cover (satellite)",
+    "rangeLabel": "Range",
+    "r1h": "1H",
+    "r24h": "24H",
+    "r7d": "7D",
+    "moistureTitle": "Soil moisture",
+    "safetyLimit": "Safety limit",
+    "alertRaised": "Raised {{ago}}",
+    "noCamera": "This park has no camera",
+    "frames": "Recent frames",
+    "framesEmpty": "No frames yet",
+    "detector": "Litter detector",
+    "detectorModel": "YOLO11s, one class (litter)",
+    "precision": "Precision",
+    "recall": "Recall",
+    "map50": "mAP50",
+    "threshold": "Confidence threshold",
+    "speed": "Speed on CPU",
+    "ms": "{{n}} ms",
+    "measuredNote": "Measured on 753 held-out public test photos, not on our own park photos yet.",
+    "historyTitle": "Latest problem, step by step",
+    "historySub": "Every step is taken from the activity log.",
+    "duration": "Alert to verified fix",
+    "historyEmpty": "No problem recorded for this park yet",
+    "system": "System",
+    "by": "by {{name}}",
+    "settingsRange": "Moisture range",
+    "rangeValue": "{{min}}% to {{max}}%",
+    "settingsOutline": "Outline and data sources",
+    "settingsReadOnly": "Read-only view"
+  },
+  "timeline": {
+    "alert_raised": "Alert raised",
+    "task_created": "Task created",
+    "task_assigned": "Assigned to {{name}}",
+    "task_started": "Worker started",
+    "pump_on": "Pump turned on",
+    "pump_off": "Pump turned off",
+    "task_done": "Worker marked it done",
+    "verified": "Verified by the sensors ({{minutes}} min)",
+    "not_verified": "Not verified",
+    "task_cancelled": "Task cancelled",
+    "alert_resolved": "Alert resolved"
+  },
+  "tasksPage": {
+    "kpiOpen": "Open now",
+    "kpiVerified": "Closed fixes verified by sensors",
+    "kpiEscalated": "Escalated (nobody started in time)",
+    "newTask": "New task",
+    "rule": "A task only closes when the sensors confirm the problem is gone, not when someone presses Done.",
+    "todo": "To do",
+    "in_progress": "In progress",
+    "checking": "Checking",
+    "closed": "Closed",
+    "hintTodo": "Waiting for a worker to start",
+    "hintInProgress": "A worker is on site",
+    "hintChecking": "Done, sensors are confirming",
+    "hintClosed": "Verified or cancelled",
+    "priorityLabel": "Priority",
+    "allPriorities": "All priorities",
+    "viewLabel": "View",
+    "board": "Board",
+    "table": "Table",
+    "emptyCol": "Nothing here",
+    "resultVerified": "Verified in {{n}} min",
+    "resultNotVerified": "Not verified: {{reason}}",
+    "resultChecking": "Sensors are checking",
+    "resultCancelled": "Cancelled",
+    "watering": "Watering {{pct}}%",
+    "showing": "Showing {{shown}} of {{total}}",
+    "drawerDetails": "Details",
+    "assignee": "Worker",
+    "changePriority": "Change priority",
+    "priorityChanged": "Priority changed",
+    "created": "Created",
+    "note": "Note",
+    "openPark": "Open park",
+    "noActions": "This task is closed and can no longer be changed."
+  },
+  "impactPage": {
+    "subtitle": "What changed in your parks since NAMAA started watching them.",
+    "compareTitle": "Before and with NAMAA",
+    "before": "Before",
+    "withNamaa": "With NAMAA",
+    "rows": {
+      "finding": {
+        "label": "Finding a dry park",
+        "before": "On the next field round, after damage shows",
+        "now": "Alert within two readings, sent to a worker's phone"
+      },
+      "watering": {
+        "label": "Watering",
+        "before": "Fixed schedule, needed or not",
+        "now": "When the soil needs it, stopping at the target"
+      },
+      "proof": {
+        "label": "Proof the job was done",
+        "before": "The worker says so",
+        "now": "The sensors confirm it, or the task is sent back"
+      },
+      "green": {
+        "label": "Green cover",
+        "before": "Unknown until it is visibly lost",
+        "now": "Satellite check of every park, about every 5 days"
+      },
+      "litter": {
+        "label": "Litter",
+        "before": "Reported by visitors",
+        "now": "Camera detection, cleaner sent, cleanup confirmed"
+      }
+    },
+    "priorityTitle": "Alerts by priority",
+    "within": {
+      "urgent": "within 1 hour",
+      "high": "within 6 hours",
+      "normal": "within 48 hours",
+      "low": "weekly review"
+    },
+    "overdueNote": "Late tasks rise in priority by themselves: {{escalated}} escalated, {{overdue}} overdue in this period.",
+    "medianFix": "Median fix",
+    "greenCover": "Green cover",
+    "awaiting": "Sensor awaiting installation",
+    "tooSmall": "Too small",
+    "footer": "Simulated parks run on the simulator, real parks on installed sensors. Satellite: Sentinel-2, Copernicus.",
+    "verifiedTitle": "Fixes verified by sensors",
+    "noneDecided": "No data yet",
+    "verifiedOf": "{{verified}} of {{total}}",
+    "verifiedBody": "A fix counts only when the readings stay normal afterwards. Otherwise the task is sent back.",
+    "medianTitle": "Median time from alert to verified fix",
+    "medianBody": "Measured on every task, from the moment the sensor saw the problem. Simulated parks run at demo speed.",
+    "waterTitle": "Water against a fixed schedule",
+    "collecting": "Collecting data",
+    "waterBody": "Compares pump time with {{sessions}} × {{minutes}} min a day. Shown once a park has a full irrigation cycle and {{hours}} measured hours.",
+    "noParks": "No parks to show."
+  },
+  "city": {
+    "ofTotal": "{{done}} of {{total}}",
+    "title": "Makkah Parks",
+    "parksOnNamaa": "Parks on NAMAA",
+    "companiesCount_one": "{{count}} company",
+    "companiesCount_other": "{{count}} companies",
+    "openAlerts": "Open alerts, city-wide",
+    "openAlertsShort": "Open alerts",
+    "verifiedFixes": "Contractor fixes verified by sensors",
+    "satellite": "Parks watched by satellite",
+    "compared": "Operators compared",
+    "comparedHint": "Last 30 days · the same yardstick for every contractor",
+    "noTasks": "No tasks yet",
+    "contractTitle": "Response times in the contract",
+    "contractBody": "Late tasks rise in priority automatically and show here as overdue.",
+    "footer": "The municipality sees every operator's parks, alerts and verified work, and changes nothing. Simulated and real parks are labelled."
+  },
+  "demoPage": {
+    "camera": "Camera: send a photo or use the webcam",
+    "ndvi": "Satellite (NDVI) demo",
+    "scenarios": "Scenarios",
+    "nextLabel": "What to show next",
+    "next": {
+      "reset": "Run Reset (Step 0)",
+      "dry": "Show Step 1: dry soil",
+      "leak": "Show Step 2: the leak",
+      "litter": "Show Step 3: litter",
+      "all": "All steps shown. Try a situation from More situations, or reset to start again."
+    },
+    "step": "Step {{n}}",
+    "ranDone": "Done",
+    "watch": "Watch:",
+    "ends": "How it ends:",
+    "more": "More situations",
+    "moreHint": "Optional",
+    "steps": {
+      "reset": {
+        "title": "Reset",
+        "story": "Start here before every demo.",
+        "watch": "Overview: every park is healthy, Al Adel is at about 35 % with automatic irrigation on, no open alerts or tasks. Nothing happens until you press Step 1."
+      },
+      "dry": {
+        "title": "Dry soil, fixed automatically",
+        "story": "Press the button and Al Adel's soil drops below its minimum: a dry alert appears, the pump starts by itself, moisture climbs to the target, the pump stops and the fix is verified. No human needed.",
+        "watch": "Overview (the alert and the live moisture), then Al Adel's page for the pump."
+      },
+      "leak": {
+        "title": "A leak, a worker is needed",
+        "story": "The pump can't fix a broken pipe. Create the task, the worker's phone beeps, he repairs it and taps Done, and the sensors verify it.",
+        "watch": "Overview for the urgent alert, Tasks to create and follow the task, then the worker's phone."
+      },
+      "litter": {
+        "title": "Litter, the camera sends a cleaner",
+        "story": "Litter in 2 frames: alert, task, cleaner, clean frames, verified.",
+        "watch": "Overview for the litter alert, Tasks for the task, the worker's phone for the photo. Send frames with the camera below."
+      }
+    },
+    "more_": {
+      "heat": {
+        "title": "Heat",
+        "story": "Al Adel's temperature rises to about 42 °C.",
+        "watch": "Overview: the dry alert becomes heat stress (urgent).",
+        "ends": "Stays open until you run Recover or the park cools down."
+      },
+      "blockage": {
+        "title": "Blockage",
+        "story": "While the pump is on, Al Adel's flow drops to a third of expected.",
+        "watch": "Overview: a high-priority blockage alert after 3 readings.",
+        "ends": "Needs a worker to clean the filter; Recover clears it."
+      },
+      "battery": {
+        "title": "Battery",
+        "story": "Al Adel's simulated battery drops to 15 %.",
+        "watch": "Overview: a low-priority low battery alert after 2 readings.",
+        "ends": "Recover restores the battery and resolves the alert."
+      },
+      "offline": {
+        "title": "Sensor offline",
+        "story": "Alhilal's sensor stops reporting.",
+        "watch": "The map: the park turns grey after 30 seconds; Overview: the alert is ready after 2 minutes.",
+        "ends": "Recover brings the sensor back and the alert resolves."
+      },
+      "escalate": {
+        "title": "Escalate",
+        "story": "The newest open task that has not started reaches its due time.",
+        "watch": "Tasks: within 10 seconds its priority rises or it is flagged overdue, and a notice appears.",
+        "ends": "The task stays open until a worker starts it."
+      },
+      "recover": {
+        "title": "Recover",
+        "story": "Ends heat, leak, blockage, low battery and the offline sensor.",
+        "watch": "Overview: those alerts resolve on their own.",
+        "ends": "The parks go back to healthy."
+      },
+      "ndvi": {
+        "title": "Fetch satellite data",
+        "story": "Pulls the latest Sentinel-2 greenness (NDVI) for the parks.",
+        "watch": "A park page: the NDVI chart and the map layer.",
+        "ends": "The new values are saved and shown on the map."
+      },
+      "full": {
+        "story": "Puts every simulated park back to its starting state: soil, irrigation, pump, batteries, alerts and tasks.",
+        "watch": "Overview: everything is clean and healthy.",
+        "ends": "History is kept. Use it only before a fresh run."
+      }
+    }
+  },
+  "litterLabel": {
+    "litter": "Litter"
   }
 }

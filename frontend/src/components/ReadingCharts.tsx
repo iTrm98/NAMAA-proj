@@ -36,10 +36,10 @@ const KEYS: SeriesKey[] = ['moisture_pct', 'temperature', 'humidity', 'battery_p
 /** The time under the mouse and the chart that owns it (only that chart shows a tooltip). */
 type Hover = { ts: number; owner: SeriesKey } | null
 
-/** Which charts the user hid, remembered per user in localStorage (defaults to all shown). */
-function useHiddenCharts(userId: number | undefined) {
-  const storageKey = `namaa.charts.hidden.${userId ?? 'anon'}`
-  const [hidden, setHidden] = useState<SeriesKey[]>(() => {
+/** Which extra charts the user switched on (moisture is always shown), remembered per user in localStorage; all off by default. */
+function useShownCharts(userId: number | undefined) {
+  const storageKey = `namaa.charts.shown.${userId ?? 'anon'}`
+  const [shown, setShown] = useState<SeriesKey[]>(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? '[]')
       return Array.isArray(saved) ? saved.filter((k): k is SeriesKey => KEYS.includes(k as SeriesKey)) : []
@@ -49,7 +49,7 @@ function useHiddenCharts(userId: number | undefined) {
   })
   const toggle = useCallback(
     (key: SeriesKey) =>
-      setHidden((current) => {
+      setShown((current) => {
         const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
         try {
           localStorage.setItem(storageKey, JSON.stringify(next))
@@ -60,7 +60,7 @@ function useHiddenCharts(userId: number | undefined) {
       }),
     [storageKey],
   )
-  return { hidden, toggle }
+  return { shown, toggle }
 }
 
 /**
@@ -130,7 +130,7 @@ function useFormatters(range: ReadingRange) {
 export function ReadingCharts({ park, range }: { park: ParkDetail; range: ReadingRange }) {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const { hidden, toggle } = useHiddenCharts(user?.id)
+  const { shown, toggle } = useShownCharts(user?.id)
   const [hover, setHover] = useState<Hover>(null)
   const series = useParkReadings(park.id, range)
   const now = useNow(range === '1h' ? 5_000 : 60_000)
@@ -150,7 +150,7 @@ export function ReadingCharts({ park, range }: { park: ParkDetail; range: Readin
     }),
     [data, park.has_pump],
   )
-  const show = (key: SeriesKey) => has[key] && !hidden.includes(key)
+  const show = (key: SeriesKey) => has[key] && (key === 'moisture_pct' || shown.includes(key))
 
   // Minute precision is enough for the axis; it keeps the domain stable between renders.
   const to = Math.ceil(now / 60_000) * 60_000
@@ -176,9 +176,9 @@ export function ReadingCharts({ park, range }: { park: ParkDetail; range: Readin
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap gap-2" role="group" aria-label={t('park.chartsShown')}>
         {chips
-          .filter((c) => has[c.key])
+          .filter((c) => c.key !== 'moisture_pct' && has[c.key])
           .map((c) => {
-            const on = !hidden.includes(c.key)
+            const on = shown.includes(c.key)
             return (
               <button
                 key={c.key}
@@ -199,22 +199,23 @@ export function ReadingCharts({ park, range }: { park: ParkDetail; range: Readin
       {show('moisture_pct') && (
       <Chart {...common} lineAt={lineAt('moisture_pct')} dataKey="moisture_pct" color={COLORS.moisture} label={t('park.moisture')} unit="%" domain={[0, 100]}>
         <ReferenceLine
-          y={park.moisture_max}
-          stroke={COLORS.max}
-          strokeDasharray="5 4"
-          ifOverflow="extendDomain"
-          label={{ value: `${t('park.max')} ${park.moisture_max}`, position: 'insideBottomLeft', fill: COLORS.max, fontSize: 11, offset: 6 }}
-        />
-        <ReferenceLine
           y={park.moisture_min}
           stroke={COLORS.min}
           strokeDasharray="5 4"
           ifOverflow="extendDomain"
           label={{ value: `${t('park.min')} ${park.moisture_min}`, position: 'insideTopLeft', fill: COLORS.min, fontSize: 11, offset: 6 }}
         />
+        <ReferenceLine
+          y={(park.moisture_min + park.moisture_max) / 2}
+          stroke={COLORS.moisture}
+          strokeOpacity={0.6}
+          strokeDasharray="2 4"
+          ifOverflow="extendDomain"
+          label={{ value: t('park.wateringTarget', { value: formatNumber((park.moisture_min + park.moisture_max) / 2) }), position: 'insideTopRight', fill: COLORS.moisture, fontSize: 11, offset: 6 }}
+        />
       </Chart>
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6">
         {show('temperature') && (
           <ChartBlock title={t('park.chartTemperature')}>
             <Chart {...common} lineAt={lineAt('temperature')} dataKey="temperature" color={COLORS.temperature} label={t('park.temperature')} unit="°C" height={200} pad={2} />

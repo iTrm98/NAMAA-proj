@@ -55,7 +55,7 @@ class CameraCaptureTest extends TestCase
         Http::assertSent(fn (Request $r) => $r->url() === 'http://camera.test/capture');
         Http::assertSent(fn (Request $r) => $r->url() === 'http://vision.test/waste' && $r->isMultipart());
         Event::assertDispatched(DetectionCreated::class, fn ($e) => $e->payload['count'] === 2
-            && $e->payload['thumbnail_url'] === "/admin/detections/{$detection->id}/image");
+            && $e->payload['thumbnail_url'] === "/admin/detections/{$detection->id}/image?size=thumb");
     }
 
     public function test_people_are_blurred_before_the_photo_is_saved(): void
@@ -128,6 +128,10 @@ class CameraCaptureTest extends TestCase
         $this->assertSame(0, Alert::where('type', AlertType::Offline)->count(), 'camera off: skipped as before');
 
         config(['namaa.camera.url' => 'http://camera.test']);
+        app(OfflineChecker::class)->run();
+        $this->assertSame(0, Alert::where('type', AlertType::Offline)->count(), 'never reported: awaiting installation');
+
+        $this->camera->update(['last_seen_at' => now()->subHour()]); // it reported once, then went quiet
         app(OfflineChecker::class)->run();
         $alert = Alert::where('type', AlertType::Offline)->sole();
         $this->assertSame($this->camera->id, $alert->node_id);

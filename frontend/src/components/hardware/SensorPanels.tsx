@@ -50,14 +50,22 @@ export function CalibrationPanel({ node }: { node: HardwareNode }) {
     <section className="flex flex-col gap-2 rounded-lg border p-3">
       <h3 className="text-sm font-medium">{t('hardware.calibration.title')}</h3>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">{t('hardware.calibration.raw')}</dt>
-        <dd className="font-mono tabular-nums">{raw ?? '—'}</dd>
-        <dt className="text-muted-foreground">{t('hardware.calibration.preview')}</dt>
-        <dd className="font-mono tabular-nums">{preview != null ? `${formatNumber(preview)} %` : '—'}</dd>
+        {raw != null && (
+          <>
+            <dt className="text-muted-foreground">{t('hardware.calibration.raw')}</dt>
+            <dd className="tabular-nums">{raw}</dd>
+          </>
+        )}
+        {preview != null && (
+          <>
+            <dt className="text-muted-foreground">{t('hardware.calibration.preview')}</dt>
+            <dd className="tabular-nums">{`${formatNumber(preview)} %`}</dd>
+          </>
+        )}
         <dt className="text-muted-foreground">{t('hardware.calibration.dry')}</dt>
-        <dd className="font-mono tabular-nums">{cal.dry_value}</dd>
+        <dd className="tabular-nums">{cal.dry_value}</dd>
         <dt className="text-muted-foreground">{t('hardware.calibration.wet')}</dt>
-        <dd className="font-mono tabular-nums">{cal.wet_value}</dd>
+        <dd className="tabular-nums">{cal.wet_value}</dd>
       </dl>
       <div className="flex flex-wrap gap-2">
         {(['dry', 'wet'] as const).map((point) => (

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\NodeType;
+use App\Enums\PumpReason;
 use App\Http\Resources\Concerns\FormatsTimes;
 use App\Models\Node;
 use App\Models\Park;
@@ -69,6 +70,10 @@ class ParkResource extends JsonResource
             'has_pump' => $pumpNode !== null,
             'pump_target' => $pumpNode?->pump_target,
             'auto_irrigation' => $this->auto_irrigation,
+            // Automatic irrigation is watering right now: the setting is on, the pump is on and the
+            // newest switch was made by the rule (not by a person). "Watering automatically".
+            'auto_irrigation_active' => (bool) ($this->auto_irrigation && $pumpNode?->pump_target
+                && ($pumpNode->relationLoaded('latestPumpLog') ? $pumpNode->latestPumpLog : $pumpNode->latestPumpLog()->first())?->reason === PumpReason::Rule),
             'open_alerts_count' => (int) ($this->open_alerts_count ?? 0),
             // Parks with a camera node: its last frame (map popup). Null without a camera.
             'camera' => ($camera = $nodes->first(fn (Node $n) => $n->type === NodeType::Camera)) ? [
@@ -107,6 +112,7 @@ class ParkResource extends JsonResource
                 'type' => $n->type->value,
                 'last_seen_at' => $this->iso($n->last_seen_at),
                 'online' => $n->last_seen_at !== null && $n->last_seen_at->gte($offlineAfter),
+                'status' => $n->isAwaitingInstall() ? 'awaiting_install' : ($n->last_seen_at !== null && $n->last_seen_at->gte($offlineAfter) ? 'online' : 'offline'),
                 'source' => $n->source->value,
                 'has_pump' => $n->has_pump,
                 'pump_target' => $n->pump_target,

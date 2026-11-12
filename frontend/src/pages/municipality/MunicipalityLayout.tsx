@@ -1,37 +1,44 @@
-import { LayoutDashboard } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, Outlet, useLocation } from 'react-router'
-import { AppHeader } from '@/components/AppHeader'
-import { Button } from '@/components/ui/button'
+import { Outlet, useLocation } from 'react-router'
+import { PageTransition, PillNav } from '@/components/ds'
+import { TopBar } from '@/components/shell/TopBar'
 import { ScopeContext } from '@/lib/scope'
 
 /**
- * /municipality: read-only across every company. The admin map and park page
- * are reused under the 'municipality' scope (its API, no write controls).
+ * /municipality: read-only across every company (City, Companies, Parks). The admin map and
+ * park page are reused under the 'municipality' scope (its API, no write controls).
  */
 export default function MunicipalityLayout() {
   const { t } = useTranslation()
   const { pathname } = useLocation()
-  const home = pathname === '/municipality' || pathname === '/municipality/'
+  const activeTo = pathname.startsWith('/municipality/companies')
+    ? '/municipality/companies'
+    : pathname.startsWith('/municipality/parks')
+      ? '/municipality/parks'
+      : '/municipality'
 
   return (
     <ScopeContext.Provider value="municipality">
       <div className="flex h-svh flex-col">
-        <AppHeader
+        <TopBar
+          home="/municipality"
+          readOnly
           nav={
-            <nav className="ms-2 flex items-center gap-1">
-              <Button asChild variant={home ? 'secondary' : 'ghost'} size="sm">
-                <Link to="/municipality" aria-current={home ? 'page' : undefined}>
-                  <LayoutDashboard />
-                  <span className="hidden sm:inline">{t('municipality.overview')}</span>
-                </Link>
-              </Button>
-              <span className="ms-2 hidden rounded border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground md:inline">{t('municipality.readOnly')}</span>
-            </nav>
+            <PillNav
+              ariaLabel={t('nav.main')}
+              activeTo={activeTo}
+              items={[
+                { to: '/municipality', label: t('nav.city') },
+                { to: '/municipality/companies', label: t('nav.companies') },
+                { to: '/municipality/parks', label: t('nav.parks') },
+              ]}
+            />
           }
         />
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <Outlet />
+        <main className="min-h-0 flex-1 overflow-y-auto px-6 pb-5 max-md:px-3">
+          <PageTransition className="h-full">
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </ScopeContext.Provider>

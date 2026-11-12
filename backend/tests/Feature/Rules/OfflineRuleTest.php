@@ -27,10 +27,11 @@ class OfflineRuleTest extends TestCase
         return Alert::where('node_id', $node->id)->where('type', AlertType::Offline);
     }
 
-    public function test_a_never_seen_node_counts_as_offline(): void
+    public function test_a_never_seen_simulated_node_counts_as_offline(): void
     {
+        // A real node that never reported is awaiting installation instead (AwaitingInstallTest).
         $park = $this->park();
-        $node = Node::factory()->create(['park_id' => $park->id, 'last_seen_at' => null]);
+        $node = Node::factory()->create(['park_id' => $park->id, 'last_seen_at' => null, 'source' => \App\Enums\DataSource::Simulated]);
 
         $this->assertSame(1, app(OfflineChecker::class)->run());
 

@@ -2,7 +2,7 @@
 
 export type Role = 'admin' | 'worker' | 'municipality'
 export type Source = 'real' | 'simulated'
-export type ParkStatus = 'ok' | 'dry' | 'over' | 'offline'
+export type ParkStatus = 'ok' | 'dry' | 'over' | 'offline' | 'awaiting_install'
 export type Locale = 'ar' | 'en'
 
 export interface User {
@@ -13,6 +13,7 @@ export interface User {
   company_id: number | null
   company: { id: number; name: string } | null
   locale: Locale
+  name_ar?: string | null
 }
 
 export interface LoginResponse {
@@ -56,6 +57,8 @@ export interface Park {
   has_pump: boolean
   pump_target: boolean | null
   auto_irrigation: boolean
+  /** Automatic irrigation is running right now (backend flag; falls back to auto_irrigation + pump_target). */
+  auto_irrigation_active?: boolean
   open_alerts_count: number
   latest: LatestValues | null
   /** The park's camera and its last frame (null without a camera). */
@@ -73,6 +76,8 @@ export interface ParkNode {
   type: 'sensor' | 'camera'
   last_seen_at: string | null
   online: boolean
+  /** Sprint 6: awaiting_install for a real node that never reported. */
+  status?: 'awaiting_install' | 'online' | 'offline'
   source: Source
   has_pump: boolean
   pump_target: boolean
@@ -156,6 +161,7 @@ export type VerifyReason = 'condition_returned' | 'not_recovered' | 'no_data'
 export interface PersonRef {
   id: number
   name: string
+  name_ar?: string | null
 }
 
 export interface PumpState {
@@ -212,10 +218,20 @@ export interface Task {
     data: Record<string, unknown> | null
     detection_id?: number | null
     detection?: Detection | null
+    /** Worker route of the litter photo (`/worker/tasks/{id}/frame`); null without a frame. */
+    frame_url?: string | null
+    /** The node the alert came from; null for park-level alerts. */
+    node?: { id: number; name: string; type: string; source: Source; last_seen_at: string | null } | null
     recommended_action: string
     created_at: string
   } | null
+  /** Kanban column (Sprint 6, B4). */
+  board?: 'todo' | 'in_progress' | 'checking' | 'closed'
   title: string
+  /** i18n path of a system title (taskTitle.dry...); null for a free-text title. */
+  title_key?: string | null
+  title_park_id?: number | null
+  title_park?: { id: number; name_ar: string; name_en: string } | null
   note: string | null
   category?: AlertCategory | null
   priority: TaskPriority
@@ -250,6 +266,7 @@ export interface WorkerTaskDetail extends Task {
 export interface Worker {
   id: number
   name: string
+  name_ar?: string | null
   phone: string | null
   open_tasks: number
   in_progress_tasks: number
@@ -285,6 +302,9 @@ export interface Detection {
   origin: 'camera' | 'upload' | 'scenario' | 'browser'
   /** API path (fetched with the Bearer token; never a public URL) */
   image_url: string
+  /** Small and display-size variants (api.md); the UI never loads the full-size original. */
+  thumb_url?: string
+  display_url?: string
   captured_at: string
 }
 
@@ -429,6 +449,7 @@ export interface HardwareNode {
   park: { id: number; name_en: string; name_ar: string; is_test: boolean } | null
   has_pump: boolean
   online: boolean
+  status?: 'awaiting_install' | 'online' | 'offline'
   last_seen_at: string | null
   seconds_since_seen: number | null
   expected_interval_s: number
@@ -463,4 +484,66 @@ export interface CameraTestResult {
   bytes: number
   content_type: string
   image: string
+}
+
+// ---- Sprint 6: overview ----
+
+type OverviewPark = { id: number; name_ar: string; name_en: string; source: Source; company?: { id: number; name: string } }
+
+/** GET /api/admin/overview (and the municipality twin). */
+export interface Overview {
+  kpis: {
+    parks: { total: number; real: number; simulated: number }
+    open_alerts: { total: number; by_priority: Record<Priority, number> }
+    fixes: { days: number; done: number; verified: number; not_verified: number; pending: number; verified_pct: number | null }
+    median_fix_minutes: number | null
+  }
+  alerts_by_category: Record<AlertCategory, number>
+  right_now: { parks_needing_water: number; open_leaks: number; open_litter: number; sensors_awaiting_installation: number }
+  needs_attention: {
+    alerts: {
+      id: number
+      park: OverviewPark
+      type: AlertType
+      category: AlertCategory
+      priority: Priority
+      task_ready: boolean
+      created_at: string
+      task: { id: number; status: TaskStatus; assigned_to: PersonRef | null } | null
+    }[]
+    tasks_in_progress: {
+      id: number
+      title: string
+      title_key: string | null
+      title_park_id: number | null
+      park: OverviewPark
+      priority: TaskPriority
+      assigned_to: PersonRef | null
+      started_at: string | null
+      watering: { start_pct: number; current_pct: number; target_pct: number; progress_pct: number } | null
+    }[]
+    /** Full sizes of the three groups (the lists are capped); falls back to the list lengths. */
+    counts?: { alerts: number; tasks_in_progress: number; setup: number }
+    setup: { type: 'awaiting_installation' | 'outline_unverified'; park: OverviewPark; node: { id: number; name: string; type: string } | null }[]
+  }
+  by_company?: { company: { id: number; name: string }; parks: number; open_alerts: number; urgent_alerts: number }[]
+}
+
+/** GET /admin/parks/{id}/timeline (Sprint 6, B3): the proof chain of the park's latest problem. */
+export interface TimelineActor {
+  id: number
+  name: string
+  name_ar?: string | null
+}
+export interface TimelineStep {
+  key: 'alert_raised' | 'task_created' | 'task_assigned' | 'task_started' | 'pump_on' | 'pump_off' | 'task_done' | 'verified' | 'not_verified' | 'task_cancelled' | 'alert_resolved'
+  at: string
+  actor: TimelineActor | null
+  data: Record<string, unknown> | null
+}
+export interface ParkTimeline {
+  alert: { id: number; type: AlertType; category: AlertCategory; priority: Priority; status: 'open' | 'resolved'; created_at: string; resolved_at: string | null }
+  task: { id: number; title: string; title_key: string | null; status: TaskStatus; verified: boolean | null; assigned_to: TimelineActor | null } | null
+  steps: TimelineStep[]
+  duration_minutes: number | null
 }

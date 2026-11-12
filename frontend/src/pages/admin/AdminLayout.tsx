@@ -1,44 +1,39 @@
-import { ChartColumn, ClipboardList, Cpu, FlaskConical, Map as MapIcon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Map as MapIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, NavLink, Outlet, useLocation } from 'react-router'
-import { AppHeader } from '@/components/AppHeader'
+import { NavLink, Outlet, useLocation } from 'react-router'
+import { PageTransition, PillNav, Skeleton } from '@/components/ds'
+import { AlertsBell } from '@/components/shell/AlertsBell'
+import { QuickActions } from '@/components/shell/QuickActions'
+import { TopBar } from '@/components/shell/TopBar'
 import { SchedulerBanner } from '@/components/SchedulerBanner'
 import { SourceBadge, StatusPill } from '@/components/StatusPill'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useDemoStatus } from '@/hooks/useOps'
 import { parkName, useParks } from '@/hooks/useParks'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/** /admin: header with Map · Tasks (· Demo), park list on the start side (map and park pages), main area. */
+const WIDE = ['/admin/tasks', '/admin/demo', '/admin/impact', '/admin/hardware']
+
+/** /admin: top bar (logo, PillNav, Live, language, bell, account), quick-action rail, park list (map and park pages), main area. */
 export default function AdminLayout() {
   const { pathname } = useLocation()
-  const wide = pathname.startsWith('/admin/tasks') || pathname.startsWith('/admin/demo') || pathname.startsWith('/admin/impact') || pathname.startsWith('/admin/hardware')
+  const wide = WIDE.some((p) => pathname.startsWith(p)) || ['/admin', '/admin/'].includes(pathname) || pathname.startsWith('/admin/parks')
 
   return (
     <div className="flex h-svh flex-col">
-      <AppHeader nav={<AdminNav />} />
+      <TopBar home="/admin" nav={<AdminNav />} extras={<AlertsBell />} />
       <SchedulerBanner />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-5 px-6 pb-5 max-md:px-3">
+        <QuickActions className="self-start max-md:hidden" />
         {!wide && <ParkSidebar />}
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <Outlet />
+          <PageTransition className="h-full">
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </div>
-  )
-}
-
-function NavItem({ to, active, icon, label }: { to: string; active: boolean; icon: ReactNode; label: string }) {
-  return (
-    <Button asChild variant={active ? 'secondary' : 'ghost'} size="sm">
-      <Link to={to} aria-current={active ? 'page' : undefined}>
-        {icon}
-        <span className="hidden sm:inline">{label}</span>
-      </Link>
-    </Button>
   )
 }
 
@@ -47,14 +42,35 @@ function AdminNav() {
   const demo = useDemoStatus()
   const { pathname } = useLocation()
 
+  const activeTo =
+    pathname === '/admin' || pathname === '/admin/'
+      ? '/admin'
+      : pathname.startsWith('/admin/parks')
+        ? '/admin/parks'
+        : pathname.startsWith('/admin/tasks')
+          ? '/admin/tasks'
+          : pathname.startsWith('/admin/impact')
+            ? '/admin/impact'
+            : pathname.startsWith('/admin/hardware')
+              ? '/admin/hardware'
+              : pathname.startsWith('/admin/demo')
+                ? '/admin/demo'
+                : undefined
+
+  const tools = [{ to: '/admin/hardware', label: t('nav.hardware') }, ...(demo.data ? [{ to: '/admin/demo', label: t('nav.demo') }] : [])]
+
   return (
-    <nav className="ms-2 flex items-center gap-1">
-      <NavItem to="/admin" active={pathname === '/admin' || pathname.startsWith('/admin/parks')} icon={<MapIcon />} label={t('nav.map')} />
-      <NavItem to="/admin/tasks" active={pathname.startsWith('/admin/tasks')} icon={<ClipboardList />} label={t('nav.tasks')} />
-      <NavItem to="/admin/impact" active={pathname.startsWith('/admin/impact')} icon={<ChartColumn />} label={t('nav.impact')} />
-      <NavItem to="/admin/hardware" active={pathname.startsWith('/admin/hardware')} icon={<Cpu />} label={t('nav.hardware')} />
-      {demo.data && <NavItem to="/admin/demo" active={pathname.startsWith('/admin/demo')} icon={<FlaskConical />} label={t('nav.demo')} />}
-    </nav>
+    <PillNav
+      ariaLabel={t('nav.main')}
+      activeTo={activeTo}
+      items={[
+        { to: '/admin', label: t('nav.overview') },
+        { to: '/admin/parks', label: t('nav.parks') },
+        { to: '/admin/tasks', label: t('nav.tasks') },
+        { to: '/admin/impact', label: t('nav.impact') },
+        { to: 'tools', label: t('nav.tools'), menu: tools },
+      ]}
+    />
   )
 }
 
@@ -63,9 +79,9 @@ function ParkSidebar() {
   const parks = useParks()
 
   return (
-    <aside className="hidden w-72 shrink-0 flex-col border-e bg-muted/30 md:flex">
+    <aside className="hidden w-72 shrink-0 flex-col rounded-[var(--r-card-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg-column)] md:flex">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">{t('admin.parks')}</h2>
+        <h2 className="text-sm font-medium text-text-2">{t('admin.parks')}</h2>
         <NavLink to="/admin" end>
           {({ isActive }) => (
             <Button variant={isActive ? 'secondary' : 'ghost'} size="icon" aria-label={t('admin.parks')} title={t('admin.parks')}>
@@ -79,7 +95,7 @@ function ParkSidebar() {
         {parks.isPending && (
           <div className="flex flex-col gap-2 p-2">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-16 w-full" />
+              <Skeleton key={i} h={64} radius={12} />
             ))}
           </div>
         )}
@@ -99,7 +115,7 @@ function ParkSidebar() {
               <NavLink
                 to={`/admin/parks/${park.id}`}
                 className={({ isActive }) =>
-                  cn('flex flex-col gap-1.5 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted', isActive && 'bg-muted')
+                  cn('flex flex-col gap-1.5 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-white/10', isActive && 'bg-white/10')
                 }
               >
                 <div className="flex items-center justify-between gap-2">
@@ -111,9 +127,7 @@ function ParkSidebar() {
                     <SourceBadge source={park.source} />
                     {park.latest?.moisture_pct != null && <span>{formatNumber(park.latest.moisture_pct)} %</span>}
                   </span>
-                  {park.open_alerts_count > 0 && (
-                    <span className="text-status-dry">{t('admin.openAlerts', { count: park.open_alerts_count })}</span>
-                  )}
+                  {park.open_alerts_count > 0 && <span className="text-status-dry">{t('admin.openAlerts', { count: park.open_alerts_count })}</span>}
                 </div>
               </NavLink>
             </li>

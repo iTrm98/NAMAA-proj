@@ -54,7 +54,7 @@ class ScenarioService
     /**
      * Run a scenario. With a company id, only that company's simulated parks
      * are touched (the API passes the admin's company). `$full` only matters for
-     * `reset`: without it the demo story is reset (Al Adel, forced faults, open
+     * `reset`: without it the demo story is reset (Al Adel dry with automatic irrigation on, forced faults, open
      * alerts and tasks of the simulated parks) and the healthy parks' soil, water
      * cycle, automatic irrigation and pump are left alone; with it the healthy
      * parks are put back to the start as well.
@@ -210,6 +210,7 @@ class ScenarioService
                     foreach (self::RECOVERABLE as $flag) {
                         Cache::forget($this->key($node, $flag));
                     }
+                    $this->ensurePump($node);
                     if ($forcedBattery && $this->hasBattery($node)) {
                         $this->setBattery($node, (float) config('namaa.scenario.reset_battery_pct'));
                     }
@@ -221,16 +222,15 @@ class ScenarioService
                 $this->clearFlags($node);
 
                 if ($isDry) {
-                    // Al Adel starts dry, with a pump, pump off, automatic irrigation off.
-                    if (! $node->has_pump) {
-                        $node->update(['has_pump' => true]);
-                    }
+                    // Al Adel starts fine (35 %, above its minimum), with a pump, pump off, automatic irrigation ON: the story is
+                    // "NAMAA waters it by itself" (the worker story starts with a fault scenario).
+                    $this->ensurePump($node);
+                    // Not on stage: it holds this value (real-time physics) until `dry` is pressed.
                     Cache::forever($this->key($node, 'moisture'), config('namaa.scenario.reset_dry_pct'));
-                    Cache::forever($this->key($node, 'stage'), true);
 
-                    if ($park->auto_irrigation) {
-                        $park->update(['auto_irrigation' => false]);
-                        $this->logger->log('park.updated', $park, ['before' => ['auto_irrigation' => true], 'after' => ['auto_irrigation' => false]], user: $by);
+                    if (! $park->auto_irrigation) {
+                        $park->update(['auto_irrigation' => true]);
+                        $this->logger->log('park.updated', $park, ['before' => ['auto_irrigation' => false], 'after' => ['auto_irrigation' => true]], user: $by);
                     }
                 } else {
                     // Healthy parks keep their soil (moving it would add or remove water
@@ -241,7 +241,8 @@ class ScenarioService
                         Cache::forever($this->key($node, 'moisture'), config('namaa.scenario.reset_healthy_pct'));
                     }
 
-                    // NAMAA waters the healthy parks by itself (Al Adel stays manual: the worker story).
+                    // NAMAA waters the healthy parks by itself.
+                    $this->ensurePump($node);
                     if ($node->has_pump && ! $park->auto_irrigation) {
                         $park->update(['auto_irrigation' => true]);
                         $this->logger->log('park.updated', $park, ['before' => ['auto_irrigation' => false], 'after' => ['auto_irrigation' => true]], user: $by);
@@ -397,6 +398,18 @@ class ScenarioService
         }
     }
 
+    /** A simulated demo park has a pump (and its expected flow); a node that lacks one gets it. */
+    private function ensurePump(Node $node): void
+    {
+        if ($node->has_pump) {
+            return;
+        }
+
+        $node->update(['has_pump' => true, 'pump_target' => false, 'expected_flow_l_min' => (float) config('namaa.simulator.expected_flow_l_min')]);
+        $this->logger->log('node.updated', $node, ['before' => ['has_pump' => false], 'after' => ['has_pump' => true, 'reason' => 'scenario_reset']],
+            companyId: $node->park->company_id);
+    }
+
     public function hasBattery(Node $node): bool
     {
         return $node->source === DataSource::Simulated
@@ -444,6 +457,11 @@ class ScenarioService
 
     private function key(Node $node, string $flag): string
     {
-        return "namaa:sim:{$node->id}:$flag";
+        return self::cacheKey($node->id, $flag);
+    }
+
+    public static function cacheKey(int $nodeId, string $flag): string
+    {
+        return "namaa:sim:{$nodeId}:$flag";
     }
 }

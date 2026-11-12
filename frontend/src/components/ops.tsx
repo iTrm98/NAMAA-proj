@@ -198,7 +198,7 @@ export function DueBadge({ task, className }: { task: Pick<Task, 'status' | 'due
   const overdue = seconds < 0
   return (
     <span
-      className={cn('inline-flex items-center gap-1 text-xs tabular-nums [&_svg]:size-3.5', overdue ? 'font-semibold text-red-600 dark:text-red-400' : 'text-muted-foreground', className)}
+      className={cn('inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs tabular-nums [&_svg]:size-3.5', overdue ? 'font-semibold text-red-600 dark:text-red-400' : 'text-muted-foreground', className)}
       title={formatDateTime(task.due_at)}
     >
       <AlarmClock />

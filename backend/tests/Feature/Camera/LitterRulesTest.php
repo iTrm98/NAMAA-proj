@@ -160,6 +160,51 @@ class LitterRulesTest extends TestCase
         $this->assertTrue($task->fresh()->verified);
     }
 
+    public function test_in_demo_mode_a_litter_task_is_verified_by_three_clean_frames_in_a_row(): void
+    {
+        config(['namaa.demo_mode' => true]);
+        $this->frames([2, 2]);
+        $task = Task::factory()->create(['park_id' => $this->park->id, 'alert_id' => $this->litter()->id, 'status' => TaskStatus::Done, 'done_at' => now()]);
+        $verify = fn () => app(TaskVerifier::class)->verify($task->fresh());
+
+        foreach ([0, 0, 3, 0, 0, 0] as $i => $count) {
+            $this->litterQueue = [$count];
+            $this->travel(10)->seconds();
+            $this->artisan('namaa:capture')->assertSuccessful();
+            // The frame with litter restarts the count: verified only on the 3rd clean one after it.
+            $i === 5 ? $this->assertTrue($verify()) : $this->assertNull($verify(), "after frame $i");
+        }
+        $this->assertTrue($task->fresh()->verified);
+    }
+
+    public function test_in_demo_mode_two_clean_frames_are_not_enough(): void
+    {
+        config(['namaa.demo_mode' => true]);
+        $this->frames([2, 2]);
+        $task = Task::factory()->create(['park_id' => $this->park->id, 'alert_id' => $this->litter()->id, 'status' => TaskStatus::Done, 'done_at' => now()]);
+
+        foreach ([0, 0] as $count) {
+            $this->litterQueue = [$count];
+            $this->travel(10)->seconds();
+            $this->artisan('namaa:capture')->assertSuccessful();
+        }
+        $this->assertNull(app(TaskVerifier::class)->verify($task->fresh()));
+    }
+
+    public function test_in_normal_mode_three_quick_clean_frames_do_not_verify_before_the_window(): void
+    {
+        config(['namaa.demo_mode' => false]);
+        $this->frames([2, 2]);
+        $task = Task::factory()->create(['park_id' => $this->park->id, 'alert_id' => $this->litter()->id, 'status' => TaskStatus::Done, 'done_at' => now()]);
+
+        foreach ([0, 0, 0] as $count) {
+            $this->litterQueue = [$count];
+            $this->travel(10)->seconds();
+            $this->artisan('namaa:capture')->assertSuccessful();
+        }
+        $this->assertNull(app(TaskVerifier::class)->verify($task->fresh()));
+    }
+
     public function test_litter_returning_breaks_the_verification_window(): void
     {
         $this->frames([2, 2]);

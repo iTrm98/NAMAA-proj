@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'park_id', 'node_id', 'photo_path', 'count', 'boxes', 'items', 'people_count', 'model',
-    'inference_ms', 'image_w', 'image_h', 'origin', 'captured_at',
+    'inference_ms', 'image_w', 'image_h', 'origin', 'sample', 'captured_at',
 ])]
 class Detection extends Model
 {
@@ -47,9 +47,9 @@ class Detection extends Model
     }
 
     /** API path of the stored (blurred) photo; the dashboard fetches it with the Bearer token. */
-    public function imagePath(string $prefix = 'admin'): string
+    public function imagePath(string $prefix = 'admin', ?string $size = null): string
     {
-        return "/{$prefix}/detections/{$this->id}/image";
+        return "/{$prefix}/detections/{$this->id}/image".($size ? "?size={$size}" : '');
     }
 
     /** The camera node that took the photo. @return BelongsTo<Node, $this> */

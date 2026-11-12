@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Models\Alert;
 use App\Models\Park;
 use App\Models\Task;
+use App\Support\TaskTitles;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -30,7 +31,8 @@ class StoreTaskRequest extends FormRequest
                 Rule::exists('parks', 'id')->where('company_id', $companyId)],
             'assigned_to' => ['nullable', 'integer',
                 Rule::exists('users', 'id')->where('company_id', $companyId)->where('role', UserRole::Worker->value)],
-            'title' => ['required', 'string', 'max:160'],
+            'title' => ['required_without:title_key', 'nullable', 'string', 'max:160'],
+            'title_key' => ['nullable', 'string', Rule::in(TaskTitles::keys())],
             'note' => ['nullable', 'string', 'max:1000'],
             'priority' => ['nullable', Rule::enum(TaskPriority::class)],
         ];
@@ -68,6 +70,6 @@ class StoreTaskRequest extends FormRequest
     /** @return array<string, mixed> */
     public function taskData(): array
     {
-        return $this->safe()->only(['alert_id', 'park_id', 'assigned_to', 'title', 'note', 'priority']);
+        return $this->safe()->only(['alert_id', 'park_id', 'assigned_to', 'title', 'title_key', 'note', 'priority']);
     }
 }

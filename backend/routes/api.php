@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\AlertController as AdminAlertController;
 use App\Http\Controllers\Api\Admin\DetectionController as AdminDetectionController;
 use App\Http\Controllers\Api\Admin\NodeController as AdminNodeController;
+use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
 use App\Http\Controllers\Api\Admin\ParkController as AdminParkController;
 use App\Http\Controllers\Api\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Api\Admin\TaskController as AdminTaskController;
@@ -50,6 +51,8 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
     Route::post('parks/{park}/pump', [AdminParkController::class, 'pump']);
     Route::get('parks/{park}/detections', [AdminDetectionController::class, 'index']);
     Route::get('parks/{park}/ndvi', [AdminNdviController::class, 'index']);
+    Route::get('parks/{park}/timeline', [AdminParkController::class, 'timeline']);
+    Route::get('overview', AdminOverviewController::class);
     Route::get('impact', AdminImpactController::class);
     Route::get('detections/{detection}/image', [AdminDetectionController::class, 'image']);
 
@@ -96,6 +99,8 @@ Route::prefix('municipality')->middleware(['auth:sanctum', 'user.token', 'role:m
     Route::get('parks/{park}', [MunicipalityParkController::class, 'show']);
     Route::get('parks/{park}/readings', [MunicipalityParkController::class, 'readings']);
     Route::get('parks/{park}/ndvi', [MunicipalityParkController::class, 'ndvi']);
+    Route::get('parks/{park}/timeline', [MunicipalityParkController::class, 'timeline']);
+    Route::get('overview', [MunicipalityParkController::class, 'overview']);
     Route::get('parks/{park}/detections', [MunicipalityParkController::class, 'detections']);
     Route::get('detections/{detection}/image', [MunicipalityParkController::class, 'detectionImage']);
     Route::get('alerts', [MunicipalityParkController::class, 'alerts']);

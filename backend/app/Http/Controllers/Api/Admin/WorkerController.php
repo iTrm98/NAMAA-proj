@@ -27,6 +27,7 @@ class WorkerController extends Controller
         return response()->json(['data' => $workers->map(fn (User $w) => [
             'id' => $w->id,
             'name' => $w->name,
+            'name_ar' => $w->name_ar,
             'phone' => $w->phone,
             'open_tasks' => (int) $w->open_tasks,
             'in_progress_tasks' => (int) $w->in_progress_tasks,

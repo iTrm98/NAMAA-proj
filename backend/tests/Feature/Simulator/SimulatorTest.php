@@ -180,6 +180,29 @@ class SimulatorTest extends TestCase
         $this->assertNotNull(Alert::open()->where('node_id', $this->sim['Sim 1']->id)->where('type', AlertType::Dry)->first());
     }
 
+    public function test_after_reset_nothing_fires_for_two_minutes_and_dry_then_starts_the_story(): void
+    {
+        $adel = $this->sim['Sim 1'];
+        app(ScenarioService::class)->run('reset');
+        $pumpLogs = \App\Models\PumpLog::count();
+
+        $this->tick(24); // 2 minutes of 5 s readings
+        foreach ($this->sim as $node) {
+            $this->assertGreaterThan(30, $this->latest($node)->moisture_pct);
+            $this->assertSame(ParkStatus::Ok, $node->park->refresh()->status);
+        }
+        $this->assertGreaterThan(33, $this->latest($adel)->moisture_pct, 'Al Adel does not drift to its minimum');
+        $this->assertSame(0, Alert::open()->count(), 'no alert');
+        $this->assertSame($pumpLogs, \App\Models\PumpLog::count(), 'no pump command');
+        $this->assertFalse($adel->refresh()->pump_target);
+
+        app(ScenarioService::class)->run('dry');
+        $this->tick(3);
+        $this->assertNotNull(Alert::open()->where('node_id', $adel->id)->where('type', AlertType::Dry)->first());
+        $this->tick(3);
+        $this->assertTrue($adel->refresh()->pump_target, 'automatic irrigation starts watering');
+    }
+
     public function test_reset_returns_the_simulated_parks_to_the_start_and_never_touches_real_parks(): void
     {
         $alAdel = $this->sim['Sim 1'];
@@ -202,19 +225,19 @@ class SimulatorTest extends TestCase
         $this->assertSame(AlertStatus::Open, $realAlert->refresh()->status);
         $this->assertSame(TaskStatus::Open, $realTask->refresh()->status);
         $this->assertFalse($alAdel->refresh()->pump_target);
-        $this->assertFalse($alAdel->park->refresh()->auto_irrigation);
+        $this->assertTrue($alAdel->park->refresh()->auto_irrigation, 'Al Adel waters itself in the demo story');
         $this->assertDatabaseHas('pump_logs', ['node_id' => $alAdel->id, 'target' => false, 'reason' => 'system']);
         $this->assertDatabaseHas('activity_logs', ['action' => 'demo.scenario']);
         $this->assertDatabaseHas('activity_logs', ['action' => 'task.cancelled', 'subject_id' => $simTask->id]);
 
         $this->tick(1);
-        $this->assertEqualsWithDelta(22, $this->latest($alAdel)->moisture_pct, 1.0);
+        $this->assertEqualsWithDelta(35, $this->latest($alAdel)->moisture_pct, 1.0);
         $this->assertEqualsWithDelta(50, $this->latest($this->sim['Sim 2'])->moisture_pct, 1.0, 'healthy parks keep their soil');
         $this->assertTrue($this->sim['Sim 2']->park->refresh()->auto_irrigation, 'reset turns automatic irrigation on for healthy parks');
         $this->assertTrue($this->sim['Sim 3']->park->refresh()->auto_irrigation);
         $this->assertSame(0.0, $this->latest($this->sim['Sim 2'])->flow, 'reset also ends a leak');
         $this->tick(2);
-        $this->assertNotNull(Alert::open()->where('node_id', $alAdel->id)->where('type', AlertType::Dry)->first());
+        $this->assertNull(Alert::open()->where('node_id', $alAdel->id)->where('type', AlertType::Dry)->first(), 'reset does not start the story');
     }
 
     public function test_plain_reset_only_resets_the_demo_story_and_leaves_healthy_parks_alone(): void
@@ -233,14 +256,14 @@ class SimulatorTest extends TestCase
         $this->assertFalse($summary['full']);
         $this->assertSame(AlertStatus::Resolved, $simAlert->refresh()->status, 'open demo alerts are resolved');
         $this->assertSame(TaskStatus::Cancelled, $simTask->refresh()->status, 'open demo tasks are cancelled');
-        $this->assertFalse($alAdel->park->refresh()->auto_irrigation, 'Al Adel is back to manual and dry');
+        $this->assertTrue($alAdel->park->refresh()->auto_irrigation, 'Al Adel is back to dry with automatic irrigation on');
         $this->assertFalse((bool) $healthy->park->refresh()->auto_irrigation, 'the healthy park keeps its irrigation setting');
         $this->assertTrue($healthy->refresh()->pump_target, 'the healthy pump is not switched off');
         $this->assertNull(Cache::get("namaa:sim:{$healthy->id}:leak"), 'forced faults are cleared');
         $this->assertDatabaseMissing('pump_logs', ['node_id' => $healthy->id, 'reason' => 'system']);
 
         $this->tick(1);
-        $this->assertEqualsWithDelta(22, $this->latest($alAdel)->moisture_pct, 1.0);
+        $this->assertEqualsWithDelta(35, $this->latest($alAdel)->moisture_pct, 1.0);
         $this->assertLessThan(20, $this->latest($healthy)->moisture_pct, 'its soil was not moved back to 52 %');
     }
 
@@ -369,6 +392,7 @@ class SimulatorTest extends TestCase
     {
         config(['namaa.demo_mode' => true]);
         app(ScenarioService::class)->run('reset');
+        app(ScenarioService::class)->run('dry');
         $this->tick(2);
         $dry = Alert::open()->where('node_id', $this->sim['Sim 1']->id)->where('type', AlertType::Dry)->sole();
         $this->assertSame(TaskPriority::High, $dry->priority);
@@ -411,6 +435,7 @@ class SimulatorTest extends TestCase
     {
         config(['namaa.demo_mode' => true]);
         app(ScenarioService::class)->run('reset');
+        $this->sim['Sim 1']->park->update(['auto_irrigation' => false]); // this test drives the pump by hand
         $node = $this->sim['Sim 1']->refresh();
         $this->assertEquals(2.0, $node->expected_flow_l_min, 'scenarios set the expected flow of simulated pump nodes');
         $this->assertNull($this->real->refresh()->expected_flow_l_min, 'real nodes stay null');
@@ -435,6 +460,8 @@ class SimulatorTest extends TestCase
     {
         config(['namaa.demo_mode' => true]);
         app(ScenarioService::class)->run('reset');
+        app(ScenarioService::class)->run('dry');
+        $this->sim['Sim 1']->park->update(['auto_irrigation' => false]); // let it dry to the floor
 
         // 10 min of 5 s ticks: Al Adel dries to its floor, Sim 2 runs its pump to the top, Sim 3 wanders.
         $this->sim['Sim 2']->update(['pump_target' => true]);

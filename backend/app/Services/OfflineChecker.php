@@ -6,6 +6,7 @@ use App\Enums\AlertStatus;
 use App\Enums\AlertType;
 use App\Enums\DataSource;
 use App\Enums\NodeType;
+use App\Enums\ParkStatus;
 use App\Enums\TaskPriority;
 use App\Models\Alert;
 use App\Models\Node;
@@ -63,6 +64,7 @@ class OfflineChecker
         $stale = Node::query()
             ->where('type', NodeType::Sensor)
             ->whereHas('park', fn ($p) => $p->where('is_test', false)) // the bench: unplugged is normal
+            ->whereNot(fn ($q) => $q->awaitingInstall()) // never reported + real: awaiting installation
             ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '<', self::threshold(NodeType::Sensor)))
             ->get(['id', 'park_id', 'type']);
 
@@ -72,6 +74,7 @@ class OfflineChecker
                 ->where('source', DataSource::Real->value) // Sim Cam only gets demo frames
                 ->where('capture_mode', 'url') // a browser tab is not an outage when closed
                 ->whereHas('park', fn ($p) => $p->where('is_test', false))
+                ->whereNot(fn ($q) => $q->awaitingInstall())
                 ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '<', self::threshold(NodeType::Camera)))
                 ->get(['id', 'park_id', 'type']));
         }
@@ -103,6 +106,11 @@ class OfflineChecker
                 $this->status->recalculate($park);
             });
         }
+
+        // Parks whose sensor nodes are all awaiting installation get that status (no alert involved).
+        Park::query()->where('is_test', false)->where('status', '!=', ParkStatus::AwaitingInstall->value)
+            ->whereHas('sensorNodes', fn ($q) => $q->awaitingInstall())
+            ->get()->each(fn (Park $p) => $this->status->recalculate($p));
 
         $this->followUp();
 

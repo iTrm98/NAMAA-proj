@@ -6,7 +6,11 @@ export type Theme = 'dark' | 'light'
 const KEY = 'namaa.theme'
 const listeners = new Set<() => void>()
 
+/** Dark theme only for now: the light theme is hidden (no toggle in the UI), the code stays. */
+const FORCE_DARK = true
+
 function read(): Theme {
+  if (FORCE_DARK) return 'dark'
   try {
     return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark'
   } catch {

@@ -37,7 +37,7 @@ class CaptureFrames extends Command
             if ($feed->current()) {
                 if ($frame = $feed->next($every)) {
                     try {
-                        $pipeline->process($frame['node'], $frame['bytes'], 'scenario');
+                        $pipeline->process($frame['node'], $frame['bytes'], 'scenario', $frame['sample']);
                     } catch (VisionUnavailable $e) {
                         Log::warning('Scenario frame skipped: '.$e->getMessage());
                     }

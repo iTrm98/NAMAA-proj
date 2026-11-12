@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AlertType;
 use App\Enums\DataSource;
 use App\Enums\NodeType;
+use App\Enums\TaskStatus;
 use App\Models\Alert;
 use App\Models\Detection;
 use App\Models\Node;
@@ -12,7 +13,6 @@ use App\Models\Task;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * One-off data cleanups (Sprint 3.1). Each one first works out exactly what it
@@ -22,7 +22,15 @@ use Illuminate\Support\Facades\Storage;
  */
 class DataCleanup
 {
-    public function __construct(private readonly ActivityLogger $logger) {}
+    public function __construct(
+        private readonly ActivityLogger $logger,
+        private readonly CameraImages $images,
+        private readonly TaskService $tasks,
+        private readonly AlertService $alerts,
+    ) {}
+
+    /** Words that mark a task as made by a test or a demo run (title or note, any case). */
+    public const TEST_TASK_PATTERN = '/regression|e2e|\btest/i';
 
     /**
      * False offline alerts from the scheduler gap bug (fixed Nov 10, 2026,
@@ -91,19 +99,15 @@ class DataCleanup
     /** @param array{detections: Collection<int, Detection>, kept: int, alerts: Collection<int, Alert>, tasks: Collection<int, Task>} $plan */
     public function runTestCamera(Node $camera, array $plan): int
     {
-        $disk = Storage::disk(config('namaa.camera.disk'));
         $files = 0;
 
-        DB::transaction(function () use ($camera, $plan, $disk, &$files) {
+        DB::transaction(function () use ($camera, $plan, &$files) {
             $reason = ['reason' => 'test_camera_data', 'node_id' => $camera->id];
             $this->deleteTasks($plan['tasks'], $reason);
             $this->deleteAlerts($plan['alerts'], $reason);
 
             foreach ($plan['detections'] as $frame) {
-                if ($frame->photo_path && $disk->exists($frame->photo_path)) {
-                    $disk->delete($frame->photo_path);
-                    $files++;
-                }
+                $files += $this->images->delete($frame);
                 $this->logger->log('detection.deleted', $frame, ['before' => [
                     'id' => $frame->id, 'origin' => $frame->origin, 'count' => $frame->count,
                     'photo_path' => $frame->photo_path, 'captured_at' => $frame->captured_at?->toIso8601ZuluString(),
@@ -121,6 +125,83 @@ class DataCleanup
             $this->logger->log('node.updated', $camera, ['before' => $before, 'after' => [
                 'last_seen_at' => $camera->last_seen_at?->toIso8601ZuluString(), 'last_litter_count' => $camera->last_litter_count,
             ]] + $reason, companyId: $camera->park->company_id);
+        });
+
+        return $files;
+    }
+
+    /**
+     * Demo leftovers on the simulated parks (never a real park or node):
+     *  - active tasks whose title or note says regression / E2E / test: cancelled;
+     *  - Sim Cam frames that did not come from the current data/samples photos
+     *    (detections.sample empty or no longer matching a sample file), their
+     *    photo files, litter alerts and those alerts' tasks: deleted;
+     *  - open alerts of the cancelled test tasks: resolved.
+     *
+     * @return array{tasks: Collection<int, Task>, alerts_to_resolve: Collection<int, Alert>, detections: Collection<int, Detection>, delete_alerts: Collection<int, Alert>, delete_tasks: Collection<int, Task>}
+     */
+    public function demoLeftoversPlan(): array
+    {
+        $simParks = fn ($q) => $q->where('source', DataSource::Simulated->value);
+
+        $cameras = Node::where('type', NodeType::Camera)->where('source', DataSource::Simulated->value)
+            ->whereHas('park', $simParks)->pluck('id');
+
+        $current = CameraFeed::currentSampleIds();
+        $detections = Detection::whereIn('node_id', $cameras)->orderBy('id')->get()
+            ->filter(fn (Detection $d) => $d->sample === null || ! in_array($d->sample, $current, true))->values();
+
+        $litter = [AlertType::Litter->value, AlertType::LitterRepeated->value];
+        $deleteAlerts = Alert::whereIn('type', $litter)->whereIn('node_id', $cameras)
+            ->where(fn ($q) => $q->whereIn('detection_id', $detections->pluck('id'))->orWhereNull('detection_id'))
+            ->orderBy('id')->get();
+        $deleteTasks = $this->tasksOf($deleteAlerts);
+
+        $tasks = Task::whereIn('status', TaskStatus::active())->whereHas('park', $simParks)
+            ->whereNotIn('id', $deleteTasks->pluck('id'))->orderBy('id')->get()
+            ->filter(fn (Task $t) => preg_match(self::TEST_TASK_PATTERN, ($t->title ?? '').' '.($t->note ?? '')) === 1)->values();
+
+        $resolve = $tasks->isEmpty() ? collect() : Alert::open()->whereIn('id', $tasks->pluck('alert_id')->filter())
+            ->whereNotIn('id', $deleteAlerts->pluck('id'))->with('park')->orderBy('id')->get();
+
+        return ['tasks' => $tasks, 'alerts_to_resolve' => $resolve, 'detections' => $detections,
+            'delete_alerts' => $deleteAlerts, 'delete_tasks' => $deleteTasks];
+    }
+
+    /**
+     * @param  array{tasks: Collection<int, Task>, alerts_to_resolve: Collection<int, Alert>, detections: Collection<int, Detection>, delete_alerts: Collection<int, Alert>, delete_tasks: Collection<int, Task>}  $plan
+     * @return int photo files deleted
+     */
+    public function runDemoLeftovers(array $plan): int
+    {
+        $files = 0;
+        $reason = ['reason' => 'demo_leftovers'];
+
+        DB::transaction(function () use ($plan, $reason, &$files) {
+            foreach ($plan['tasks'] as $task) {
+                $this->tasks->cancel($task->refresh(), null, 'demo_leftovers');
+            }
+            foreach ($plan['alerts_to_resolve'] as $alert) {
+                $this->alerts->resolve($alert->refresh(), 'demo_leftovers');
+            }
+
+            $this->deleteTasks($plan['delete_tasks'], $reason);
+            $this->deleteAlerts($plan['delete_alerts'], $reason);
+
+            foreach ($plan['detections'] as $frame) {
+                $files += $this->images->delete($frame);
+                $this->logger->log('detection.deleted', $frame, ['before' => [
+                    'id' => $frame->id, 'origin' => $frame->origin, 'count' => $frame->count, 'photo_path' => $frame->photo_path,
+                    'captured_at' => $frame->captured_at?->toIso8601ZuluString(),
+                ]] + $reason, companyId: $frame->node?->park?->company_id);
+                $frame->delete();
+            }
+
+            // The cameras' cached litter count came from the deleted frames.
+            foreach ($plan['detections']->pluck('node_id')->unique() as $nodeId) {
+                $latest = Detection::where('node_id', $nodeId)->latest('captured_at')->first();
+                Node::whereKey($nodeId)->update(['last_litter_count' => $latest?->count]);
+            }
         });
 
         return $files;

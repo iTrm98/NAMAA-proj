@@ -86,8 +86,8 @@ class ParkApiTest extends TestCase
         $this->getJson('/api/admin/parks')->assertOk()->assertJsonCount(6, 'data');
         $queries = count(\DB::getQueryLog());
 
-        // token lookup + token touch + user + parks + nodes + count subquery (in the parks query)
-        $this->assertLessThanOrEqual(6, $queries);
+        // token lookup + token touch + user + parks + nodes + latest pump log of each node + count subquery (in the parks query)
+        $this->assertLessThanOrEqual(7, $queries);
     }
 
     public function test_park_detail_has_nodes_and_open_alerts(): void

@@ -10,7 +10,7 @@ use App\Support\Namaa;
 use App\Support\Realtime;
 
 /**
- * Park status (decision table, "Park status"): offline > dry > over > ok.
+ * Park status (decision table, "Park status"): awaiting_install > offline > dry > over > ok.
  * offline = no sensor node of the park reported within the offline window;
  * dry / over = an open alert of that type. status_changed_at and the
  * park.status_changed broadcast only on a real change.
@@ -42,8 +42,14 @@ class ParkStatusService
     public function compute(Park $park): ParkStatus
     {
         $onlineAfter = now()->subSeconds(Namaa::timing('offline_seconds'));
+        $sensors = $park->sensorNodes()->get(['id', 'source', 'last_seen_at']);
 
-        if (! $park->sensorNodes()->where('last_seen_at', '>=', $onlineAfter)->exists()) {
+        // Sprint 6: only real boards that have never reported = not installed yet.
+        if ($sensors->isNotEmpty() && $sensors->every(fn ($n) => $n->isAwaitingInstall())) {
+            return ParkStatus::AwaitingInstall;
+        }
+
+        if (! $sensors->contains(fn ($n) => $n->last_seen_at !== null && $n->last_seen_at->gte($onlineAfter))) {
             return ParkStatus::Offline;
         }
 

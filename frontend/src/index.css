@@ -1,19 +1,28 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/noto-sans-arabic";
+@import "@fontsource-variable/readex-pro/wght.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    /* Readex Pro is the only font (Arabic + Latin, weights 300-600). */
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', 'Noto Sans Arabic Variable', sans-serif;
+    --font-sans: 'Readex Pro Variable', 'Readex Pro', system-ui, sans-serif;
     /* Park status colours (map, pills, charts) */
-    --color-status-ok: #22c55e;
-    --color-status-dry: #f97316;
-    --color-status-over: #3b82f6;
-    --color-status-offline: #9ca3af;
+    --color-status-ok: var(--healthy);
+    --color-status-dry: var(--water);
+    --color-status-over: var(--info);
+    --color-status-offline: var(--awaiting);
+    --color-urgent: var(--urgent);
+    --color-lime: var(--accent-lime);
+    --color-clean: var(--clean);
+    --color-glass: var(--glass-bg);
+    --color-glass-border: var(--glass-border);
+    --color-text-2: var(--text-2);
+    --color-text-3: var(--text-3);
+    --radius-card: var(--r-card);
+    --radius-mini: var(--r-mini);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -54,7 +63,76 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ---------------------------------------------------------------------------
+   NAMAA design tokens (from the approved mockups). One place; dark theme only.
+   The light palette stays in :root as shadcn defaults but is not offered in the
+   UI: <html class="dark"> is forced (see lib/theme.ts).
+   --------------------------------------------------------------------------- */
 :root {
+    --bg: #10120e;
+    --text: #EEECE3;
+    --text-2: #B9B5A6;
+    --text-3: #A9A597;
+    --text-muted: #C9C5B8;
+    --accent-lime: #C8F25A;
+    --on-accent: #141710;
+    --healthy: #8BE36B;
+    --water: #FF9A62;
+    --urgent: #FF6B5E;
+    --info: #7CB8FF;
+    --clean: #FFC857;
+    --awaiting: #C9C5B8;
+
+    /* soft chip backgrounds + text */
+    --chip-urgent-bg: rgba(255,107,94,.22);  --chip-urgent-fg: #FFAAA1;
+    --chip-high-bg: rgba(255,154,98,.20);    --chip-high-fg: #FFBE96;
+    --chip-normal-bg: rgba(124,184,255,.18); --chip-normal-fg: #A9CEFF;
+    --chip-muted-bg: rgba(255,255,255,.10);  --chip-muted-fg: #D6D2C4;
+    --chip-ok-bg: rgba(139,227,107,.16);     --chip-ok-fg: #B8F09F;
+    --chip-lime-bg: rgba(200,242,90,.16);    --chip-lime-fg: #D9F79A;
+
+    /* glass recipe */
+    --glass-bg: rgba(255,255,255,.05);
+    --glass-bg-strong: rgba(255,255,255,.07);
+    --glass-bg-column: rgba(255,255,255,.04);
+    --glass-border: rgba(255,255,255,.10);
+    --glass-border-strong: rgba(255,255,255,.16);
+    --glass-blur: 18px;
+    --solid-over-map: rgba(16,18,14,.8);
+    --pill-active-bg: rgba(255,255,255,.16);
+    --pill-track-bg: rgba(255,255,255,.06);
+
+    /* radii */
+    --r-card: 26px;
+    --r-card-sm: 24px;
+    --r-worker: 22px;
+    --r-mini: 18px;
+    --r-input: 14px;
+    --r-pill: 999px;
+
+    /* spacing (4/8 scale) */
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px;
+    --page-pad: 20px 24px 32px;
+
+    /* type scale */
+    --fs-title: 40px;
+    --fs-big: 44px;
+    --fs-kpi: 26px;
+    --fs-card-title: 17px;
+    --fs-mini-title: 15px;
+    --fs-body: 14px;
+    --fs-small: 12px;
+    --fs-chip: 11px;
+
+    /* page background gradient */
+    --page-bg:
+        radial-gradient(1200px 700px at 12% -10%, rgba(120,128,70,.30), transparent 60%),
+        radial-gradient(900px 600px at 95% 10%, rgba(150,110,70,.22), transparent 55%),
+        radial-gradient(1000px 700px at 60% 110%, rgba(40,90,85,.25), transparent 60%),
+        #10120e;
+
+    /* shadcn variables (light palette, not shown in the UI) */
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -89,51 +167,127 @@
     --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* The shipped theme: shadcn variables mapped onto the NAMAA tokens. */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.72 0.17 150);
-    --primary-foreground: oklch(0.18 0.02 150);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: var(--bg);
+    --foreground: var(--text);
+    --card: #181b14;
+    --card-foreground: var(--text);
+    --popover: #181b14;
+    --popover-foreground: var(--text);
+    --primary: var(--accent-lime);
+    --primary-foreground: var(--on-accent);
+    --secondary: rgba(255,255,255,.08);
+    --secondary-foreground: var(--text);
+    --muted: rgba(255,255,255,.06);
+    --muted-foreground: var(--text-2);
+    --accent: rgba(255,255,255,.10);
+    --accent-foreground: var(--text);
+    --destructive: var(--urgent);
+    --border: var(--glass-border);
+    --input: rgba(255,255,255,.14);
+    --ring: rgba(200,242,90,.6);
+    --chart-1: var(--accent-lime);
+    --chart-2: var(--info);
+    --chart-3: var(--water);
+    --chart-4: var(--healthy);
+    --chart-5: var(--clean);
+    --sidebar: #181b14;
+    --sidebar-foreground: var(--text);
+    --sidebar-primary: var(--accent-lime);
+    --sidebar-primary-foreground: var(--on-accent);
+    --sidebar-accent: rgba(255,255,255,.08);
+    --sidebar-accent-foreground: var(--text);
+    --sidebar-border: var(--glass-border);
+    --sidebar-ring: var(--ring);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
-  html[lang="ar"] {
-    font-family: 'Noto Sans Arabic Variable', 'Geist Variable', sans-serif;
-    }
+    background: var(--bg);
+  }
+  body {
+    @apply text-foreground;
+    background: var(--page-bg);
+    background-attachment: fixed;
+    min-height: 100svh;
+  }
+  h1, h2, h3, h4, button, input, select, textarea {
+    font-family: inherit;
+  }
+}
+
+/* Glass recipe (never over the live map: use .solid there). */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+.glass.solid {
+  background: var(--solid-over-map);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Skeleton shimmer: transform only, only while loading, off under reduced motion. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255,255,255,.07);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+    animation: ns-sh 1.2s ease-out infinite;
+  }
+  [dir='rtl'] .skeleton::after {
+    transform: translateX(100%);
+    animation-name: ns-sh-rtl;
+  }
+  .live-ping {
+    animation: ns-ping 1.6s ease-out infinite;
+  }
+}
+@keyframes ns-sh { to { transform: translateX(100%); } }
+@keyframes ns-sh-rtl { to { transform: translateX(-100%); } }
+@keyframes ns-ping {
+  0% { transform: scale(1); opacity: .6; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Button press feedback: transform only, 150 ms. Classes with their own transition win. */
+@media (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):not([role='switch']):not([role='combobox']):not([role='tab']) {
+    transition: transform 0.15s ease-out;
+  }
+  button:not(:disabled):not([role='switch']):not([role='combobox']):not([role='tab']):active {
+    transform: scale(0.97);
+  }
+}
+/* Reduced motion: every CSS transition and animation is instant. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* MapLibre controls follow the app font. */
+.maplibregl-map, .maplibregl-ctrl, .maplibregl-ctrl-attrib, .maplibregl-popup-content {
+  font-family: var(--font-sans);
 }

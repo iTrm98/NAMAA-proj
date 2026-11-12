@@ -8,4 +8,6 @@ enum ParkStatus: string
     case Dry = 'dry';
     case Over = 'over';
     case Offline = 'offline';
+    /** Sprint 6: every sensor node is real and has never reported (not installed yet). */
+    case AwaitingInstall = 'awaiting_install';
 }

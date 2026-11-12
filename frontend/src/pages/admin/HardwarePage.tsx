@@ -1,17 +1,13 @@
 import { Cpu } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Chip, Disclosure, EmptyState, GlassCard, Skeleton, Toggle } from '@/components/ds'
 import { CameraPanel } from '@/components/hardware/CameraPanel'
 import { CalibrationPanel, RelayPanel } from '@/components/hardware/SensorPanels'
 import { TokenButton } from '@/components/hardware/TokenDialog'
-import { SourceBadge } from '@/components/StatusPill'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { loadIncludeTest, saveIncludeTest, useDeviceRejections, useHardwareNodes } from '@/hooks/useHardware'
 import { useNow } from '@/hooks/useNow'
-import { formatDateTime, formatDuration } from '@/lib/format'
+import { formatDateTime, formatDuration, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { DeviceRejections, HardwareNode } from '@/types'
 
@@ -25,110 +21,124 @@ function signal(rssi: number | null): 'excellent' | 'good' | 'fair' | 'weak' | n
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-sm">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-end">{children}</dd>
+    <div className="flex items-baseline justify-between gap-3 text-[13px]">
+      <dt className="text-text-2">{label}</dt>
+      <dd className="m-0 text-end">{children}</dd>
     </div>
   )
 }
+
+// The panels carry their own small title; the collapsible header already shows it.
+const PANEL = '[&_h3]:hidden'
 
 function NodeCard({ node, rejections, now }: { node: HardwareNode; rejections: DeviceRejections | undefined; now: number }) {
   const { t, i18n } = useTranslation()
   // Ticks client-side from the last post; the server value is only the fallback before the first tick.
   const seen = node.last_seen_at ? Math.max(0, Math.round((now - new Date(node.last_seen_at).getTime()) / 1000)) : null
-  const online = seen != null && seen <= node.offline_after_s
+  const awaiting = node.status === 'awaiting_install' || (node.last_seen_at == null && node.source === 'real')
+  const online = !awaiting && seen != null && seen <= node.offline_after_s
   const quality = signal(node.rssi)
   const bench = node.park?.is_test === true
+  const rej = rejections?.requests.slice(0, 5) ?? []
 
   return (
-    <Card>
-      <CardHeader className="gap-2">
-        <CardTitle className="flex flex-wrap items-center gap-2">
-          <span
-            role="img"
-            aria-label={online ? t('hardware.online') : t('hardware.offline')}
-            className={cn('size-2.5 shrink-0 rounded-full', online ? 'bg-status-ok' : 'bg-status-offline')}
-          />
-          {node.name}
-          <SourceBadge source={node.source} />
-          {bench && <span className="rounded-md border border-dashed px-1.5 py-0.5 text-[0.7rem] font-medium">{t('hardware.bench')}</span>}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <dl className="flex flex-col gap-1">
-          <Row label={t('hardware.type')}>
-            {t(`hardware.types.${node.type}`)}
-            {node.has_pump && ` + ${t('hardware.types.pump')}`}
-          </Row>
-          <Row label={t('hardware.park')}>{node.park ? (i18n.language === 'ar' ? node.park.name_ar : node.park.name_en) : '—'}</Row>
-          <Row label={t('hardware.lastPost')}>
-            <span className={cn('tabular-nums', !online && 'text-destructive')}>
-              {seen != null ? t('hardware.secondsAgo', { s: seen }) : t('common.never')}
-            </span>{' '}
-            <span className="text-xs text-muted-foreground">{t('hardware.expected', { s: node.expected_interval_s })}</span>
-          </Row>
-          <Row label={t('hardware.rssi')}>
-            {node.rssi != null ? (
-              <>
-                <span dir="ltr" className="tabular-nums">{node.rssi} dBm</span> <span className="text-xs text-muted-foreground">{quality && t(`hardware.signal.${quality}`)}</span>
-              </>
-            ) : (
-              '—'
-            )}
-          </Row>
-          <Row label={t('hardware.uptime')}>{node.uptime_s != null ? formatDuration(node.uptime_s) : '—'}</Row>
-          <Row label={t('hardware.fw')}>
-            <span dir="ltr">{node.fw_version ?? '—'}</span>
-          </Row>
-          <Row label={t('hardware.connection')}>{node.via ? t(`hardware.via.${node.via}`) : '—'}</Row>
-        </dl>
+    <GlassCard as="article" padding={18} className="flex min-w-0 flex-col gap-3.5">
+      <header className="flex flex-wrap items-center gap-2">
+        <span
+          role="img"
+          aria-label={awaiting ? t('status.awaiting_install') : online ? t('hardware.online') : t('hardware.offline')}
+          className={cn('size-2.5 shrink-0 rounded-full', awaiting ? 'bg-[var(--awaiting)]' : online ? 'bg-[var(--healthy)]' : 'bg-[var(--urgent)]')}
+        />
+        <h2 className="m-0 me-auto text-[17px] font-medium">{node.name}</h2>
+        <Chip tone={node.source === 'real' ? 'lime' : 'muted'}>{t(`source.${node.source}`)}</Chip>
+        {awaiting && <Chip tone="muted">{t('status.awaiting_install')}</Chip>}
+        {bench && <Chip tone="muted">{t('hardware.bench')}</Chip>}
+      </header>
 
-        {node.type === 'sensor' && (
-          <section className="flex flex-col gap-1.5">
-            <h3 className="text-sm font-medium">{t('hardware.lastPayload')}</h3>
-            {node.last_reading ? (
-              <>
-                <pre dir="ltr" className="overflow-x-auto rounded-md border bg-muted p-2 text-start text-xs">
-                  {JSON.stringify(node.last_reading, null, 2)}
-                </pre>
-                <p className="text-xs text-muted-foreground">{formatDateTime(node.last_reading.at)}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('hardware.noPayload')}</p>
+      <dl className="m-0 flex flex-col gap-1.5">
+        <Row label={t('hardware.type')}>
+          {t(`hardware.types.${node.type}`)}
+          {node.has_pump && ` + ${t('hardware.types.pump')}`}
+        </Row>
+        {node.park && <Row label={t('hardware.park')}>{i18n.language === 'ar' ? node.park.name_ar : node.park.name_en}</Row>}
+        {awaiting ? (
+          <p className="m-0 text-sm text-text-2">{t('hardware.awaitingLine')}</p>
+        ) : (
+          <>
+            <Row label={t('hardware.lastPost')}>
+              <span className={cn('tabular-nums', !online && 'text-[var(--urgent)]')}>{seen != null ? t('hardware.secondsAgo', { s: seen }) : t('common.never')}</span>{' '}
+              <span className="text-xs text-text-2">{t('hardware.expected', { s: node.expected_interval_s })}</span>
+            </Row>
+            {node.rssi != null && (
+              <Row label={t('hardware.rssi')}>
+                <span dir="ltr" className="tabular-nums">
+                  {node.rssi} dBm
+                </span>{' '}
+                <span className="text-xs text-text-2">{quality && t(`hardware.signal.${quality}`)}</span>
+              </Row>
             )}
-          </section>
+            {node.uptime_s != null && <Row label={t('hardware.uptime')}>{formatDuration(node.uptime_s)}</Row>}
+            {node.fw_version && (
+              <Row label={t('hardware.fw')}>
+                <span dir="ltr">{node.fw_version}</span>
+              </Row>
+            )}
+            {node.via && <Row label={t('hardware.connection')}>{t(`hardware.via.${node.via}`)}</Row>}
+          </>
         )}
+      </dl>
 
-        {node.type === 'sensor' && <CalibrationPanel node={node} />}
-        {node.has_pump && <RelayPanel node={node} />}
-        {node.type === 'camera' && <CameraPanel node={node} />}
-
-        <section className="flex flex-col gap-1.5">
-          <h3 className="text-sm font-medium">{t('hardware.rejections.title')}</h3>
-          {rejections && rejections.requests.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-xs">
-              {rejections.requests.slice(0, 5).map((r, i) => (
-                <li key={i} className="flex flex-wrap gap-x-2 rounded border px-2 py-1">
-                  <span className="text-muted-foreground">{formatDateTime(r.at)}</span>
-                  <span className="font-mono font-medium">{r.status}</span>
-                  <span className="min-w-0 break-words">{r.message ?? ''}</span>
-                </li>
-              ))}
-            </ul>
+      {node.type === 'sensor' && !awaiting && (
+        <Disclosure title={t('hardware.lastPayload')} meta={node.last_reading ? formatDateTime(node.last_reading.at) : undefined}>
+          {node.last_reading ? (
+            <pre dir="ltr" className="m-0 overflow-x-auto rounded-xl border border-[var(--glass-border)] bg-black/20 p-2.5 text-start text-xs">
+              {JSON.stringify(node.last_reading, null, 2)}
+            </pre>
           ) : (
-            <p className="text-sm text-muted-foreground">{t('hardware.rejections.none')}</p>
+            <p className="m-0 text-sm text-text-2">{t('hardware.noPayload')}</p>
           )}
-        </section>
+        </Disclosure>
+      )}
+      {node.type === 'sensor' && !awaiting && (
+        <Disclosure title={t('hardware.calibration.title')} className={PANEL}>
+          <CalibrationPanel node={node} />
+        </Disclosure>
+      )}
+      {node.has_pump && (
+        <Disclosure title={t('hardware.relay.title')} className={PANEL}>
+          <RelayPanel node={node} />
+        </Disclosure>
+      )}
+      {node.type === 'camera' && (
+        <Disclosure title={t('camera.title')} defaultOpen className={PANEL}>
+          <CameraPanel node={node} />
+        </Disclosure>
+      )}
 
-        <div className="flex flex-wrap gap-2 border-t pt-3">
-          <TokenButton node={node} />
-        </div>
-      </CardContent>
-    </Card>
+      <Disclosure title={t('hardware.rejections.title')} meta={rej.length > 0 ? formatNumber(rej.length, 0) : undefined}>
+        {rej.length > 0 ? (
+          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-xs">
+            {rej.map((r, i) => (
+              <li key={i} className="flex flex-wrap gap-x-2 rounded-lg border border-[var(--glass-border)] px-2 py-1">
+                <span className="text-text-2">{formatDateTime(r.at)}</span>
+                <span className="font-medium tabular-nums">{r.status}</span>
+                <span className="min-w-0 break-words">{r.message ?? ''}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="m-0 text-sm text-text-2">{t('hardware.rejections.none')}</p>
+        )}
+      </Disclosure>
+
+      <div className="flex flex-wrap gap-2">
+        <TokenButton node={node} />
+      </div>
+    </GlassCard>
   )
 }
 
-/** /admin/hardware: one card per node of the company (real, simulated, bench). */
+/** /admin/hardware (Tools menu): one card per node of the company (real, simulated, bench). */
 export default function HardwarePage() {
   const { t } = useTranslation()
   const [includeTest, setIncludeTest] = useState(loadIncludeTest)
@@ -142,39 +152,39 @@ export default function HardwarePage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 lg:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold">
-            <Cpu className="size-5" />
-            {t('hardware.title')}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t('hardware.intro')}</p>
+    <div className="flex min-w-0 flex-col gap-5 pb-8">
+      <section className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="m-0 text-[40px] leading-[1.05] font-light tracking-[-.01em]">{t('hardware.title')}</h1>
+          <span className="text-sm text-text-2">{t('hardware.intro')}</span>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={includeTest} onCheckedChange={toggle} aria-label={t('hardware.showBench')} />
+        <label className="flex items-center gap-2.5 text-sm">
+          <Toggle checked={includeTest} onChange={toggle} label={t('hardware.showBench')} />
           {t('hardware.showBench')}
         </label>
-      </div>
+      </section>
 
       {nodes.isPending && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-80" />
+            <Skeleton key={i} h={320} radius={26} />
           ))}
         </div>
       )}
       {nodes.isError && (
-        <div role="alert" className="flex items-center gap-3 text-sm text-destructive">
-          {t('common.error')}
-          <Button variant="outline" size="sm" onClick={() => nodes.refetch()}>
-            {t('common.retry')}
-          </Button>
-        </div>
+        <EmptyState
+          icon={<Cpu />}
+          title={t('common.error')}
+          action={
+            <button type="button" className="h-10 rounded-full border border-[var(--glass-border-strong)] px-5 text-sm" onClick={() => nodes.refetch()}>
+              {t('common.retry')}
+            </button>
+          }
+        />
       )}
-      {nodes.data?.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{t('hardware.empty')}</p>}
+      {nodes.data?.length === 0 && <EmptyState icon={<Cpu />} title={t('hardware.empty')} />}
       {nodes.data && nodes.data.length > 0 && (
-        <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3">
           {nodes.data.map((node) => (
             <NodeCard key={node.id} node={node} now={now} rejections={rejections.data?.find((r) => r.node_id === node.id)} />
           ))}

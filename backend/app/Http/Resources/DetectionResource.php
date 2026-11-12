@@ -21,6 +21,8 @@ class DetectionResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
+        $prefix = $request->is('api/municipality/*') ? 'municipality' : 'admin';
+
         return [
             'id' => $this->id,
             'park_id' => $this->park_id,
@@ -34,7 +36,10 @@ class DetectionResource extends JsonResource
             'image_h' => $this->image_h,
             'origin' => $this->origin,
             // Municipality viewers fetch through their own read-only route.
-            'image_url' => $this->imagePath($request->is('api/municipality/*') ? 'municipality' : 'admin'),
+            'image_url' => $this->imagePath($prefix),
+            // Small variants (about 960 px / 320 px wide): the UI uses these, never the original.
+            'display_url' => $this->imagePath($prefix, 'display'),
+            'thumb_url' => $this->imagePath($prefix, 'thumb'),
             'captured_at' => $this->iso($this->captured_at),
         ];
     }

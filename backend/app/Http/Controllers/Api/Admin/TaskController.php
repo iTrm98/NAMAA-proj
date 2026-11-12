@@ -10,6 +10,7 @@ use App\Http\Requests\Admin\UpdateTaskRequest;
 use App\Http\Resources\TaskResource;
 use App\Models\Task;
 use App\Services\TaskService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -20,6 +21,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TaskController extends Controller
 {
+    private const BOARD = ['todo', 'in_progress', 'checking', 'closed'];
+
     private const WITH = ['park', 'alert.detection', 'assignee', 'creator'];
 
     public function __construct(private readonly TaskService $tasks) {}
@@ -29,13 +32,16 @@ class TaskController extends Controller
      * Newest first by default. sort=priority: open and in-progress first
      * (urgent, high, normal, low, oldest first), then the rest, newest first.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection|JsonResponse
     {
         $filters = $request->validate([
             'status' => ['sometimes', Rule::in(['all', 'overdue', ...array_column(TaskStatus::cases(), 'value')])],
             'park_id' => ['sometimes', 'integer'],
             'sort' => ['sometimes', Rule::in(['newest', 'priority'])],
             'per_page' => ['sometimes', 'integer', 'between:1,100'],
+            'board' => ['sometimes', Rule::in(self::BOARD)],
+            'grouped' => ['sometimes', 'boolean'],
+            'per_column' => ['sometimes', 'integer', 'between:1,100'],
         ]);
 
         $query = Task::forCompany($request->user()->company_id)
@@ -43,7 +49,12 @@ class TaskController extends Controller
             ->when(! in_array($filters['status'] ?? 'all', ['all', 'overdue'], true), fn ($q) => $q->status($filters['status']))
             ->when(($filters['status'] ?? null) === 'overdue', fn ($q) => $q->overdue())
             ->when($filters['park_id'] ?? null, fn ($q, $id) => $q->where('park_id', $id))
+            ->when($filters['board'] ?? null, fn ($q, $column) => $q->board($column))
             ->with(self::WITH);
+
+        if ($request->boolean('grouped')) {
+            return $this->grouped($query, (int) ($filters['per_column'] ?? 50));
+        }
 
         if (($filters['sort'] ?? 'newest') === 'priority') {
             $query->orderByRaw("case when status in ('open', 'in_progress') then 0 else 1 end")
@@ -55,6 +66,32 @@ class TaskController extends Controller
         }
 
         return TaskResource::collection($query->paginate($filters['per_page'] ?? 50));
+    }
+
+    /**
+     * Grouped board response: each column limited to per_column, with the full counts.
+     *
+     * @param  Builder<Task>  $base
+     */
+    private function grouped(Builder $base, int $limit): JsonResponse
+    {
+        $data = [];
+        $counts = [];
+
+        foreach (self::BOARD as $column) {
+            $query = (clone $base)->board($column);
+            $counts[$column] = (clone $query)->toBase()->count();
+
+            if ($column === 'closed') {
+                $query->orderByDesc('created_at')->orderByDesc('id');
+            } else {
+                $query->byPriority();
+            }
+
+            $data[$column] = TaskResource::collection($query->limit($limit)->get())->resolve();
+        }
+
+        return response()->json(['data' => $data, 'counts' => $counts]);
     }
 
     public function show(Task $task): TaskResource

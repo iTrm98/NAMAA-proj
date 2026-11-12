@@ -108,7 +108,7 @@ function AlertItem({ alert, onCreate }: { alert: Alert; onCreate?: (seed: TaskSe
       </div>
 
       {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
-      {alert.detection && <FrameImage detection={alert.detection} labels={false} className="w-48" />}
+      {alert.detection && <FrameImage detection={alert.detection} labels={false} thumbOnly className="w-48" />}
 
       {autoRunning ? (
         <p className="flex items-center gap-1.5 text-xs text-status-over">

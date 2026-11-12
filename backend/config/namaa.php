@@ -26,6 +26,9 @@ return [
         // continuous window of readings after Done ...
         'verify_window_seconds' => ['normal' => 600, 'demo' => 60],
         // ... within this time after Done, otherwise "not verified".
+        // Litter tasks, demo only: this many clean camera frames in a row verify the task
+        // instead of the window (0 = use the window).
+        'verify_clean_frames' => ['normal' => 0, 'demo' => 3],
         'verify_timeout_seconds' => ['normal' => 3600, 'demo' => 180],
         // How often done tasks are checked.
         'verify_check_seconds' => ['normal' => 60, 'demo' => 10],
@@ -227,7 +230,7 @@ return [
         'dry_node' => 'Sim 1',      // Al Adel
         'leak_node' => 'Sim 2',     // Alkhatateen
         'offline_node' => 'Sim 3',  // Alhilal
-        'reset_dry_pct' => 22.0,
+        'reset_dry_pct' => 35.0,   // Al Adel after reset: above its 25 % minimum; only `dry` pushes it below
         'reset_healthy_pct' => 52.0,
         'heat_node' => 'Sim 1',     // Al Adel
         'heat_temp_c' => 42.0,

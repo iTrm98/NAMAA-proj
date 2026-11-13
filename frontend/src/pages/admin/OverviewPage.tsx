@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Link } from 'react-router'
 import { CreateTaskDialog, type TaskSeed } from '@/components/CreateTaskDialog'
-import { EmptyState, GlassCard, Kpi, MiniCard, Segmented, Skeleton, useDir } from '@/components/ds'
+import { Chip, EmptyState, GlassCard, Kpi, MiniCard, Segmented, Skeleton, useDir } from '@/components/ds'
 import type { ChipTone } from '@/components/ds'
 import { OverviewMap } from '@/components/OverviewMap'
 import { CREATE_TASK_EVENT } from '@/components/shell/QuickActions'
@@ -99,6 +99,7 @@ export default function OverviewPage() {
       </section>
 
       <RightNow right={o.right_now} />
+      {o.demo_stand && <DemoStandCard stand={o.demo_stand} />}
 
       <section className="flex flex-wrap items-stretch gap-5 min-[1280px]:h-[clamp(560px,66vh,760px)]">
         <OverviewMap parks={parks.data} selectedId={selectedId} onSelect={setSelectedId} className="h-[460px] min-[1280px]:h-full" />
@@ -113,6 +114,32 @@ export default function OverviewPage() {
       <footer className="text-xs text-text-2">{t('overview.footer')}</footer>
       {!readOnly && <CreateTaskDialog seed={seed} onOpenChange={(open) => !open && setSeed(null)} />}
     </div>
+  )
+}
+
+/** The demo stand is a live bench, never a park: a small card with its name, online state and latest reading. */
+function DemoStandCard({ stand }: { stand: NonNullable<Overview['demo_stand']> }) {
+  const { t, i18n } = useTranslation()
+  const latest = stand.latest
+  const values = latest
+    ? [
+        latest.moisture_pct != null ? `${t('overview.stand.moisture')} ${formatNumber(latest.moisture_pct, 0)}%` : null,
+        latest.temperature_c != null ? `${t('overview.stand.temperature')} ${formatNumber(latest.temperature_c, 1)}°` : null,
+        latest.humidity_pct != null ? `${t('overview.stand.humidity')} ${formatNumber(latest.humidity_pct, 0)}%` : null,
+      ].filter(Boolean)
+    : []
+  return (
+    <GlassCard padding={14} className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label={t('overview.stand.title')}>
+      <span className={`size-2.5 shrink-0 rounded-full ${stand.online ? 'bg-[var(--healthy)]' : 'border-[1.5px] border-[var(--awaiting)]'}`} aria-hidden />
+      <div className="flex min-w-0 flex-col">
+        <span className="text-[15px] font-medium">{t('overview.stand.title')}</span>
+        <span className="text-xs text-text-2">{i18n.language === 'ar' ? stand.name_ar : stand.name_en}</span>
+      </div>
+      <Chip tone={stand.online ? 'ok' : 'muted'}>{t(stand.online ? 'overview.stand.online' : 'overview.stand.offline')}</Chip>
+      <span className="text-sm tabular-nums text-text-2">
+        {latest && values.length ? `${t('overview.stand.latest')}: ${values.join(' · ')} · ${formatAgo(latest.at)}` : t('overview.stand.none')}
+      </span>
+    </GlassCard>
   )
 }
 

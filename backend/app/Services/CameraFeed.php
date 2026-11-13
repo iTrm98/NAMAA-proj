@@ -68,6 +68,8 @@ class CameraFeed
     {
         return Node::where('type', NodeType::Camera)
             ->where('source', DataSource::Simulated->value)
+            ->whereNull('detached_at')
+            ->whereHas('park', fn ($p) => $p->whereNull('archived_at'))
             ->when($companyId, fn ($q) => $q->whereHas('park', fn ($p) => $p->where('company_id', $companyId)))
             ->orderBy('id')->first();
     }

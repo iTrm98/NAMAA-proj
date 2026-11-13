@@ -43,7 +43,7 @@ class BenchSetup extends Command
             return self::FAILURE;
         }
 
-        $park = Park::where('name_en', self::PARK_EN)->where('company_id', $company->id)->first();
+        $park = \App\Services\StandSetup::find($company->id); // by site_type, then the Workshop name
         if (! $park) {
             // Next to King Abdullah Park (the real park); a 400 m2 outline.
             $ref = Park::where('company_id', $company->id)->where('name_en', 'King Abdullah Park')->first();

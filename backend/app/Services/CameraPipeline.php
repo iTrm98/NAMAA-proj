@@ -61,7 +61,8 @@ class CameraPipeline
     public static function urlCameras(): \Illuminate\Support\Collection
     {
         return Node::where('type', NodeType::Camera)->where('source', DataSource::Real->value)
-            ->where('capture_mode', 'url')->orderBy('id')->get()
+            ->where('capture_mode', 'url')->whereNull('detached_at')
+            ->whereHas('park', fn ($p) => $p->whereNull('archived_at'))->orderBy('id')->get()
             ->filter(fn (Node $n) => self::urlFor($n) !== '')->values();
     }
 

@@ -1,4 +1,4 @@
-import type { Polygon } from 'geojson'
+import type { MultiPolygon, Polygon } from 'geojson'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { POLL_MS } from '@/hooks/useParks'
 import { api } from '@/lib/api'
@@ -14,6 +14,7 @@ import type {
   TaskStatus,
   Worker,
   WorkerTaskDetail,
+  DemoStory,
 } from '@/types'
 
 /** Data hooks for alerts, tasks, workers, pump and demo (admin and worker). */
@@ -140,12 +141,21 @@ export function useUpdatePark(parkId: number) {
 }
 
 /** PUT /api/admin/parks/{id}/outline (Sprint 3.1): the editor's outline and its source. */
+export interface OutlineBody {
+  boundary?: Polygon
+  green_zone?: MultiPolygon | null
+  imagery: 'esri' | 'maptiler'
+  checked: boolean
+}
+
+export type OutlineWarning = 'green_zone_outside_boundary' | 'green_zone_larger_than_boundary'
+
 export function useSaveOutline(parkId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (body: { polygon: Polygon; source: 'traced' | 'official'; reference: string | null }) =>
-      api<{ data: ParkDetail }>(`/admin/parks/${parkId}/outline`, { method: 'PUT', body }).then((r) => r.data),
-    onSuccess: (park) => {
+    mutationFn: (body: OutlineBody) =>
+      api<{ data: ParkDetail; warnings?: OutlineWarning[] }>(`/admin/parks/${parkId}/outline`, { method: 'PUT', body }).then((r) => ({ park: r.data, warnings: r.warnings ?? [] })),
+    onSuccess: ({ park }) => {
       queryClient.setQueryData(['admin', 'parks', parkId], park)
       void queryClient.invalidateQueries({ queryKey: ['admin', 'parks'] })
       void queryClient.invalidateQueries({ queryKey: ['admin', 'impact'] })
@@ -161,6 +171,15 @@ export function useDemoStatus() {
     queryFn: ({ signal }) => api<{ demo_mode: boolean }>('/demo/status', { signal }).then((r) => r.demo_mode),
     staleTime: 5 * 60_000,
     retry: false,
+  })
+}
+
+export function useDemoStory(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'demo', 'story'],
+    queryFn: ({ signal }) => api<{ data: DemoStory }>('/admin/demo/story', { signal }).then((r) => r.data),
+    enabled,
+    refetchInterval: 30_000,
   })
 }
 

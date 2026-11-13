@@ -46,6 +46,17 @@ class VisionClient
      */
     public function ndvi(int $parkId, array $polygon, string $from, string $to): array
     {
+        return $this->ndviDetailed($parkId, $polygon, $from, $to)['values'];
+    }
+
+    /**
+     * Same call, plus one entry per satellite date found (kept or dropped with the reason).
+     *
+     * @param  array<string, mixed>  $polygon
+     * @return array{values: list<array{date: string, mean: float, pixels: int}>, dates: list<array{date: string, status: string, reason?: string, mean?: float, pixels: int}>}
+     */
+    public function ndviDetailed(int $parkId, array $polygon, string $from, string $to): array
+    {
         try {
             $body = Http::timeout((int) config('namaa.vision.ndvi_timeout_seconds'))
                 ->acceptJson()
@@ -54,6 +65,7 @@ class VisionClient
                     'polygon' => $polygon,
                     'date_from' => $from,
                     'date_to' => $to,
+                    'max_cloud' => (int) config('namaa.ndvi.max_cloud'),
                 ])
                 ->throw()
                 ->json();
@@ -61,7 +73,7 @@ class VisionClient
             throw new VisionUnavailable('Vision /ndvi failed: '.$e->getMessage(), previous: $e);
         }
 
-        return array_values($body['values'] ?? []);
+        return ['values' => array_values($body['values'] ?? []), 'dates' => array_values($body['dates'] ?? [])];
     }
 
     /** GET /health within 3 s. @return array<string, mixed>|null null when it does not answer */

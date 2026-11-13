@@ -18,6 +18,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/admin/tasks': 'nav.tasks',
   '/admin/demo': 'nav.demo',
   '/admin/hardware': 'nav.hardware',
+  '/admin/park-setup': 'nav.parkSetup',
   '/admin/impact': 'nav.impact',
   '/worker': 'worker.myTasks',
   '/municipality': 'nav.city',

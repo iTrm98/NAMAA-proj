@@ -33,6 +33,9 @@ class NdviTest extends TestCase
     /** What the fake /ndvi answers. @var list<array{date: string, mean: float, pixels: int}> */
     private array $values = [];
 
+    /** @var list<array<string, mixed>> */
+    private array $dates = [];
+
     private bool $visionUp = true;
 
     private int $calls = 0;
@@ -51,7 +54,7 @@ class NdviTest extends TestCase
                 $this->calls++;
 
                 return $this->visionUp
-                    ? Http::response(['park_id' => $this->park->id, 'values' => $this->values])
+                    ? Http::response(['park_id' => $this->park->id, 'values' => $this->values, 'dates' => $this->dates])
                     : Http::response(['detail' => 'STAC timed out'], 504);
             },
         ]);
@@ -255,6 +258,33 @@ class NdviTest extends TestCase
 
         $this->visionUp = false;
         $this->artisan('namaa:ndvi', ['--sync' => true])->assertFailed();
+    }
+
+    public function test_vision_client_sends_the_configured_max_cloud(): void
+    {
+        $this->artisan('namaa:ndvi', ['--park' => $this->park->id, '--sync' => true])->assertSuccessful();
+        Http::assertSent(fn ($r) => $r['max_cloud'] === 80);
+
+        config(['namaa.ndvi.max_cloud' => 55]);
+        $this->artisan('namaa:ndvi', ['--park' => $this->park->id, '--sync' => true])->assertSuccessful();
+        Http::assertSent(fn ($r) => $r['max_cloud'] === 55);
+    }
+
+    public function test_sync_command_prints_every_date_kept_or_dropped_with_the_reason(): void
+    {
+        $this->values = [['date' => '2026-11-11', 'mean' => 0.312, 'pixels' => 412]];
+        $this->dates = [
+            ['date' => '2026-11-06', 'status' => 'dropped', 'reason' => 'too_few_pixels', 'pixels' => 4],
+            ['date' => '2026-11-08', 'status' => 'dropped', 'reason' => 'outside_outline', 'pixels' => 0],
+            ['date' => '2026-11-09', 'status' => 'dropped', 'reason' => 'no_data', 'pixels' => 0],
+            ['date' => '2026-11-11', 'status' => 'kept', 'mean' => 0.312, 'pixels' => 412],
+        ];
+        $this->artisan('namaa:ndvi', ['--park' => $this->park->id, '--sync' => true])
+            ->expectsOutputToContain('2026-11-11  kept     NDVI 0.31  412 clear px')
+            ->expectsOutputToContain('2026-11-06  dropped  only 4 clear px (min 10)')
+            ->expectsOutputToContain('2026-11-08  dropped  outside the outline')
+            ->expectsOutputToContain('2026-11-09  dropped  no data')
+            ->assertSuccessful();
     }
 
     // ---- Sprint 4, 0.3: outlines too small for Sentinel-2 ----

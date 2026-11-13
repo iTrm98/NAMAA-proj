@@ -78,7 +78,6 @@ class DemoHistorySeeder extends Seeder
                 };
 
                 $this->cacheLatest($park, $node, $result['rows'], $statusChangedAt);
-                $this->ndvi($park, $key, $end);
 
                 $this->command?->info(sprintf('%s: %d readings, status %s.', $park->name_en, count($result['rows']), $park->status->value));
             });
@@ -261,34 +260,5 @@ class DemoHistorySeeder extends Seeder
             'status_changed_at' => $statusChangedAt,
             'last_reading_at' => $at,
         ]);
-    }
-
-    /**
-     * One NDVI value every 5 days for the last 90 days. Healthy parks 0.45-0.55;
-     * Al Adel falls from about 0.40 to 0.18. Pixels: 10 m x 10 m, some lost to clouds.
-     */
-    private function ndvi(Park $park, string $key, CarbonImmutable $end): void
-    {
-        $random = new Randomizer(new Mt19937(crc32('ndvi-'.$key)));
-        $count = 18; // newest 2 days ago, oldest 87 days ago
-        $rows = [];
-
-        for ($i = 0; $i < $count; $i++) {
-            $progress = $i / ($count - 1); // 0 = oldest, 1 = newest
-            $mean = $key === 'al_adel'
-                ? 0.40 - 0.22 * $progress + $random->getFloat(-0.01, 0.01)
-                : 0.50 + $random->getFloat(-0.04, 0.04);
-
-            $rows[] = [
-                'park_id' => $park->id,
-                'date' => $end->subDays(2 + 5 * ($count - 1 - $i))->toDateString(),
-                'mean' => round($mean, 3),
-                'pixels' => (int) round($park->area_m2 / 100 * $random->getFloat(0.80, 0.95)),
-                'created_at' => $end,
-                'updated_at' => $end,
-            ];
-        }
-
-        DB::table('ndvi_readings')->insert($rows);
     }
 }

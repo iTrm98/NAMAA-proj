@@ -67,7 +67,8 @@
     "dry": "Dry",
     "over": "Over-watered",
     "offline": "Offline",
-    "awaiting_install": "Awaiting installation"
+    "awaiting_install": "Awaiting installation",
+    "no_sensor": "No sensor"
   },
   "source": {
     "real": "Real",
@@ -168,7 +169,8 @@
     "parks": "Parks",
     "tools": "Tools",
     "city": "City",
-    "companies": "Companies"
+    "companies": "Companies",
+    "parkSetup": "Park setup"
   },
   "priority": {
     "low": "Low",
@@ -519,7 +521,8 @@
   "ndvi": {
     "title": "Vegetation (NDVI)",
     "source": "Sentinel-2, Copernicus. One value per clear satellite pass (about every 5 days).",
-    "imageDate": "Image of {{date}}",
+    "latestImage": "Latest image",
+    "noImage": "No satellite image yet",
     "empty": "No satellite values yet.",
     "pixels_one": "{{count}} clear pixel (10 m)",
     "pixels_other": "{{count}} clear pixels (10 m)",
@@ -647,7 +650,7 @@
   "outline": {
     "edit": "Edit outline",
     "title": "Outline of {{park}}",
-    "editHint": "Drag a point to move it, drag a midpoint to add one, right-click a point to delete it, or redraw the outline.",
+    "editHint": "Boundary: drag a point to move it, drag a midpoint to add one, right-click a point to delete it. Green zone: add green areas or cut out holes.",
     "drawHint": "Click to add points around the green area; click the first point (or double-click) to close the outline.",
     "area": "Area",
     "redraw": "Redraw",
@@ -661,7 +664,25 @@
     "saved": "Outline saved. Recomputing satellite data…",
     "needPolygon": "Draw an outline first.",
     "noSatellite": "No MapTiler key: street map instead of satellite imagery",
-    "recomputing": "Recomputing satellite data…"
+    "recomputing": "Recomputing satellite data…",
+    "boundaryArea": "Boundary area",
+    "greenArea": "Green zone area",
+    "layerBoundary": "Boundary",
+    "layerGreen": "Green zone",
+    "addGreen": "Add green area",
+    "cutOut": "Cut out",
+    "clearGreen": "Clear green zone",
+    "cancelDraw": "Cancel drawing",
+    "checked": "I checked this outline on imagery",
+    "warningsTitle": "Saved, with warnings",
+    "warning": {
+      "green_zone_outside_boundary": "Part of the green zone lies outside the boundary.",
+      "green_zone_larger_than_boundary": "The green zone is larger than the boundary."
+    },
+    "greenHint": "Click to add points around a green area; click the first point (or double-click) to close it. It is merged into the green zone.",
+    "cutHint": "Click to draw the area to cut out of the green zone (a lawn-free patch, a building); click the first point to close it.",
+    "cutNeedsGreen": "Draw a green area first, then cut out of it.",
+    "mergeFailed": "Could not merge this shape. Try drawing it again."
   },
   "scheduler": {
     "stalled": "Scheduler stalled",
@@ -887,7 +908,17 @@
     "last30": "Last 30 days",
     "noAlerts30": "No alerts in the last 30 days",
     "notCountedNote": "Sensors not installed yet are not counted as alerts.",
-    "footer": "Simulated parks are labelled on their pages. Satellite data: Sentinel-2, Copernicus."
+    "footer": "Simulated parks are labelled on their pages. Satellite data: Sentinel-2, Copernicus.",
+    "stand": {
+      "title": "Live from the demo stand",
+      "online": "Online",
+      "offline": "Offline",
+      "latest": "Latest reading",
+      "none": "No reading yet",
+      "moisture": "Moisture",
+      "temperature": "Temperature",
+      "humidity": "Humidity"
+    }
   },
   "parksPage": {
     "kpiTotal": "Parks under contract",
@@ -1098,22 +1129,22 @@
       "reset": {
         "title": "Reset",
         "story": "Start here before every demo.",
-        "watch": "Overview: every park is healthy, Al Adel is at about 35 % with automatic irrigation on, no open alerts or tasks. Nothing happens until you press Step 1."
+        "watch": "Overview: every park is healthy, no open alerts or tasks. Nothing happens until you press Step 1."
       },
       "dry": {
         "title": "Dry soil, fixed automatically",
-        "story": "Press the button and Al Adel's soil drops below its minimum: a dry alert appears, the pump starts by itself, moisture climbs to the target, the pump stops and the fix is verified. No human needed.",
-        "watch": "Overview (the alert and the live moisture), then Al Adel's page for the pump."
+        "story": "Press the button and the soil at {{park}} drops below its minimum: a dry alert appears, the pump starts by itself, moisture climbs to the target, the pump stops and the fix is verified. No human needed.",
+        "watch": "Overview (the alert and the live moisture), then the page of {{park}} for the pump."
       },
       "leak": {
         "title": "A leak, a worker is needed",
-        "story": "The pump can't fix a broken pipe. Create the task, the worker's phone beeps, he repairs it and taps Done, and the sensors verify it.",
-        "watch": "Overview for the urgent alert, Tasks to create and follow the task, then the worker's phone."
+        "story": "{{park}} shows water flowing with the pump off. The pump can't fix a broken pipe: create the task, the worker's phone beeps, he repairs it and taps Done, and the sensors verify it.",
+        "watch": "Overview for the urgent alert at {{park}}, Tasks to create and follow the task, then the worker's phone."
       },
       "litter": {
         "title": "Litter, the camera sends a cleaner",
-        "story": "Litter in 2 frames: alert, task, cleaner, clean frames, verified.",
-        "watch": "Overview for the litter alert, Tasks for the task, the worker's phone for the photo. Send frames with the camera below."
+        "story": "Litter at {{park}} in 2 frames: alert, task, cleaner, clean frames, verified.",
+        "watch": "Overview for the litter alert at {{park}}, Tasks for the task, the worker's phone for the photo. Send frames with the camera below."
       }
     },
     "more_": {
@@ -1164,9 +1195,105 @@
         "watch": "Overview: everything is clean and healthy.",
         "ends": "History is kept. Use it only before a fresh run."
       }
-    }
+    },
+    "standLive": "Live from the demo stand",
+    "simulatedCamera": "Simulated",
+    "noPark": "No park is set up for this step yet.",
+    "parkFallback": "the demo park"
   },
   "litterLabel": {
     "litter": "Litter"
+  },
+  "mode": {
+    "real_sensors": "Real sensors",
+    "simulated_sensors": "Simulated sensors",
+    "satellite_only": "No sensor · satellite only",
+    "simulated": "Simulated sensors"
+  },
+  "map": {
+    "esri": "Esri imagery",
+    "cluster_one": "{{count}} park, zoom in",
+    "cluster_other": "{{count}} parks, zoom in",
+    "detailSatellite": "Watched by satellite only. No sensor installed.",
+    "detailSatelliteNdvi": "Watched by satellite only · NDVI {{ndvi}}"
+  },
+  "parkSetup": {
+    "title": "Park setup",
+    "intro": "Choose which OpenStreetMap outlines become monitored parks, fix their names, and set how each one is monitored. Export writes the selection file; nothing is imported from here.",
+    "export": "Export selection",
+    "exported": "Selection exported.",
+    "tooManySimulated": "At most {{max}} parks can be simulated.",
+    "noOsmHint": "No OpenStreetMap file yet. Run the fetch command on the server first (namaa:parks:fetch-osm).",
+    "counts": "{{features}} outlines, {{big}} of 1 ha or more",
+    "simulatedCounter": "Simulated {{n}} / {{max}}",
+    "search": "Search by name or district",
+    "bigOnly": "1 ha or larger only",
+    "unsaved": "Unsaved changes",
+    "empty": "No parks match",
+    "emptyHint": "Clear the search or show outlines under 1 ha.",
+    "colNameAr": "Name (Arabic)",
+    "colNameEn": "Name (English)",
+    "colDistrict": "District",
+    "colArea": "Area",
+    "colMode": "Monitoring",
+    "colClaims": "Claims",
+    "hectares": "{{n}} ha",
+    "existing": "Park",
+    "claims": "Claims",
+    "claimsAfterImport": "After import",
+    "note": "Simulated parks are limited to 4 so the demo stays honest; every other park is shown as watched by satellite until a real sensor is installed.",
+    "modes": {
+      "satellite_only": "Satellite only",
+      "simulated": "Simulated sensors",
+      "real_sensors": "Real sensors"
+    },
+    "claimsTitle": "Claims: {{name}}",
+    "claimsHint": "Facts about this park with their source, for example its area or opening year.",
+    "claimsEmpty": "No claims yet.",
+    "claimsUnavailable": "Claims are not available yet.",
+    "claimDelete": "Delete claim",
+    "claimField": "Field",
+    "claimValue": "Value",
+    "claimSource": "Source name",
+    "claimDate": "Source date",
+    "claimUrl": "Source link",
+    "claimNote": "Note",
+    "claimAdd": "Add claim"
+  },
+  "parkAbout": {
+    "title": "About this park",
+    "names": "Names",
+    "nameAr": "Arabic name",
+    "nameEn": "English name",
+    "district": "District",
+    "boundaryArea": "Boundary area",
+    "greenArea": "Green zone area",
+    "notSet": "Not set",
+    "geometry": "Outline source",
+    "geo": {
+      "osm": "OSM",
+      "traced": "Traced by NAMAA",
+      "rough_legacy": "Rough outline"
+    },
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "mode": "Monitoring mode",
+    "claims": "Claims",
+    "claimsEmpty": "No claims recorded for this park.",
+    "claimSource": "Source: {{name}}",
+    "photo": "Cover photo",
+    "photoNone": "No cover photo yet.",
+    "photoAdd": "Upload photo",
+    "photoReplace": "Replace photo",
+    "photoDelete": "Delete photo",
+    "photoHint": "Blur faces before uploading.",
+    "photoLoading": "Loading photo…",
+    "photoError": "The photo could not be loaded.",
+    "photoRetry": "Try again",
+    "photoUploaded": "Photo saved.",
+    "photoDeleted": "Photo deleted.",
+    "photoFormat": "Use a JPEG, PNG or WebP image up to 5 MB.",
+    "photoAlt": "Cover photo of {{park}}",
+    "loadError": "Could not save the photo."
   }
 }

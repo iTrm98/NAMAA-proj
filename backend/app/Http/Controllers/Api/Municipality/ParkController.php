@@ -31,7 +31,7 @@ class ParkController extends Controller
 {
     public function index(): AnonymousResourceCollection
     {
-        $parks = Park::withoutTest()->with(['nodes.latestPumpLog', 'company', 'latestNdvi'])
+        $parks = Park::parks()->withoutTest()->with(['nodes.latestPumpLog', 'company', 'latestNdvi'])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('company_id')
             ->orderBy('id')
@@ -90,7 +90,7 @@ class ParkController extends Controller
     /** GET /api/municipality/overview: the admin overview across all companies. */
     public function overview(OverviewService $overview): JsonResponse
     {
-        $parks = Park::withoutTest()->with(['nodes', 'company'])->orderBy('company_id')->orderBy('id')->get();
+        $parks = Park::parks()->withoutTest()->with(['nodes', 'company'])->orderBy('company_id')->orderBy('id')->get();
 
         return response()->json(['data' => $overview->build($parks, withCompany: true)]);
     }
@@ -115,7 +115,7 @@ class ParkController extends Controller
         $status = $filters['status'] ?? 'open';
 
         $alerts = Alert::query()
-            ->whereHas('park', fn ($p) => $p->withoutTest())
+            ->whereHas('park', fn ($p) => $p->parks()->withoutTest())
             ->when($status !== 'all', fn ($q) => $q->where('status', $status))
             ->when($filters['company_id'] ?? null, fn ($q, $id) => $q->whereHas('park', fn ($p) => $p->where('company_id', $id)))
             ->with(['park.company', 'latestTask.assignee', 'detection'])
@@ -128,7 +128,7 @@ class ParkController extends Controller
     /** GET /api/municipality/impact?days=30&company_id=: the impact figures plus a row per company. */
     public function impact(ImpactRequest $request, ImpactService $impact): JsonResponse
     {
-        $parks = Park::withoutTest()->with(['company', 'latestNdvi'])
+        $parks = Park::parks()->withoutTest()->with(['company', 'latestNdvi'])
             ->when($request->validated('company_id'), fn ($q, $id) => $q->where('company_id', $id))
             ->orderBy('company_id')->orderBy('id')->get();
         $days = $request->days();

@@ -11,6 +11,7 @@ use App\Models\Alert;
 use App\Models\Node;
 use App\Models\Park;
 use App\Models\Task;
+use App\Enums\NodeType;
 use Illuminate\Support\Collection;
 
 /**
@@ -41,7 +42,7 @@ class OverviewService
         $done = Task::whereIn('park_id', $ids)->where('status', TaskStatus::Done)
             ->where('done_at', '>=', now()->subDays(self::DAYS))
             ->get(['id', 'verified', 'time_to_resolve_min']);
-        $awaiting = Node::awaitingInstall()->whereIn('park_id', $ids)->orderBy('id')->get(['id', 'park_id', 'name', 'type']);
+        $awaiting = Node::awaitingInstall()->whereNull('detached_at')->whereIn('park_id', $ids)->orderBy('id')->get(['id', 'park_id', 'name', 'type']);
 
         $count = fn (array $types) => $alerts->filter(fn (Alert $a) => in_array($a->type, $types, true));
 
@@ -166,6 +167,38 @@ class OverviewService
         return collect(AlertCategory::cases())
             ->mapWithKeys(fn (AlertCategory $c) => [$c->value => $alerts->filter(fn (Alert $a) => $a->type->category() === $c)->count()])
             ->all();
+    }
+
+    /**
+     * The demo stand block of the admin overview: the stand park, whether any of its boards
+     * reported within the offline window, and the latest values of its sensor board.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function demoStand(int $companyId): ?array
+    {
+        $stand = StandSetup::find($companyId);
+        if (! $stand) {
+            return null;
+        }
+
+        $nodes = Node::where('park_id', $stand->id)->whereNull('detached_at')->get();
+        $sensor = $nodes->where('type', NodeType::Sensor)->sortByDesc('last_seen_at')->first();
+        $online = $nodes->contains(fn (Node $n) => $n->last_seen_at !== null
+            && $n->last_seen_at->gte(now()->subSeconds(OfflineChecker::offlineSeconds($n->type))));
+
+        return [
+            'park_id' => $stand->id,
+            'name_ar' => $stand->name_ar,
+            'name_en' => $stand->name_en,
+            'online' => $online,
+            'latest' => $sensor?->last_seen_at ? [
+                'moisture_pct' => $sensor->last_moisture_pct,
+                'temperature_c' => $sensor->last_temperature,
+                'humidity_pct' => $sensor->last_humidity,
+                'at' => $sensor->last_seen_at->utc()->format('Y-m-d\TH:i:s\Z'),
+            ] : null,
+        ];
     }
 
     /** @return array<string, mixed> */

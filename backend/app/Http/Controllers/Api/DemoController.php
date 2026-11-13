@@ -8,7 +8,12 @@ use App\Http\Requests\Demo\DemoFrameRequest;
 use App\Http\Requests\Demo\DemoLoginRequest;
 use App\Http\Resources\DetectionResource;
 use App\Jobs\FetchNdvi;
+use App\Enums\DataSource;
+use App\Enums\NodeType;
 use App\Models\Node;
+use App\Services\CameraFeed;
+use App\Services\OfflineChecker;
+use App\Services\StandSetup;
 use App\Models\Park;
 use App\Services\NdviService;
 use App\Services\SystemHealth;
@@ -49,6 +54,34 @@ class DemoController extends Controller
         $logger->log('auth.demo_login', $user, ['after' => ['role' => $user->role->value]], user: $user);
 
         return AuthController::tokenResponse($user);
+    }
+
+    /**
+     * GET /api/admin/demo/story: the park and node behind each demo step of the admin's company.
+     * A role with no park falls back to today's config nodes; litter is the demo stand's real
+     * camera when it is online, else the simulated camera (flagged `source: simulated`).
+     */
+    public function story(Request $request, ScenarioService $scenarios): JsonResponse
+    {
+        $companyId = $request->user()->company_id;
+        $row = fn (?Node $node) => $node ? [
+            'park_id' => $node->park_id,
+            'name_ar' => $node->park->name_ar,
+            'name_en' => $node->park->name_en,
+            'node' => ['id' => $node->id, 'name' => $node->name, 'source' => $node->source->value],
+        ] : null;
+
+        $story = array_map($row, $scenarios->storyNodes($companyId));
+
+        $stand = StandSetup::find($companyId);
+        $camera = $stand ? Node::where('park_id', $stand->id)->where('type', NodeType::Camera)
+            ->where('source', DataSource::Real->value)->whereNull('detached_at')
+            ->where('last_seen_at', '>=', now()->subSeconds(OfflineChecker::offlineSeconds(NodeType::Camera)))
+            ->orderBy('id')->first() : null;
+        $camera ??= CameraFeed::cameraOf($companyId);
+        $story['litter'] = $row($camera?->loadMissing('park'));
+
+        return response()->json(['data' => $story]);
     }
 
     /** POST /api/admin/demo/scenario { name }: the admin's company's simulated parks only. */
@@ -98,7 +131,7 @@ class DemoController extends Controller
             return response()->json(['data' => $current], 409);
         }
 
-        $parkIds = Park::forCompany($request->user()->company_id)->whereNotNull('polygon')->orderBy('id')->pluck('id')->all();
+        $parkIds = Park::forCompany($request->user()->company_id)->parks()->whereNotNull('polygon')->orderBy('id')->pluck('id')->all();
         abort_if($parkIds === [], 422, 'No park of your company has an outline.');
 
         $run = NdviService::startRun($parkIds, $days);

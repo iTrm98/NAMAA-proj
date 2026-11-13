@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AlertType;
 use App\Enums\DataSource;
+use App\Enums\MonitoringMode;
 use App\Enums\NodeType;
 use App\Enums\PumpReason;
 use App\Enums\TaskStatus;
@@ -188,8 +189,11 @@ class ScenarioService
         $resolved = 0;
         $cancelled = 0;
 
-        DB::transaction(function () use ($nodes, $parkIds, $by, $full, &$resolved, &$cancelled) {
-            foreach (Alert::open()->whereIn('park_id', $parkIds)->with('park')->get() as $alert) {
+        $dryNodeId = $this->findTarget($nodes, 'dry_node')?->id;
+
+        DB::transaction(function () use ($nodes, $parkIds, $by, $full, $dryNodeId, &$resolved, &$cancelled) {
+            // Satellite truth (ndvi_drop) is not part of the simulated story: Reset leaves it open.
+            foreach (Alert::open()->whereIn('park_id', $parkIds)->where('type', '!=', AlertType::NdviDrop->value)->with('park')->get() as $alert) {
                 $this->alerts->resolve($alert, 'scenario_reset');
                 $resolved++;
             }
@@ -200,7 +204,7 @@ class ScenarioService
             }
 
             foreach ($nodes as $node) {
-                $isDry = $node->name === config('namaa.scenario.dry_node');
+                $isDry = $node->id === $dryNodeId;
                 $park = $node->park;
                 $forcedBattery = $this->forcedBattery($node) !== null;
 
@@ -412,8 +416,7 @@ class ScenarioService
 
     public function hasBattery(Node $node): bool
     {
-        return $node->source === DataSource::Simulated
-            && in_array($node->name, config('namaa.simulator.battery_nodes', []), true);
+        return $node->source === DataSource::Simulated && $node->type === NodeType::Sensor;
     }
 
     /** @return Collection<int, Node> simulated sensor nodes, optionally of one company */
@@ -422,30 +425,80 @@ class ScenarioService
         return Node::query()
             ->where('source', DataSource::Simulated)
             ->where('type', NodeType::Sensor)
-            ->whereHas('park', fn ($q) => $q->where('source', DataSource::Simulated)
+            ->whereNull('detached_at')
+            ->whereHas('park', fn ($q) => $q->parks()->where('monitoring_mode', MonitoringMode::Simulated->value)
                 ->when($companyId, fn ($q) => $q->where('company_id', $companyId)))
             ->with('park')
             ->orderBy('id')
             ->get();
     }
 
-    /** @param Collection<int, Node> $nodes */
-    private function target(Collection $nodes, string $configKey): Node
+    /** Config key -> the demo role whose park it follows (heat, blockage and battery follow dry). */
+    private const ROLE_OF = [
+        'dry_node' => 'dry', 'heat_node' => 'dry', 'battery_node' => 'dry', 'blockage_node' => 'dry',
+        'leak_node' => 'leak', 'offline_node' => 'offline',
+    ];
+
+    /**
+     * The node a scenario acts on: the simulated sensor node of the park holding the
+     * matching demo role; else the config node name (today's behaviour); else, for
+     * offline, the last other simulated node. Null when none.
+     *
+     * @param  Collection<int, Node>  $nodes
+     */
+    private function findTarget(Collection $nodes, string $configKey): ?Node
     {
-        $name = config("namaa.scenario.$configKey");
-        $node = $nodes->firstWhere('name', $name);
+        $role = self::ROLE_OF[$configKey] ?? null;
+        $node = $role ? $nodes->first(fn (Node $n) => $n->park->demo_role === $role) : null;
+        $node ??= $nodes->firstWhere('name', config("namaa.scenario.$configKey"));
 
         // Alhilal (Sim 3) may belong to the second demo company (namaa:demo:second-company):
         // then the first company's offline scenario uses its last other simulated node.
         if (! $node && $configKey === 'offline_node') {
-            $node = $nodes->reject(fn (Node $n) => $n->name === config('namaa.scenario.dry_node'))->last();
+            $dry = $this->findTarget($nodes, 'dry_node');
+            $node = $nodes->reject(fn (Node $n) => $n->id === $dry?->id)->last();
         }
 
+        return $node;
+    }
+
+    /** @param Collection<int, Node> $nodes */
+    private function target(Collection $nodes, string $configKey): Node
+    {
+        $node = $this->findTarget($nodes, $configKey);
+
         if (! $node) {
+            $name = config("namaa.scenario.$configKey");
             throw new InvalidArgumentException("Simulated node [$name] not found.");
         }
 
         return $node;
+    }
+
+    /**
+     * The demo story targets of a company (GET /admin/demo/story): the node per step,
+     * null when the company has no simulated node for it.
+     *
+     * @return array{dry: ?Node, leak: ?Node, offline: ?Node}
+     */
+    public function storyNodes(?int $companyId): array
+    {
+        $nodes = $this->simulatedNodes($companyId);
+
+        return [
+            'dry' => $this->findTarget($nodes, 'dry_node'),
+            'leak' => $this->findTarget($nodes, 'leak_node'),
+            'offline' => $this->findTarget($nodes, 'offline_node'),
+        ];
+    }
+
+    /** Forget every forced and simulated state of a node (a park leaving the simulation). */
+    public function forgetNode(Node $node): void
+    {
+        $this->clearFlags($node);
+        foreach (['battery', 'soil'] as $flag) {
+            Cache::forget($this->key($node, $flag));
+        }
     }
 
     private function clearFlags(Node $node): void

@@ -6,7 +6,7 @@ from typing import Literal
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.ndvi import NdviError, compute_ndvi
+from app.ndvi import DEFAULT_MAX_CLOUD, NdviError, compute_ndvi_detail
 from app.waste import WasteConfig, WasteDetector, WasteError
 
 log = logging.getLogger("uvicorn.error")
@@ -56,7 +56,7 @@ class NdviRequest(BaseModel):
     polygon: GeoJsonPolygon
     date_from: date
     date_to: date
-    max_cloud: float = Field(default=10, ge=0, le=100)
+    max_cloud: float = Field(default=DEFAULT_MAX_CLOUD, ge=0, le=100)
 
     @model_validator(mode="after")
     def dates_in_order(self):
@@ -69,11 +69,11 @@ class NdviRequest(BaseModel):
 def ndvi(request: NdviRequest):
     """Sentinel-2 NDVI per date for one park polygon (see app/ndvi.py)."""
     try:
-        values = compute_ndvi(request.polygon.model_dump(), request.date_from, request.date_to, request.max_cloud)
+        values, dates = compute_ndvi_detail(request.polygon.model_dump(), request.date_from, request.date_to, request.max_cloud)
     except NdviError as e:
         raise HTTPException(status_code=e.status, detail=e.message) from e
 
-    return {"park_id": request.park_id, "values": values}
+    return {"park_id": request.park_id, "values": values, "dates": dates}
 
 
 @app.post("/waste")

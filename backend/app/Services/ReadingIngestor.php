@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\ReadingReceived;
+use App\Enums\MonitoringMode;
 use App\Models\Node;
 use App\Models\Reading;
 use App\Support\Realtime;
@@ -34,6 +35,12 @@ class ReadingIngestor
             $raw = isset($data['moisture']) ? (int) $data['moisture'] : null;
 
             $park = $node->park()->lockForUpdate()->first();
+
+            // A detached node, or a park that is satellite_only, does not feed the park:
+            // accepted (the board gets its normal reply) but nothing is stored or evaluated.
+            if ($node->detached_at !== null || $park->monitoring_mode === MonitoringMode::SatelliteOnly) {
+                return new Reading(['node_id' => $node->id, 'park_id' => $node->park_id, 'source' => $node->source]);
+            }
 
             $recordedAt = ! empty($data['recorded_at']) ? Carbon::parse($data['recorded_at'])->utc() : null;
             // Newer than the node's latest reading (or the first one): it is the current state.

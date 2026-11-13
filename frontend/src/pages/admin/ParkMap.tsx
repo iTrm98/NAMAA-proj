@@ -1,9 +1,9 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { FeatureCollection, Polygon } from 'geojson'
+import type { FeatureCollection, MultiPolygon, Polygon } from 'geojson'
 import { Camera } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import Map, { Layer, type MapLayerMouseEvent, Marker, NavigationControl, Popup, Source } from 'react-map-gl/maplibre'
+import Map, { Layer, type MapLayerMouseEvent, NavigationControl, Popup, Source } from 'react-map-gl/maplibre'
 import { Link } from 'react-router'
 import { OpenAlertsPanel } from '@/components/OpenAlertsPanel'
 import { CATEGORY_META, PriorityBadge } from '@/components/ops'
@@ -14,7 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { parkName, useParks } from '@/hooks/useParks'
 import { formatAgo, formatDate, formatDateTime, formatNumber } from '@/lib/format'
 import { NDVI_GRADIENT, NDVI_NONE, ndviColor } from '@/lib/ndvi'
-import { MAKKAH, MAPTILER_KEY, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { MAKKAH, MAPTILER_KEY, mapShellProps, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { ParkMarkers } from '@/components/map/ParkMarkers'
+import { mapParks } from '@/lib/parkClusters'
 import { useBasePath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import type { Park } from '@/types'
@@ -57,7 +59,8 @@ export default function ParkMap() {
   )
 }
 
-function ParkMapView({ parks }: { parks: Park[] }) {
+function ParkMapView({ parks: allParks }: { parks: Park[] }) {
+  const parks = useMemo(() => mapParks(allParks), [allParks])
   const { t, i18n } = useTranslation()
   const [basemap, setBasemap] = useBasemap()
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -81,10 +84,20 @@ function ParkMapView({ parks }: { parks: Park[] }) {
     [parks, layer],
   )
 
+  const greenZones = useMemo<FeatureCollection<MultiPolygon>>(
+    () => ({
+      type: 'FeatureCollection',
+      features: parks
+        .filter((p) => p.green_zone)
+        .map((p) => ({ type: 'Feature', properties: { id: p.id }, geometry: p.green_zone as MultiPolygon })),
+    }),
+    [parks],
+  )
+
   // Only computed once: the initial view fits every park; polling must not move the map.
   const [initialView] = useState(() => {
     const bounds = boundsOf(parks)
-    return bounds ? { bounds, fitBoundsOptions: { padding: 80, maxZoom: 16 } } : MAKKAH
+    return bounds ? { bounds, fitBoundsOptions: { padding: 80, maxZoom: 11 } } : MAKKAH
   })
 
   function onClick(event: MapLayerMouseEvent) {
@@ -97,6 +110,7 @@ function ParkMapView({ parks }: { parks: Park[] }) {
       <Map
         initialViewState={initialView}
         mapStyle={mapStyle(basemap)}
+        {...mapShellProps(basemap)}
         interactiveLayerIds={['park-fill']}
         onClick={onClick}
         cursor="auto"
@@ -109,23 +123,13 @@ function ParkMapView({ parks }: { parks: Park[] }) {
           <Layer id="park-outline" type="line" paint={{ 'line-color': ['get', 'color'], 'line-width': 2 }} />
         </Source>
 
-        {/* A marker per park: visible at every zoom (the polygons are small at city zoom). */}
-        {parks.map((park) => (
-          <Marker key={park.id} longitude={park.lng} latitude={park.lat} anchor="bottom" onClick={(e) => {
-            e.originalEvent.stopPropagation()
-            setSelectedId(park.id)
-          }}>
-            <button
-              type="button"
-              className="flex items-center gap-1 rounded-full bg-background/90 px-1.5 py-1 shadow ring-1 ring-black/10"
-              aria-label={parkName(park, i18n.language)}
-              title={parkName(park, i18n.language)}
-            >
-              <span className="size-3 rounded-full ring-2 ring-white/80" style={{ backgroundColor: colorOf(park) }} />
-              {park.source === 'simulated' && <SourceBadge source="simulated" className="px-1 py-0 text-[0.6rem]" />}
-            </button>
-          </Marker>
-        ))}
+        {/* Green zone (Sprint 6.2): a distinct dashed green, drawn above the boundary, only where a park has one. */}
+        <Source id="green-zones" type="geojson" data={greenZones}>
+          <Layer id="green-zone-fill" type="fill" paint={{ 'fill-color': '#8BE36B', 'fill-opacity': 0.3 }} />
+          <Layer id="green-zone-line" type="line" paint={{ 'line-color': '#8BE36B', 'line-width': 1.5, 'line-dasharray': [2, 1] }} />
+        </Source>
+
+        <ParkMarkers parks={parks} selectedId={selectedId} onSelect={(p) => setSelectedId(p.id)} colorOf={colorOf} />
 
         {selected && (
           <Popup
@@ -143,17 +147,14 @@ function ParkMapView({ parks }: { parks: Park[] }) {
       </Map>
 
       <div className="absolute top-3 left-3 flex flex-col items-start gap-2" dir={i18n.dir()}>
-        {MAPTILER_KEY ? (
-          <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow">
-            {(['satellite', 'streets'] as const).map((b) => (
-              <Button key={b} size="sm" variant={basemap === b ? 'default' : 'ghost'} onClick={() => setBasemap(b)}>
-                {t(`admin.${b}`)}
-              </Button>
-            ))}
-          </div>
-        ) : (
-          <div className="max-w-xs rounded-lg bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow">{t('admin.osmNote')}</div>
-        )}
+        <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow" role="group" aria-label={t('overview.baseMap')}>
+          {(MAPTILER_KEY ? (['satellite', 'streets', 'esri'] as const) : (['streets', 'esri'] as const)).map((b) => (
+            <Button key={b} size="sm" variant={basemap === b ? 'default' : 'ghost'} onClick={() => setBasemap(b)} aria-pressed={basemap === b}>
+              {b === 'esri' ? t('map.esri') : t(`admin.${b}`)}
+            </Button>
+          ))}
+        </div>
+        {!MAPTILER_KEY && basemap === 'streets' && <div className="max-w-xs rounded-lg bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow">{t('admin.osmNote')}</div>}
         <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow" role="group" aria-label={t('ndvi.layer')}>
           {(['status', 'ndvi'] as const).map((l) => (
             <Button key={l} size="sm" variant={layer === l ? 'default' : 'ghost'} onClick={() => setLayer(l)} aria-pressed={layer === l}>
@@ -186,7 +187,11 @@ function ParkMapView({ parks }: { parks: Park[] }) {
               {t('ndvi.tooSmall')}: {parks.filter((x) => x.ndvi?.too_small).map((x) => parkName(x, i18n.language)).join(', ')}
             </span>
           )}
-          <span className="text-muted-foreground">{imageDate ? t('ndvi.imageDate', { date: formatDate(imageDate) }) : t('ndvi.empty')}</span>
+          {imageDate && (
+            <span className="text-muted-foreground">
+              {t('ndvi.latestImage')}: <bdi>{formatDate(imageDate, true)}</bdi>
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -209,7 +214,7 @@ function ParkPopup({ park }: { park: Park }) {
       {park.company && <span className="-mt-1.5 text-xs text-neutral-500">{park.company.name}</span>}
       <div className="flex items-center gap-1.5">
         <StatusPill status={park.status} />
-        <SourceBadge source={park.source} />
+        {park.monitoring_mode ? <span className="text-xs text-neutral-500">{t(`mode.${park.monitoring_mode}`)}</span> : <SourceBadge source={park.source} />}
       </div>
       {park.camera && (
         <div className="flex items-center gap-1.5 text-xs" title={t('camera.title')}>
@@ -252,16 +257,28 @@ function ParkPopup({ park }: { park: Park }) {
             <>
               <span className="size-2.5 rounded-full" style={{ backgroundColor: ndviColor(park.ndvi.mean) }} />
               {formatNumber(park.ndvi.mean, 2)}
-              <span className="font-normal text-neutral-500">{formatDate(park.ndvi.date, true)}</span>
             </>
           ) : (
             '—'
           )}
         </dd>
-        <dt className="text-neutral-500">{t('admin.lastReading')}</dt>
-        <dd className={cn('font-medium', !park.last_reading_at && 'text-neutral-500')}>
-          {park.last_reading_at ? formatDateTime(park.last_reading_at) : t('admin.noReadingYet')}
+        <dd className="col-span-2 -mt-0.5 text-neutral-500">
+          {park.ndvi?.date ? (
+            <>
+              {t('ndvi.latestImage')}: <bdi>{formatDate(park.ndvi.date, true)}</bdi>
+            </>
+          ) : (
+            t('ndvi.noImage')
+          )}
         </dd>
+        {park.monitoring_mode !== 'satellite_only' && park.status !== 'no_sensor' && (
+          <>
+            <dt className="text-neutral-500">{t('admin.lastReading')}</dt>
+            <dd className={cn('font-medium', !park.last_reading_at && 'text-neutral-500')}>
+              {park.last_reading_at ? formatDateTime(park.last_reading_at) : t('admin.noReadingYet')}
+            </dd>
+          </>
+        )}
       </dl>
       <Link to={`${base}/parks/${park.id}`} className="text-xs font-medium text-green-700 underline-offset-4 hover:underline">
         {t('admin.openPark')}

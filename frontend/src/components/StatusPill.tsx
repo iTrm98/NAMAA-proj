@@ -9,6 +9,7 @@ export const STATUS_COLORS: Record<ParkStatus, string> = {
   over: '#7CB8FF',
   offline: '#C9C5B8',
   awaiting_install: '#C9C5B8', // drawn as a grey ring where the shape allows
+  no_sensor: '#D9D6CB', // light grey, solid: satellite only
 }
 
 const PILL: Record<ParkStatus, string> = {
@@ -17,6 +18,7 @@ const PILL: Record<ParkStatus, string> = {
   over: 'bg-status-over/15 text-status-over ring-status-over/30',
   offline: 'bg-status-offline/15 text-status-offline ring-status-offline/30',
   awaiting_install: 'bg-transparent text-status-offline ring-status-offline/60',
+  no_sensor: 'bg-white/10 text-[#D6D2C4] ring-white/20',
 }
 
 export function StatusPill({ status, className }: { status: ParkStatus; className?: string }) {

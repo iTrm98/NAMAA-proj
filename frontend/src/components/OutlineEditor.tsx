@@ -1,29 +1,33 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 import turfArea from '@turf/area'
-import type { Polygon } from 'geojson'
+import turfDifference from '@turf/difference'
+import turfUnion from '@turf/union'
+import type { Feature, MultiPolygon, Polygon } from 'geojson'
 import type { Map as MapLibreMap } from 'maplibre-gl'
-import { Pencil, RotateCcw, Save } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Eraser, Pencil, RotateCcw, Save, Scissors, Sprout, TriangleAlert, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import Map, { NavigationControl } from 'react-map-gl/maplibre'
+import Map, { Layer, NavigationControl, Source } from 'react-map-gl/maplibre'
 import { toast } from 'sonner'
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode } from 'terra-draw'
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { useSaveOutline } from '@/hooks/useOps'
+import { type OutlineWarning, useSaveOutline } from '@/hooks/useOps'
 import { parkName } from '@/hooks/useParks'
 import { ApiError } from '@/lib/api'
 import { formatNumber } from '@/lib/format'
-import { mapStyle, MAPTILER_KEY } from '@/lib/mapStyle'
+import { type Basemap, attributionFor, mapStyle, MAPTILER_KEY } from '@/lib/mapStyle'
 import type { ParkDetail } from '@/types'
 
 const MODE_SELECT = 'select'
 const MODE_POLYGON = 'polygon'
-const OUTLINE = '#facc15'
+/** Boundary: yellow (Terra Draw). Green zone: green (a map layer edited with union / difference). */
+const BOUNDARY = '#facc15'
+const GREEN = '#8BE36B'
 
-/** Bounds of a ring with a small margin. */
+type Target = 'boundary' | 'green' | 'cutout'
+
 function boundsOf(ring: number[][]): [[number, number], [number, number]] {
   const lngs = ring.map((c) => c[0])
   const lats = ring.map((c) => c[1])
@@ -33,32 +37,70 @@ function boundsOf(ring: number[][]): [[number, number], [number, number]] {
   ]
 }
 
-/** The first polygon drawn on the canvas, or null. */
+/** The polygon on the Terra Draw canvas (the boundary), or null. */
 function currentPolygon(draw: TerraDraw | null): Polygon | null {
-  const feature = draw?.getSnapshot().find((f) => f.geometry.type === 'Polygon')
-  return feature ? (feature.geometry as Polygon) : null
+  const found = draw?.getSnapshot().find((f) => f.geometry.type === 'Polygon')
+  return found ? (found.geometry as Polygon) : null
+}
+
+/** Any polygon or multipolygon as a MultiPolygon; null when empty. */
+function asMulti(geometry: Polygon | MultiPolygon | null | undefined): MultiPolygon | null {
+  if (!geometry) return null
+  const multi: MultiPolygon = geometry.type === 'Polygon' ? { type: 'MultiPolygon', coordinates: [geometry.coordinates] } : geometry
+  return multi.coordinates.length ? multi : null
+}
+
+const toFeature = (g: Polygon | MultiPolygon): Feature<Polygon | MultiPolygon> => ({ type: 'Feature', properties: {}, geometry: g })
+const pair = (a: Polygon | MultiPolygon, b: Polygon | MultiPolygon) => ({ type: 'FeatureCollection' as const, features: [toFeature(a), toFeature(b)] })
+
+/** Terra Draw has no holes: the green zone is merged (union) or cut (difference) on the client. */
+function mergeGreen(current: MultiPolygon | null, drawn: Polygon, target: 'green' | 'cutout'): MultiPolygon | null {
+  if (target === 'green') return asMulti(current ? (turfUnion(pair(current, drawn))?.geometry ?? current) : drawn)
+  if (!current) return null
+  return asMulti(turfDifference(pair(current, drawn))?.geometry ?? null)
+}
+
+function errorLines(e: unknown, fallback: string): string[] {
+  if (e instanceof ApiError && e.body) {
+    const fields = Object.values(e.body.errors ?? {}).flat()
+    return fields.length ? fields : [e.body.message]
+  }
+  return [fallback]
 }
 
 /**
- * Outline editor (Sprint 3.1, D2): the park on satellite imagery with its outline
- * editable (drag points, click a midpoint to add one, right-click a point to
- * delete it) or redrawn. The area is geodesic (@turf/area, the same formula as
- * the server) and updates live. Save asks for the source: traced or official.
+ * Outline editor (Sprint 6.2): two layers on Esri imagery. The boundary is edited with
+ * Terra Draw (drag points, midpoints add, right-click deletes) or redrawn. The green zone
+ * is a MultiPolygon built on the client: "add green" unions a drawn polygon, "cut out"
+ * subtracts one (holes). Both areas are geodesic (@turf/area) and live. The server
+ * revalidates and returns warnings. "Verified" is only set when the box is ticked.
  */
 export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t, i18n } = useTranslation()
   const save = useSaveOutline(park.id)
   const drawRef = useRef<TerraDraw | null>(null)
-  const [area, setArea] = useState<number | null>(park.area_m2)
-  const [drawing, setDrawing] = useState(false)
-  const [source, setSource] = useState<'traced' | 'official'>('traced')
-  const [reference, setReference] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const ring = park.polygon?.coordinates?.[0] ?? [[park.lng, park.lat]]
+  const targetRef = useRef<Target>('boundary')
+  const greenRef = useRef<MultiPolygon | null>(null)
+  const initialBoundary = park.boundary ?? park.polygon
+  const initialGreen = useMemo(() => asMulti(park.green_zone as Polygon | MultiPolygon | null | undefined), [park.green_zone])
+  const [boundaryArea, setBoundaryArea] = useState<number | null>(park.boundary_area_m2 ?? park.area_m2)
+  const [green, setGreenState] = useState<MultiPolygon | null>(initialGreen)
+  const [drawing, setDrawing] = useState<Target | null>(null)
+  const [basemap, setBasemap] = useState<Basemap>('esri')
+  const [checked, setChecked] = useState(false)
+  const [errors, setErrors] = useState<string[]>([])
+  const [warnings, setWarnings] = useState<OutlineWarning[]>([])
+  const ring = initialBoundary?.coordinates?.[0] ?? [[park.lng, park.lat]]
+
+  const setGreen = useCallback((next: MultiPolygon | null) => {
+    greenRef.current = next
+    setGreenState(next)
+  }, [])
+  const greenArea = green ? Math.round(turfArea(toFeature(green))) : null
 
   const refresh = useCallback(() => {
     const polygon = currentPolygon(drawRef.current)
-    setArea(polygon ? Math.round(turfArea(polygon)) : null)
+    setBoundaryArea(polygon ? Math.round(turfArea(polygon)) : null)
   }, [])
 
   const loadCurrent = useCallback(() => {
@@ -66,14 +108,16 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
     if (!draw) return
     draw.clear()
     draw.setMode(MODE_SELECT)
-    setDrawing(false)
-    if (park.polygon?.type === 'Polygon') {
+    targetRef.current = 'boundary'
+    setDrawing(null)
+    setGreen(initialGreen)
+    if (initialBoundary?.type === 'Polygon') {
       const id = crypto.randomUUID()
-      draw.addFeatures([{ id, type: 'Feature', geometry: park.polygon, properties: { mode: MODE_POLYGON } }])
+      draw.addFeatures([{ id, type: 'Feature', geometry: initialBoundary, properties: { mode: MODE_POLYGON } }])
       draw.selectFeature(id)
     }
     refresh()
-  }, [park.polygon, refresh])
+  }, [initialBoundary, initialGreen, refresh, setGreen])
 
   const onLoad = useCallback(
     (map: MapLibreMap) => {
@@ -86,24 +130,37 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
                 feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true } },
               },
             },
-            styles: { selectedPolygonColor: OUTLINE, selectedPolygonOutlineColor: OUTLINE, selectedPolygonFillOpacity: 0.15, selectionPointColor: OUTLINE, midPointColor: '#ffffff' },
+            styles: { selectedPolygonColor: BOUNDARY, selectedPolygonOutlineColor: BOUNDARY, selectedPolygonFillOpacity: 0.12, selectionPointColor: BOUNDARY, midPointColor: '#ffffff' },
           }),
-          new TerraDrawPolygonMode({ styles: { fillColor: OUTLINE, outlineColor: OUTLINE, fillOpacity: 0.15 } }),
+          new TerraDrawPolygonMode({ styles: { fillColor: BOUNDARY, outlineColor: BOUNDARY, fillOpacity: 0.12 } }),
         ],
       })
       draw.start()
       draw.on('change', refresh)
       draw.on('finish', (id) => {
-        // A redraw is finished: back to editing it.
+        const target = targetRef.current
         draw.setMode(MODE_SELECT)
-        draw.selectFeature(id)
-        setDrawing(false)
-        refresh()
+        setDrawing(null)
+        if (target === 'boundary') {
+          draw.selectFeature(id)
+          refresh()
+          return
+        }
+        // A green or cut-out polygon: merge it into the green zone, then drop the drawn feature.
+        const drawn = draw.getSnapshotFeature(id)?.geometry
+        draw.removeFeatures([id])
+        targetRef.current = 'boundary'
+        if (drawn?.type !== 'Polygon') return
+        try {
+          setGreen(mergeGreen(greenRef.current, drawn as Polygon, target))
+        } catch {
+          setErrors([t('outline.mergeFailed')])
+        }
       })
       drawRef.current = draw
       loadCurrent()
     },
-    [loadCurrent, refresh],
+    [loadCurrent, refresh, setGreen, t],
   )
 
   // Stop the drawing library when the dialog closes (the map is unmounted with it).
@@ -117,91 +174,177 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
     drawRef.current = null
   }, [open])
 
-  const redraw = () => {
+  const startDraw = (target: Target) => {
     const draw = drawRef.current
     if (!draw) return
-    draw.clear()
+    setErrors([])
+    if (target === 'cutout' && !greenRef.current) {
+      setErrors([t('outline.cutNeedsGreen')])
+      return
+    }
+    if (target === 'boundary') {
+      draw.clear()
+      setBoundaryArea(null)
+    }
+    targetRef.current = target
     draw.setMode(MODE_POLYGON)
-    setDrawing(true)
-    setArea(null)
+    setDrawing(target)
+  }
+
+  const cancelDraw = () => {
+    const draw = drawRef.current
+    if (!draw) return
+    draw.setMode(MODE_SELECT)
+    targetRef.current = 'boundary'
+    setDrawing(null)
+    // A cancelled boundary redraw leaves nothing on the canvas: put the saved one back.
+    if (!currentPolygon(draw)) loadCurrent()
   }
 
   const submit = () => {
-    const polygon = currentPolygon(drawRef.current)
-    if (!polygon) {
-      setError(t('outline.needPolygon'))
+    const boundary = currentPolygon(drawRef.current)
+    if (!boundary) {
+      setErrors([t('outline.needPolygon')])
       return
     }
-    setError(null)
+    setErrors([])
+    setWarnings([])
     save.mutate(
-      { polygon, source, reference: reference.trim() || null },
       {
-        onSuccess: () => {
+        boundary,
+        ...(green || initialGreen ? { green_zone: green } : {}),
+        imagery: basemap === 'esri' ? 'esri' : 'maptiler',
+        checked,
+      },
+      {
+        onSuccess: ({ warnings: returned }) => {
           toast.success(t('outline.saved'))
-          onOpenChange(false)
+          if (returned.length) setWarnings(returned)
+          else onOpenChange(false)
         },
-        onError: (e) => setError(e instanceof ApiError && e.body?.message ? e.body.message : t('common.error')),
+        onError: (e) => setErrors(errorLines(e, t('common.error'))),
       },
     )
   }
 
+  const greenData = useMemo(() => (green ? toFeature(green) : null), [green])
+  const hint = drawing === 'boundary' ? t('outline.drawHint') : drawing === 'green' ? t('outline.greenHint') : drawing === 'cutout' ? t('outline.cutHint') : t('outline.editHint')
+  const basemaps: Basemap[] = MAPTILER_KEY ? ['esri', 'satellite'] : ['esri']
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[95vh] w-[95vw] max-w-5xl flex-col gap-3 sm:max-w-5xl">
+      <DialogContent className="flex max-h-[95vh] w-[95vw] max-w-5xl flex-col gap-3 overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>{t('outline.title', { park: parkName(park, i18n.language) })}</DialogTitle>
-          <DialogDescription>{drawing ? t('outline.drawHint') : t('outline.editHint')}</DialogDescription>
+          <DialogDescription>{hint}</DialogDescription>
         </DialogHeader>
 
-        <div className="relative h-[60vh] min-h-[320px] overflow-hidden rounded-lg border">
+        <div className="relative h-[55vh] min-h-[320px] overflow-hidden rounded-lg border" dir="ltr">
           {open && (
             <Map
               initialViewState={{ bounds: boundsOf(ring), fitBoundsOptions: { padding: 60, maxZoom: 19 } }}
-              mapStyle={mapStyle('satellite')}
+              mapStyle={mapStyle(basemap)}
+              attributionControl={{ compact: false, customAttribution: attributionFor(basemap) }}
               style={{ width: '100%', height: '100%' }}
               onLoad={(e) => onLoad(e.target)}
               maxZoom={20}
             >
               <NavigationControl position="top-left" showCompass={false} />
+              {greenData && (
+                <Source id="green-zone" type="geojson" data={greenData}>
+                  <Layer id="green-zone-fill" type="fill" paint={{ 'fill-color': GREEN, 'fill-opacity': 0.35 }} />
+                  <Layer id="green-zone-line" type="line" paint={{ 'line-color': GREEN, 'line-width': 2, 'line-dasharray': [2, 1] }} />
+                </Source>
+              )}
             </Map>
           )}
-          <div className="absolute end-2 top-2 rounded-md bg-background/90 px-3 py-1.5 text-sm shadow">
-            {t('outline.area')}: <span className="font-semibold tabular-nums">{area == null ? '—' : `${formatNumber(area, 0)} m²`}</span>
+          <div className="absolute end-2 top-2 flex flex-col gap-1 rounded-md bg-[var(--solid-over-map)] px-3 py-2 text-sm" dir={i18n.dir()}>
+            <span className="inline-flex items-center gap-2">
+              <i className="size-3 rounded-sm" style={{ background: BOUNDARY }} aria-hidden />
+              {t('outline.boundaryArea')}: <span className="font-semibold tabular-nums">{boundaryArea == null ? '—' : `${formatNumber(boundaryArea, 0)} m²`}</span>
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <i className="size-3 rounded-sm" style={{ background: GREEN }} aria-hidden />
+              {t('outline.greenArea')}: <span className="font-semibold tabular-nums">{greenArea == null ? '—' : `${formatNumber(greenArea, 0)} m²`}</span>
+            </span>
           </div>
-          {!MAPTILER_KEY && <div className="absolute bottom-2 start-2 rounded-md bg-background/90 px-2 py-1 text-xs text-muted-foreground">{t('outline.noSatellite')}</div>}
+          {basemaps.length > 1 && (
+            <div className="absolute start-2 bottom-8 flex gap-1 rounded-md bg-[var(--solid-over-map)] p-1" role="group" aria-label={t('overview.baseMap')} dir={i18n.dir()}>
+              {basemaps.map((b) => (
+                <Button key={b} size="sm" variant={basemap === b ? 'default' : 'ghost'} onClick={() => setBasemap(b)} aria-pressed={basemap === b}>
+                  {b === 'esri' ? t('map.esri') : t('admin.satellite')}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <Button type="button" variant="outline" size="sm" onClick={redraw} disabled={drawing}>
-            <Pencil />
-            {t('outline.redraw')}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={loadCurrent}>
-            <RotateCcw />
-            {t('outline.reset')}
-          </Button>
-          <label className="ms-auto flex items-center gap-2 text-sm">
-            {t('outline.source')}
-            <select className="rounded-md border bg-background px-2 py-1" value={source} onChange={(e) => setSource(e.target.value as 'traced' | 'official')}>
-              <option value="traced">{t('sources.type.traced')}</option>
-              <option value="official">{t('sources.type.official')}</option>
-            </select>
-          </label>
-          <Input
-            className="w-64"
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder={source === 'official' ? t('outline.referenceRequired') : t('outline.referenceOptional')}
-            aria-label={t('outline.reference')}
-          />
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">{t('outline.layerBoundary')}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => startDraw('boundary')} disabled={drawing !== null}>
+              <Pencil />
+              {t('outline.redraw')}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={loadCurrent} disabled={drawing !== null}>
+              <RotateCcw />
+              {t('outline.reset')}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">{t('outline.layerGreen')}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => startDraw('green')} disabled={drawing !== null}>
+              <Sprout />
+              {t('outline.addGreen')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => startDraw('cutout')} disabled={drawing !== null || !green}>
+              <Scissors />
+              {t('outline.cutOut')}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setGreen(null)} disabled={drawing !== null || !green}>
+              <Eraser />
+              {t('outline.clearGreen')}
+            </Button>
+          </div>
+          {drawing && (
+            <Button type="button" variant="ghost" size="sm" onClick={cancelDraw}>
+              <X />
+              {t('outline.cancelDraw')}
+            </Button>
+          )}
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
+          {t('outline.checked')}
+        </label>
+
+        {warnings.length > 0 && (
+          <div className="rounded-lg bg-[var(--clean)]/15 p-3 text-sm text-[#FFE2A0]" role="status">
+            <p className="m-0 mb-1 inline-flex items-center gap-1.5 font-medium">
+              <TriangleAlert className="size-4" aria-hidden />
+              {t('outline.warningsTitle')}
+            </p>
+            <ul className="m-0 ps-5">
+              {warnings.map((w) => (
+                <li key={w}>{t(`outline.warning.${w}`)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {errors.length > 0 && (
+          <ul className="m-0 list-none p-0 text-sm text-destructive" role="alert">
+            {errors.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            {t('common.cancel')}
+            {warnings.length ? t('common.close') : t('common.cancel')}
           </Button>
-          <Button type="button" onClick={submit} disabled={save.isPending || drawing || (source === 'official' && !reference.trim())}>
+          <Button type="button" onClick={submit} disabled={save.isPending || drawing !== null}>
             <Save />
             {save.isPending ? t('outline.saving') : t('outline.save')}
           </Button>

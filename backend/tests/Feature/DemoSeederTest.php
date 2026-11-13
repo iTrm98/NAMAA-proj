@@ -47,9 +47,9 @@ class DemoSeederTest extends TestCase
         $this->assertSame(0, NdviReading::whereIn('park_id', $real)->count());
         $this->assertSame(2, Park::whereIn('id', $real)->where('status', ParkStatus::Offline)->count());
 
-        // Simulated parks: 7 days x 144 readings each, NDVI every 5 days.
+        // Simulated parks: 7 days x 144 readings each, no seeded NDVI (satellite data is fetched, never invented).
         $this->assertSame(3 * 1008, Reading::where('source', 'simulated')->count());
-        $this->assertSame(3 * 18, NdviReading::count());
+        $this->assertSame(0, NdviReading::count());
 
         $adel = Park::where('name_en', 'Al Adel Park')->firstOrFail();
         $this->assertSame(ParkStatus::Dry, $adel->status);

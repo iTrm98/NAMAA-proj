@@ -132,7 +132,9 @@ return [
     ],
     // NDVI: below this many valid Sentinel-2 pixels (10 m, about 2000 m2) in the outline the
     // value is "too small to measure reliably": shown as such, never used by ndvi_drop.
-    'ndvi' => ['min_pixels' => 20],
+    // max_cloud: tile-level cloud cover % sent to the vision service as the STAC filter; high on
+    // purpose, the per-pixel cloud mask and the minimum of valid pixels drop cloudy parks.
+    'ndvi' => ['min_pixels' => 20, 'max_cloud' => (int) env('NAMAA_NDVI_MAX_CLOUD', 80)],
 
     'impact' => [
         // A gap between two readings of the pump node longer than this is not
@@ -158,6 +160,9 @@ return [
     // Park outlines (php artisan namaa:parks:outlines): OpenStreetMap through Overpass.
     'overpass_url' => env('OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
     'parks_seed_path' => base_path('../data/seed/parks.json'),
+    // Park selection file and OSM exports (data/parks, mounted read-write into the backend container).
+    'parks_data_path' => base_path('../data/parks'),
+    'max_simulated_parks' => 4,
 
     'camera' => [
         'url' => env('CAMERA_URL', ''),

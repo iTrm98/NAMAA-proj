@@ -2,7 +2,7 @@
 
 export type Role = 'admin' | 'worker' | 'municipality'
 export type Source = 'real' | 'simulated'
-export type ParkStatus = 'ok' | 'dry' | 'over' | 'offline' | 'awaiting_install'
+export type ParkStatus = 'ok' | 'dry' | 'over' | 'offline' | 'awaiting_install' | 'no_sensor'
 export type Locale = 'ar' | 'en'
 
 export interface User {
@@ -24,6 +24,11 @@ export interface LoginResponse {
 export interface GeoJsonPolygon {
   type: 'Polygon'
   coordinates: [number, number][][] // [lng, lat]
+}
+
+export interface GeoJsonMultiPolygon {
+  type: 'MultiPolygon'
+  coordinates: [number, number][][][]
 }
 
 export interface LatestValues {
@@ -68,6 +73,18 @@ export interface Park {
   /** Newest Sentinel-2 NDVI value (map vegetation layer); null before the first fetch. */
   ndvi: ParkNdvi | null
   company?: { id: number; name: string }
+  /** Sprint 6.2 Phase A (optional until the backend ships them). */
+  site_type?: 'park' | 'demo_stand'
+  monitoring_mode?: 'real_sensors' | 'simulated' | 'satellite_only'
+  geometry_source?: string | null
+  verification_status?: string | null
+  boundary?: GeoJsonPolygon | null
+  green_zone?: GeoJsonMultiPolygon | null
+  boundary_area_m2?: number | null
+  green_zone_area_m2?: number | null
+  demo_role?: string | null
+  cover_photo?: { url: string; at: string } | null
+  archived_at?: string | null
 }
 
 export interface ParkNode {
@@ -106,6 +123,8 @@ export interface ParkDetail extends Park {
   pump: PumpState | null
   /** Sprint 3.1: where the outline and the area come from. */
   sources: { outline: DataSourceInfo; area: DataSourceInfo }
+  /** Sprint 6.2 Phase A: sourced facts about the park (detail only). */
+  claims?: ParkClaim[]
 }
 
 export type ReadingRange = '1h' | '24h' | '7d'
@@ -526,6 +545,8 @@ export interface Overview {
     counts?: { alerts: number; tasks_in_progress: number; setup: number }
     setup: { type: 'awaiting_installation' | 'outline_unverified'; park: OverviewPark; node: { id: number; name: string; type: string } | null }[]
   }
+  /** Sprint 6.2: the demo stand (never a park); admin only, null when there is none. */
+  demo_stand?: { park_id: number; name_ar: string; name_en: string; online: boolean; latest: { moisture_pct: number | null; temperature_c: number | null; humidity_pct: number | null; at: string } | null } | null
   by_company?: { company: { id: number; name: string }; parks: number; open_alerts: number; urgent_alerts: number }[]
 }
 
@@ -546,4 +567,65 @@ export interface ParkTimeline {
   task: { id: number; title: string; title_key: string | null; status: TaskStatus; verified: boolean | null; assigned_to: TimelineActor | null } | null
   steps: TimelineStep[]
   duration_minutes: number | null
+}
+
+/** Sprint 6.2 Phase A: park setup (GET /admin/park-setup/osm and /selection, claims). */
+export type SetupMode = 'simulated' | 'real_sensors' | 'satellite_only'
+
+/** A GeoJSON feature as the setup endpoints send it; geometry is passed through untouched. */
+export interface SetupGeoFeature {
+  type: 'Feature'
+  geometry: unknown
+  properties: {
+    osm_id?: string | null
+    slug?: string | null
+    name?: string | null
+    'name:ar'?: string | null
+    'name:en'?: string | null
+    name_ar?: string | null
+    name_en?: string | null
+    district?: string | null
+    area_m2?: number | null
+    monitoring_mode?: SetupMode | null
+    claims?: unknown[]
+  }
+}
+
+export interface FeatureCollectionOf {
+  type: 'FeatureCollection'
+  features: SetupGeoFeature[]
+}
+
+export interface OsmExport {
+  file: string
+  fetched_at: string | null
+  features: number
+  ge_1ha: number
+  geojson: FeatureCollectionOf
+}
+
+export interface SelectionResponse extends FeatureCollectionOf {
+  simulated: number
+  cap: number
+}
+
+export interface ParkClaim {
+  id: number
+  field: string
+  value: string
+  source_name: string | null
+  source_url: string | null
+  source_date: string | null
+  note: string | null
+}
+
+export type ParkClaimInput = Omit<ParkClaim, 'id'>
+
+/** GET /admin/demo/story (Sprint 6.2): the park each demo step runs on; null when none is set up. */
+export type DemoStoryEntry = { park_id: number; name_ar: string; name_en: string; node: { id: number; name: string; source: Source } } | null
+export interface DemoStory {
+  dry: DemoStoryEntry
+  leak: DemoStoryEntry
+  offline: DemoStoryEntry
+  litter: DemoStoryEntry
 }

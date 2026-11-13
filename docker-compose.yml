@@ -48,6 +48,8 @@ x-laravel: &laravel
     - ./backend:/var/www/html
     # Seed and recorded demo data (data/seed/parks.json), read-only.
     - ./data:/var/www/data:ro
+    # Park selection file and OSM exports are written by the backend (read-write over the read-only mount).
+    - ./data/parks:/var/www/data/parks
   environment:
     <<: *laravel-env
   depends_on:

@@ -13,8 +13,10 @@ class OverviewController extends Controller
 {
     public function __invoke(Request $request, OverviewService $overview): JsonResponse
     {
-        $parks = Park::forCompany($request->user()->company_id)->withoutTest()->with('nodes')->orderBy('id')->get();
+        $parks = Park::forCompany($request->user()->company_id)->parks()->withoutTest()->with('nodes')->orderBy('id')->get();
 
-        return response()->json(['data' => $overview->build($parks)]);
+        $data = $overview->build($parks) + ['demo_stand' => $overview->demoStand($request->user()->company_id)];
+
+        return response()->json(['data' => $data]);
     }
 }

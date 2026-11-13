@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Enums\GeometrySource;
+use App\Enums\VerificationStatus;
 use App\Jobs\RecomputeNdvi;
 use App\Models\Park;
 use App\Models\User;
+use App\Support\Geo;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -15,9 +18,6 @@ use Illuminate\Support\Facades\DB;
  */
 class ParkOutline
 {
-    /** WGS84 equatorial radius, the same as @turf/area, so the editor and the server agree. */
-    private const EARTH_RADIUS_M = 6378137.0;
-
     /** Every point of an outline must be this close to the park's map marker. */
     public const MAX_DISTANCE_M = 2000;
 
@@ -25,34 +25,16 @@ class ParkOutline
 
     public function __construct(private readonly ActivityLogger $logger) {}
 
-    /**
-     * Area of a closed ring in m² on the sphere (Chamberlain and Duquette, as in
-     * @turf/area): sum of (lng2 - lng1) x (2 + sin lat1 + sin lat2) x R² / 2.
-     *
-     * @param  list<array{0: float, 1: float}>  $ring
-     */
+    /** Area of a closed ring in m² (see Geo::ringArea). @param list<array{0: float, 1: float}> $ring */
     public static function area(array $ring): float
     {
-        $ring = self::closed($ring);
-        $sum = 0.0;
-        for ($i = 0, $n = count($ring) - 1; $i < $n; $i++) {
-            [$lng1, $lat1] = $ring[$i];
-            [$lng2, $lat2] = $ring[$i + 1];
-            $sum += deg2rad($lng2 - $lng1) * (2 + sin(deg2rad($lat1)) + sin(deg2rad($lat2)));
-        }
-
-        return abs($sum * self::EARTH_RADIUS_M * self::EARTH_RADIUS_M / 2);
+        return Geo::ringArea($ring);
     }
 
     /** The ring with its first point repeated at the end. @param list<array{0: float, 1: float}> $ring */
     public static function closed(array $ring): array
     {
-        $ring = array_values(array_map(fn ($p) => [(float) $p[0], (float) $p[1]], $ring));
-        if ($ring !== [] && $ring[0] !== $ring[count($ring) - 1]) {
-            $ring[] = $ring[0];
-        }
-
-        return $ring;
+        return Geo::closeRing($ring);
     }
 
     /** Distinct points of the ring (without the closing point). @param list<array{0: float, 1: float}> $ring */
@@ -115,6 +97,11 @@ class ParkOutline
             $park->forceFill([
                 'polygon' => ['type' => 'Polygon', 'coordinates' => [$ring]],
                 'area_m2' => $area,
+                'geometry_source' => GeometrySource::Traced,
+                'geometry_updated_at' => now(),
+                'verification_status' => VerificationStatus::Unverified,
+                'verified_by' => null,
+                'verified_at' => null,
                 'outline_source' => $source,
                 'outline_reference' => $reference ?: ($source === 'traced' ? 'Traced on satellite imagery (MapTiler) in the NAMAA editor' : null),
                 'outline_by' => $by->id,
@@ -135,6 +122,113 @@ class ParkOutline
         RecomputeNdvi::dispatch($park->id);
 
         return $park;
+    }
+
+    /**
+     * Save an outline in the v2 shape (Sprint 6.2): a boundary and/or a green zone drawn on
+     * imagery. Drawing marks the geometry traced and unverified unless the editor ticked
+     * "checked". Returns the warnings for the answer.
+     *
+     * @param  array<string, mixed>  $input  validated: boundary?, green_zone?, imagery, checked
+     * @return list<string>
+     */
+    public function saveGeometry(Park $park, array $input, User $by): array
+    {
+        $before = [
+            'area_m2' => $park->area_m2,
+            'green_zone_area_m2' => $park->green_zone_area_m2,
+            'geometry_source' => $park->geometry_source?->value,
+            'verification_status' => $park->verification_status?->value,
+        ];
+        $reference = $input['imagery'] === 'esri'
+            ? 'Traced on Esri World Imagery in the NAMAA editor'
+            : 'Traced on MapTiler satellite imagery in the NAMAA editor';
+        $checked = (bool) $input['checked'];
+        $now = now();
+        $attrs = [
+            'geometry_source' => GeometrySource::Traced,
+            'geometry_updated_at' => $now,
+            'outline_source' => 'traced',
+            'outline_reference' => $reference,
+            'outline_by' => $by->id,
+            'outline_at' => $now,
+            'verification_status' => $checked ? VerificationStatus::Verified : VerificationStatus::Unverified,
+            'verified_by' => $checked ? $by->id : null,
+            'verified_at' => $checked ? $now : null,
+            'ndvi_recompute_at' => $now,
+        ];
+
+        if (! empty($input['boundary'])) {
+            $boundary = $this->roundGeometry($input['boundary']);
+            $attrs['polygon'] = $boundary;
+            $attrs['area_m2'] = (int) round(Geo::area($boundary));
+            if ($c = Geo::centroid($boundary)) {
+                $attrs['lng'] = round($c[0], 7);
+                $attrs['lat'] = round($c[1], 7);
+            }
+            $attrs += [
+                'area_source' => 'traced', 'area_reference' => 'Computed from the outline (geodesic area)',
+                'area_by' => $by->id, 'area_at' => $now,
+            ];
+        }
+        if (array_key_exists('green_zone', $input)) {
+            $green = $input['green_zone'] ? $this->roundGeometry($input['green_zone']) : null;
+            $attrs['green_zone'] = $green;
+            $attrs['green_zone_area_m2'] = $green ? (int) round(Geo::area($green)) : null;
+        }
+
+        DB::transaction(function () use ($park, $attrs, $by, $before) {
+            $park->forceFill($attrs)->save();
+            $this->logger->log('park.outline_updated', $park, [
+                'before' => $before,
+                'after' => [
+                    'area_m2' => $park->area_m2,
+                    'green_zone_area_m2' => $park->green_zone_area_m2,
+                    'geometry_source' => 'traced',
+                    'verification_status' => $park->verification_status->value,
+                    'reference' => $park->outline_reference,
+                ],
+            ], user: $by);
+        });
+
+        RecomputeNdvi::dispatch($park->id);
+
+        return $this->warnings($park);
+    }
+
+    /** @return list<string> */
+    public function warnings(Park $park): array
+    {
+        $green = $park->green_zone;
+        $boundary = $park->polygon;
+        if (! $green || ! $boundary) {
+            return [];
+        }
+        $warnings = [];
+        $polygons = $green['type'] === 'Polygon' ? [$green['coordinates']] : $green['coordinates'];
+        foreach ($polygons as $polygon) {
+            foreach ($polygon[0] ?? [] as $p) {
+                if (! Geo::pointInPolygon((float) $p[0], (float) $p[1], $boundary)) {
+                    $warnings[] = 'green_zone_outside_boundary';
+                    break 2;
+                }
+            }
+        }
+        if (Geo::area($green) > Geo::area($boundary)) {
+            $warnings[] = 'green_zone_larger_than_boundary';
+        }
+
+        return $warnings;
+    }
+
+    /** @param array<string, mixed> $geometry @return array<string, mixed> */
+    private function roundGeometry(array $geometry): array
+    {
+        $round = function ($v) use (&$round) {
+            return is_array($v) ? array_map($round, $v) : round((float) $v, 7);
+        };
+
+        return ['type' => $geometry['type'], 'coordinates' => $round($geometry['coordinates'])];
     }
 
     /** @param array{0: float, 1: float} $p1 */

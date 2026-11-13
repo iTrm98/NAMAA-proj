@@ -4,11 +4,15 @@ namespace App\Models;
 
 use App\Enums\AlertStatus;
 use App\Enums\DataSource;
+use App\Enums\GeometrySource;
+use App\Enums\MonitoringMode;
 use App\Enums\NodeType;
 use App\Enums\ParkStatus;
 use App\Enums\ParkType;
+use App\Enums\SiteType;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
+use App\Enums\VerificationStatus;
 use Database\Factories\ParkFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,11 +28,29 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'status', 'status_changed_at', 'last_reading_at', 'source', 'is_test',
     'outline_source', 'outline_reference', 'outline_by', 'outline_at',
     'area_source', 'area_reference', 'area_by', 'area_at', 'ndvi_recompute_at',
+    'site_type', 'slug', 'osm_id', 'green_zone', 'green_zone_area_m2', 'geometry_source', 'geometry_updated_at',
+    'monitoring_mode', 'verification_status', 'verified_by', 'verified_at', 'archived_at', 'demo_role',
+    'cover_photo_path', 'cover_photo_at',
 ])]
 class Park extends Model
 {
     /** @use HasFactory<ParkFactory> */
     use HasFactory;
+
+    /** Defaults that follow the older columns, so parks created without the Sprint 6.2 fields stay correct. */
+    protected static function booted(): void
+    {
+        static::creating(function (Park $park) {
+            $park->site_type ??= $park->is_test ? SiteType::DemoStand : SiteType::Park;
+            $park->monitoring_mode ??= $park->source === DataSource::Simulated ? MonitoringMode::Simulated : MonitoringMode::RealSensors;
+            $park->geometry_source ??= match ($park->getAttributes()['outline_source'] ?? null) {
+                'osm' => GeometrySource::Osm,
+                'traced', 'official' => GeometrySource::Traced,
+                default => GeometrySource::RoughLegacy,
+            };
+            $park->verification_status ??= VerificationStatus::Unverified;
+        });
+    }
 
     protected function casts(): array
     {
@@ -50,6 +72,16 @@ class Park extends Model
             'outline_at' => 'datetime',
             'area_at' => 'datetime',
             'ndvi_recompute_at' => 'datetime',
+            'site_type' => SiteType::class,
+            'green_zone' => 'array',
+            'green_zone_area_m2' => 'integer',
+            'geometry_source' => GeometrySource::class,
+            'geometry_updated_at' => 'datetime',
+            'monitoring_mode' => MonitoringMode::class,
+            'verification_status' => VerificationStatus::class,
+            'verified_at' => 'datetime',
+            'archived_at' => 'datetime',
+            'cover_photo_at' => 'datetime',
         ];
     }
 
@@ -75,6 +107,18 @@ class Park extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /** @return HasMany<ParkClaim, $this> */
+    public function claims(): HasMany
+    {
+        return $this->hasMany(ParkClaim::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
     }
 
     /** @return HasMany<Node, $this> */
@@ -178,6 +222,12 @@ class Park extends Model
     public function scopeWithoutTest(Builder $query): void
     {
         $query->where('is_test', false);
+    }
+
+    /** Real parks only: not the demo stand, not archived (Sprint 6.2). @param Builder<Park> $query */
+    public function scopeParks(Builder $query): void
+    {
+        $query->where('site_type', SiteType::Park->value)->whereNull('archived_at');
     }
 
     /** @param Builder<Park> $query */

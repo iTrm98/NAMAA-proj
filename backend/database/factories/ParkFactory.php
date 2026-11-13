@@ -3,8 +3,12 @@
 namespace Database\Factories;
 
 use App\Enums\DataSource;
+use App\Enums\GeometrySource;
+use App\Enums\MonitoringMode;
 use App\Enums\ParkStatus;
 use App\Enums\ParkType;
+use App\Enums\SiteType;
+use App\Enums\VerificationStatus;
 use App\Models\Company;
 use App\Models\Park;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -48,11 +52,30 @@ class ParkFactory extends Factory
             'status_changed_at' => null,
             'last_reading_at' => null,
             'source' => DataSource::Real,
+            'site_type' => SiteType::Park,
+            'monitoring_mode' => MonitoringMode::RealSensors,
+            'geometry_source' => GeometrySource::RoughLegacy,
+            'verification_status' => VerificationStatus::Unverified,
         ];
     }
 
     public function simulated(): static
     {
-        return $this->state(fn () => ['source' => DataSource::Simulated]);
+        return $this->state(fn () => ['source' => DataSource::Simulated, 'monitoring_mode' => MonitoringMode::Simulated]);
+    }
+
+    public function demoStand(): static
+    {
+        return $this->state(fn () => ['site_type' => SiteType::DemoStand, 'is_test' => true]);
+    }
+
+    public function satelliteOnly(): static
+    {
+        return $this->state(fn () => ['monitoring_mode' => MonitoringMode::SatelliteOnly]);
+    }
+
+    public function archived(): static
+    {
+        return $this->state(fn () => ['archived_at' => now()]);
     }
 }

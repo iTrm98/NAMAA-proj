@@ -16,7 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable([
     'park_id', 'type', 'name', 'has_pump', 'pump_target', 'dry_value', 'wet_value',
-    'last_seen_at', 'last_moisture_pct', 'last_flow', 'last_temperature',
+    'last_seen_at', 'detached_at', 'last_moisture_pct', 'last_flow', 'last_temperature',
     'last_humidity', 'last_pump_on', 'last_battery_pct', 'last_litter_count', 'expected_flow_l_min', 'source', 'rssi', 'uptime_s', 'fw_version', 'via', 'capture_mode', 'camera_url',
 ])]
 class Node extends Model

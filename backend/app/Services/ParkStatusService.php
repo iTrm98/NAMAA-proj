@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AlertType;
+use App\Enums\MonitoringMode;
 use App\Enums\ParkStatus;
 use App\Events\ParkStatusChanged;
 use App\Models\Park;
@@ -10,7 +11,7 @@ use App\Support\Namaa;
 use App\Support\Realtime;
 
 /**
- * Park status (decision table, "Park status"): awaiting_install > offline > dry > over > ok.
+ * Park status (decision table, "Park status"): no_sensor (satellite_only parks) > awaiting_install > offline > dry > over > ok.
  * offline = no sensor node of the park reported within the offline window;
  * dry / over = an open alert of that type. status_changed_at and the
  * park.status_changed broadcast only on a real change.
@@ -41,8 +42,13 @@ class ParkStatusService
 
     public function compute(Park $park): ParkStatus
     {
+        // Sprint 6.2: a satellite-only park has no sensor feed; never ok, never "needs attention".
+        if ($park->monitoring_mode === MonitoringMode::SatelliteOnly) {
+            return ParkStatus::NoSensor;
+        }
+
         $onlineAfter = now()->subSeconds(Namaa::timing('offline_seconds'));
-        $sensors = $park->sensorNodes()->get(['id', 'source', 'last_seen_at']);
+        $sensors = $park->sensorNodes()->whereNull('detached_at')->get(['id', 'source', 'last_seen_at']);
 
         // Sprint 6: only real boards that have never reported = not installed yet.
         if ($sensors->isNotEmpty() && $sensors->every(fn ($n) => $n->isAwaitingInstall())) {

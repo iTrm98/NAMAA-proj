@@ -1,10 +1,10 @@
 import type { TFunction } from 'i18next'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { FeatureCollection, Polygon } from 'geojson'
+import type { FeatureCollection, MultiPolygon, Polygon } from 'geojson'
 import { Maximize2, Minus, Plus, X } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import Map, { Layer, type MapLayerMouseEvent, type MapRef, Marker, Source } from 'react-map-gl/maplibre'
+import Map, { Layer, type MapLayerMouseEvent, type MapRef, Source } from 'react-map-gl/maplibre'
 import { Link } from 'react-router'
 import { Chip, GlassCard, Segmented } from '@/components/ds'
 import type { ChipTone } from '@/components/ds'
@@ -12,7 +12,9 @@ import { STATUS_COLORS } from '@/components/StatusPill'
 import { parkName } from '@/hooks/useParks'
 import { isAutoWatering } from '@/lib/irrigation'
 import { formatAgo, formatDate, formatNumber } from '@/lib/format'
-import { MAKKAH, MAPTILER_KEY, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { MAKKAH, MAPTILER_KEY, mapShellProps, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { ParkMarkers } from '@/components/map/ParkMarkers'
+import { mapParks } from '@/lib/parkClusters'
 import { NDVI_GRADIENT, NDVI_NONE, ndviColor } from '@/lib/ndvi'
 import { useBasePath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
@@ -44,6 +46,7 @@ function statusTone(status: Park['status']): ChipTone {
 
 /** Short line next to the park name on its pin: moisture, or the state when there is no reading. */
 function pinLabel(park: Park, t: Tr): string {
+  if (park.status === 'no_sensor') return t('mode.satellite_only')
   if (park.status === 'awaiting_install') return t('overview.awaitingShort')
   if (isAutoWatering(park)) return t('overview.wateringAuto')
   const m = park.latest?.moisture_pct
@@ -51,9 +54,10 @@ function pinLabel(park: Park, t: Tr): string {
 }
 
 /** The live map: every park named, status colours, grey rings for parks awaiting installation, solid controls, side card. */
-export function OverviewMap({ parks, selectedId: controlledId, onSelect, className }: { parks: Park[]; selectedId?: number | null; onSelect?: (id: number | null) => void; className?: string }) {
+export function OverviewMap({ parks: allParks, selectedId: controlledId, onSelect, className }: { parks: Park[]; selectedId?: number | null; onSelect?: (id: number | null) => void; className?: string }) {
   const { t, i18n } = useTranslation()
   const base = useBasePath()
+  const parks = useMemo(() => mapParks(allParks), [allParks])
   const mapRef = useRef<MapRef>(null)
   const [basemap, setBasemap] = useBasemap()
   const [layer, setLayer] = useState<MapLayer>('status')
@@ -91,10 +95,20 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
     [parks, colorOf, layer],
   )
 
+  const greenZones = useMemo<FeatureCollection<MultiPolygon>>(
+    () => ({
+      type: 'FeatureCollection',
+      features: parks
+        .filter((p) => p.green_zone)
+        .map((p) => ({ type: 'Feature', properties: { id: p.id }, geometry: p.green_zone as MultiPolygon })),
+    }),
+    [parks],
+  )
+
   // Computed once: the first view fits every park; polling must not move the map.
   const [initialView] = useState(() => {
     const bounds = boundsOf(parks)
-    return bounds ? { bounds, fitBoundsOptions: { padding: FIT.padding, maxZoom: FIT.maxZoom } } : MAKKAH
+    return bounds ? { bounds, fitBoundsOptions: { padding: FIT.padding, maxZoom: 11 } } : MAKKAH
   })
 
   const fit = useCallback(() => {
@@ -121,12 +135,12 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
         ref={mapRef}
         initialViewState={initialView}
         mapStyle={mapStyle(basemap)}
+        {...mapShellProps(basemap)}
         interactiveLayerIds={['park-fill']}
         onClick={onClick}
         onZoom={(e) => setZoom(e.viewState.zoom)}
         onLoad={(e) => setZoom(e.target.getZoom())}
         cursor="auto"
-        attributionControl={{ compact: true }}
         style={{ width: '100%', height: '100%' }}
       >
         <Source id="parks" type="geojson" data={features}>
@@ -134,42 +148,13 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
           <Layer id="park-outline" type="line" paint={{ 'line-color': ['get', 'color'], 'line-width': 2 }} />
         </Source>
 
-        {/* Every park is named on the map at every zoom (solid pin, no blur). */}
-        {parks.map((park) => {
-          const awaiting = park.status === 'awaiting_install'
-          const on = park.id === selectedId
-          return (
-            <Marker
-              key={park.id}
-              longitude={park.lng}
-              latitude={park.lat}
-              anchor="center"
-              onClick={(e) => {
-                e.originalEvent.stopPropagation()
-                pick(park)
-              }}
-            >
-              <button
-                type="button"
-                dir={i18n.dir()}
-                aria-label={`${parkName(park, i18n.language)}, ${t(`status.${park.status}`)}`}
-                className={cn(
-                  'flex items-center gap-2 rounded-full bg-[rgba(16,18,14,.82)] py-[7px] ps-2 pe-3 text-[13px] whitespace-nowrap text-[var(--text)]',
-                  awaiting ? 'border border-dashed border-white/30' : 'border border-white/15',
-                  on && 'outline-2 outline-offset-2 outline-[var(--accent-lime)]',
-                )}
-              >
-                <span
-                  className="size-3 shrink-0 rounded-full border-[1.5px] border-transparent"
-                  style={awaiting ? { borderColor: STATUS_COLORS.awaiting_install } : { background: colorOf(park) }}
-                  aria-hidden
-                />
-                <span className="font-medium">{parkName(park, i18n.language)}</span>
-                <span className="text-xs text-[var(--text-muted)]">{pinLabel(park, t)}</span>
-              </button>
-            </Marker>
-          )
-        })}
+        {/* Green zone (Sprint 6.2): a distinct dashed green, drawn above the boundary, only where a park has one. */}
+        <Source id="green-zones" type="geojson" data={greenZones}>
+          <Layer id="green-zone-fill" type="fill" paint={{ 'fill-color': '#8BE36B', 'fill-opacity': 0.3 }} />
+          <Layer id="green-zone-line" type="line" paint={{ 'line-color': '#8BE36B', 'line-width': 1.5, 'line-dasharray': [2, 1] }} />
+        </Source>
+
+        <ParkMarkers parks={parks} selectedId={selectedId} onSelect={pick} colorOf={colorOf} detail={(p) => pinLabel(p, t)} />
       </Map>
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2.5" dir={i18n.dir()}>
@@ -189,18 +174,21 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
               ]}
               className="!bg-[var(--solid-over-map)]"
             />
-            {MAPTILER_KEY && (
-              <Segmented
-                ariaLabel={t('overview.baseMap')}
-                value={basemap}
-                onChange={setBasemap}
-                options={[
-                  { value: 'satellite', label: t('admin.satellite') },
-                  { value: 'streets', label: t('admin.streets') },
-                ]}
-                className="!bg-[var(--solid-over-map)]"
-              />
-            )}
+            <Segmented
+              ariaLabel={t('overview.baseMap')}
+              value={basemap}
+              onChange={setBasemap}
+              options={[
+                ...(MAPTILER_KEY
+                  ? [
+                      { value: 'satellite' as const, label: t('admin.satellite') },
+                      { value: 'streets' as const, label: t('admin.streets') },
+                    ]
+                  : [{ value: 'streets' as const, label: t('admin.streets') }]),
+                { value: 'esri' as const, label: t('map.esri') },
+              ]}
+              className="!bg-[var(--solid-over-map)]"
+            />
           </div>
         )}
       </div>
@@ -226,7 +214,7 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
           <div className="flex flex-wrap gap-1.5">
             <Chip tone={statusTone(selected.status)}>{t(`status.${selected.status}`)}</Chip>
             {isAutoWatering(selected) && <Chip tone="normal">{t('overview.wateringAuto')}</Chip>}
-            <Chip tone="muted">{t(`source.${selected.source}`)}</Chip>
+            {selected.monitoring_mode ? <Chip tone="muted">{t(`mode.${selected.monitoring_mode}`)}</Chip> : <Chip tone="muted">{t(`source.${selected.source}`)}</Chip>}
           </div>
           <p className="m-0 text-[13px] leading-normal text-[var(--chip-muted-fg)]">{parkDetail(selected, t)}</p>
           <Link
@@ -245,6 +233,7 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
             <Legend color={STATUS_COLORS.dry} label={t('overview.needsWater')} />
             <Legend color={STATUS_COLORS.over} label={t('status.over')} />
             <Legend ring label={t('status.awaiting_install')} />
+            {parks.some((p) => p.status === 'no_sensor') && <Legend color={STATUS_COLORS.no_sensor} label={t('status.no_sensor')} />}
           </>
         ) : (
           <div className="flex w-52 flex-col gap-1">
@@ -258,7 +247,11 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
               <span className="size-2.5 rounded-full" style={{ backgroundColor: NDVI_NONE }} />
               {t('ndvi.noValue')}
             </span>
-            <span className="text-text-2">{imageDate ? t('ndvi.imageDate', { date: formatDate(imageDate) }) : t('ndvi.empty')}</span>
+            {imageDate && (
+              <span className="text-text-2">
+                {t('ndvi.latestImage')}: <bdi>{formatDate(imageDate, true)}</bdi>
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -280,6 +273,9 @@ export function OverviewMap({ parks, selectedId: controlledId, onSelect, classNa
 }
 
 function parkDetail(park: Park, t: Tr): string {
+  if (park.status === 'no_sensor') {
+    return park.ndvi?.mean != null ? t('map.detailSatelliteNdvi', { ndvi: formatNumber(park.ndvi.mean, 2) }) : t('map.detailSatellite')
+  }
   if (park.status === 'awaiting_install') {
     return park.ndvi?.mean != null ? t('overview.detailAwaitingNdvi', { ndvi: formatNumber(park.ndvi.mean, 2) }) : t('overview.detailAwaiting')
   }
@@ -288,7 +284,7 @@ function parkDetail(park: Park, t: Tr): string {
   if (m != null) parts.push(t('overview.detailMoisture', { value: formatNumber(m), min: formatNumber(park.moisture_min) }))
   parts.push(park.open_alerts_count > 0 ? t('admin.openAlerts', { count: park.open_alerts_count }) : t('overview.noOpenAlerts'))
   if (park.ndvi?.mean != null && !park.ndvi.too_small) parts.push(`NDVI ${formatNumber(park.ndvi.mean, 2)}`)
-  if (park.last_reading_at) parts.push(t('overview.lastReadingAgo', { time: formatAgo(park.last_reading_at) }))
+  if (park.last_reading_at && park.monitoring_mode !== 'satellite_only') parts.push(t('overview.lastReadingAgo', { time: formatAgo(park.last_reading_at) }))
   return parts.join(' · ')
 }
 

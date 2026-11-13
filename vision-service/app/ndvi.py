@@ -34,6 +34,7 @@ log = logging.getLogger("namaa.ndvi")
 STAC_URL = "https://earth-search.aws.element84.com/v1"
 COLLECTION = "sentinel-2-c1-l2a"
 MIN_VALID_PIXELS = 10  # proposed
+DEFAULT_MAX_CLOUD = 80  # tile-level cloud %; per-pixel SCL mask + MIN_VALID_PIXELS drop cloudy parks
 SEARCH_TIMEOUT_S = 30
 READ_TIMEOUT_S = 30
 MAX_ITEMS = 60
@@ -69,13 +70,20 @@ class DateValue:
     date: str
     mean: float
     pixels: int
+    reason: str | None = None  # why the item has no value: outside_outline | no_data
 
 
-def compute_ndvi(polygon: dict, date_from: date, date_to: date, max_cloud: float = 10) -> list[dict]:
+def compute_ndvi(polygon: dict, date_from: date, date_to: date, max_cloud: float = DEFAULT_MAX_CLOUD) -> list[dict]:
     """Return [{date, mean, pixels}] sorted by date (dates with < MIN_VALID_PIXELS left out)."""
+    return compute_ndvi_detail(polygon, date_from, date_to, max_cloud)[0]
+
+
+def compute_ndvi_detail(polygon: dict, date_from: date, date_to: date, max_cloud: float = DEFAULT_MAX_CLOUD) -> tuple[list[dict], list[dict]]:
+    """Return (values, dates). `dates` has one entry per acquisition date found:
+    {date, status: kept|dropped, reason?: too_few_pixels|outside_outline|no_data, mean?, pixels}."""
     items = _search(polygon, date_from, date_to, max_cloud)
     if not items:
-        return []
+        return [], []
 
     geom_wgs84 = shape(polygon)
 
@@ -84,13 +92,22 @@ def compute_ndvi(polygon: dict, date_from: date, date_to: date, max_cloud: float
 
     best: dict[str, DateValue] = {}
     for value in results:
-        if value is None or value.pixels < MIN_VALID_PIXELS:
+        if value is None:
             continue
         current = best.get(value.date)
+        # the tile with more clear pixels wins; a read failure never beats a real count
         if current is None or value.pixels > current.pixels:
             best[value.date] = value
 
-    return [{"date": v.date, "mean": round(v.mean, 3), "pixels": v.pixels} for v in sorted(best.values(), key=lambda v: v.date)]
+    values, dates = [], []
+    for day in sorted(best):
+        v = best[day]
+        if v.reason is None and v.pixels >= MIN_VALID_PIXELS:
+            values.append({"date": v.date, "mean": round(v.mean, 3), "pixels": v.pixels})
+            dates.append({"date": v.date, "status": "kept", "mean": round(v.mean, 3), "pixels": v.pixels})
+        else:
+            dates.append({"date": v.date, "status": "dropped", "reason": v.reason or "too_few_pixels", "pixels": v.pixels})
+    return values, dates
 
 
 def _search(polygon: dict, date_from: date, date_to: date, max_cloud: float) -> list:
@@ -135,7 +152,7 @@ def _item_value(item, geom_wgs84) -> DateValue | None:
         red_asset, nir_asset, scl_asset = item.assets["red"], item.assets["nir"], item.assets["scl"]
     except KeyError:
         log.warning("item %s lacks red/nir/scl assets", item.id)
-        return None
+        return DateValue(date=_item_date(item), mean=0.0, pixels=0, reason="no_data")
 
     try:
         with rasterio.Env(**GDAL_ENV):
@@ -147,7 +164,7 @@ def _item_value(item, geom_wgs84) -> DateValue | None:
                 window = window.round_offsets(op="floor").round_lengths(op="ceil")
                 window = window.intersection(Window(0, 0, red_src.width, red_src.height))
                 if window.width < 1 or window.height < 1:
-                    return None
+                    return DateValue(date=_item_date(item), mean=0.0, pixels=0, reason="outside_outline")
 
                 red = red_src.read(1, window=window).astype("float64")
                 win_transform = red_src.window_transform(window)
@@ -167,7 +184,7 @@ def _item_value(item, geom_wgs84) -> DateValue | None:
         log.warning("reading %s failed: %s", item.id, e)
         if _is_timeout(e):
             raise NdviError(504, f"Reading imagery timed out ({item.id})") from e
-        return None
+        return DateValue(date=_item_date(item), mean=0.0, pixels=0, reason="no_data")
 
     inside = geometry_mask([geom], out_shape=red.shape, transform=win_transform, invert=True)
 
@@ -184,6 +201,8 @@ def _item_value(item, geom_wgs84) -> DateValue | None:
     total = nir_r + red_r
     valid &= total > 0
 
+    if not inside.any():
+        return DateValue(date=_item_date(item), mean=0.0, pixels=0, reason="outside_outline")
     if not valid.any():
         return DateValue(date=_item_date(item), mean=0.0, pixels=0)
 

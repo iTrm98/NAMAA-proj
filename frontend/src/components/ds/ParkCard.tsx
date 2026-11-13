@@ -15,6 +15,7 @@ const DOT: Record<ParkStatus, string> = {
   over: 'bg-[var(--info)]',
   offline: 'bg-[var(--awaiting)]',
   awaiting_install: 'border-[1.5px] border-[var(--awaiting)] bg-transparent',
+  no_sensor: 'bg-[#D9D6CB]',
 }
 
 export interface ParkCardProps {
@@ -40,7 +41,7 @@ export function ParkCard({ park, to, className }: ParkCardProps) {
       <p className="m-0 text-xs text-text-2">
         {[awaiting ? t('parkCard.awaiting') : t(`status.${park.status}`), park.district].filter(Boolean).join(' · ')}
       </p>
-      {(!awaiting || park.latest?.moisture_pct != null) && (
+      {park.status !== 'no_sensor' && (!awaiting || park.latest?.moisture_pct != null) && (
       <div className="grid grid-cols-2 gap-2.5 rounded-2xl bg-white/[.06] px-3.5 py-3">
         <div>
           <div className="text-xs text-text-2">{t('parkCard.moisture')}</div>

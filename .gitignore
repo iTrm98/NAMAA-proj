@@ -54,3 +54,6 @@ ml/weights/
 *.cache
 runs/
 *.pt
+
+# Park OSM exports (ODbL, refetched with namaa:parks:fetch-osm)
+data/parks/osm/

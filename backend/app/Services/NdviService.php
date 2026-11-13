@@ -27,7 +27,7 @@ class NdviService
     ) {}
 
     /**
-     * @return array{park_id: int, from: string, to: string, values: int, inserted: int, updated: int, rule: array<string, mixed>}
+     * @return array{park_id: int, from: string, to: string, values: int, inserted: int, updated: int, rule: array<string, mixed>, dates: list<array<string, mixed>>}
      *
      * @throws VisionUnavailable
      */
@@ -35,7 +35,8 @@ class NdviService
     {
         $to = now('Asia/Riyadh')->toDateString();
         $from = now('Asia/Riyadh')->subDays(max(1, $days))->toDateString();
-        $values = $this->vision->ndvi($park->id, $park->polygon, $from, $to);
+        $answer = $this->vision->ndviDetailed($park->id, $park->polygon, $from, $to);
+        $values = $answer['values'];
 
         $dates = array_column($values, 'date');
         $existing = $dates
@@ -85,6 +86,9 @@ class NdviService
             'ndvi' => $rule['latest'],
             'values' => count($rows),
         ]));
+
+        // per satellite date, for the command output; not part of the activity log
+        $result['dates'] = $answer['dates'];
 
         return $result;
     }

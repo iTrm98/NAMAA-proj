@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\DataSource;
+use App\Enums\MonitoringMode;
 use App\Enums\NodeType;
 use App\Models\Node;
 use App\Support\Namaa;
@@ -46,6 +47,8 @@ class Simulator
         $nodes = Node::query()
             ->where('source', DataSource::Simulated)
             ->where('type', NodeType::Sensor)
+            ->whereNull('detached_at')
+            ->whereHas('park', fn ($p) => $p->parks()->where('monitoring_mode', MonitoringMode::Simulated->value))
             ->with('park')
             ->orderBy('id')
             ->get();

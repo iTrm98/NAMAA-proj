@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\Admin\AlertController as AdminAlertController;
 use App\Http\Controllers\Api\Admin\DetectionController as AdminDetectionController;
 use App\Http\Controllers\Api\Admin\NodeController as AdminNodeController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
+use App\Http\Controllers\Api\Admin\ParkClaimController as AdminParkClaimController;
 use App\Http\Controllers\Api\Admin\ParkController as AdminParkController;
+use App\Http\Controllers\Api\Admin\ParkSetupController as AdminParkSetupController;
 use App\Http\Controllers\Api\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Api\Admin\TaskController as AdminTaskController;
 use App\Http\Controllers\Api\Admin\WorkerController as AdminWorkerController;
@@ -47,11 +49,20 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
     Route::get('parks/{park}', [AdminParkController::class, 'show']);
     Route::patch('parks/{park}', [AdminParkController::class, 'update']);
     Route::put('parks/{park}/outline', [AdminParkController::class, 'outline']);
+    Route::post('parks/{park}/photo', [AdminParkController::class, 'storePhoto']);
+    Route::delete('parks/{park}/photo', [AdminParkController::class, 'deletePhoto']);
+    Route::get('parks/{park}/photo', [AdminParkController::class, 'photo']);
     Route::get('parks/{park}/readings', [AdminParkController::class, 'readings']);
     Route::post('parks/{park}/pump', [AdminParkController::class, 'pump']);
     Route::get('parks/{park}/detections', [AdminDetectionController::class, 'index']);
     Route::get('parks/{park}/ndvi', [AdminNdviController::class, 'index']);
     Route::get('parks/{park}/timeline', [AdminParkController::class, 'timeline']);
+    Route::get('parks/{park}/claims', [AdminParkClaimController::class, 'index']);
+    Route::post('parks/{park}/claims', [AdminParkClaimController::class, 'store']);
+    Route::delete('claims/{claim}', [AdminParkClaimController::class, 'destroy']);
+    Route::get('park-setup/osm', [AdminParkSetupController::class, 'osm']);
+    Route::get('park-setup/selection', [AdminParkSetupController::class, 'selection']);
+    Route::put('park-setup/selection', [AdminParkSetupController::class, 'saveSelection']);
     Route::get('overview', AdminOverviewController::class);
     Route::get('impact', AdminImpactController::class);
     Route::get('detections/{detection}/image', [AdminDetectionController::class, 'image']);
@@ -77,6 +88,7 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
     Route::get('system/status', [AdminSystemController::class, 'status']);
     Route::get('device-rejections', [AdminSystemController::class, 'rejections']);
 
+    Route::get('demo/story', [DemoController::class, 'story'])->middleware('demo');
     Route::post('demo/scenario', [DemoController::class, 'scenario'])->middleware('demo');
     Route::post('demo/frame', [DemoController::class, 'frame'])->middleware('demo');
     Route::post('demo/ndvi', [DemoController::class, 'ndvi'])->middleware('demo');

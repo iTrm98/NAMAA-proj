@@ -53,7 +53,9 @@ export function NdviCard({ parkId, scope }: { parkId: number; scope?: ApiScope }
               <span className="size-3 rounded-full" style={{ backgroundColor: ndviColor(null) }} />
               {t('ndvi.tooSmall')}
             </span>
-            <span className="text-xs text-muted-foreground">{t('ndvi.imageDate', { date: formatDate(latest.date) })}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('ndvi.latestImage')}: <bdi>{formatDate(latest.date, true)}</bdi>
+            </span>
           </div>
         )}
         {latest && !latest.too_small && (
@@ -62,7 +64,9 @@ export function NdviCard({ parkId, scope }: { parkId: number; scope?: ApiScope }
               <span className="size-3 rounded-full" style={{ backgroundColor: ndviColor(latest.mean) }} />
               {formatNumber(latest.mean ?? 0, 2)}
             </span>
-            <span className="text-xs text-muted-foreground">{t('ndvi.imageDate', { date: formatDate(latest.date) })}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('ndvi.latestImage')}: <bdi>{formatDate(latest.date, true)}</bdi>
+            </span>
           </div>
         )}
       </CardHeader>
@@ -74,7 +78,7 @@ export function NdviCard({ parkId, scope }: { parkId: number; scope?: ApiScope }
         ) : latest?.too_small && values.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">{t('ndvi.tooSmallBody')}</p>
         ) : values.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">{t('ndvi.empty')}</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">{t('ndvi.noImage')}</p>
         ) : (
           <div className="h-48 w-full" dir="ltr">
             <ResponsiveContainer>

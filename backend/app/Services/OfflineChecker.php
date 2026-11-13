@@ -63,7 +63,8 @@ class OfflineChecker
         // Uses the last_seen_at index (range + IS NULL); type is filtered after.
         $stale = Node::query()
             ->where('type', NodeType::Sensor)
-            ->whereHas('park', fn ($p) => $p->where('is_test', false)) // the bench: unplugged is normal
+            ->whereNull('detached_at')
+            ->whereHas('park', fn ($p) => $p->where('is_test', false)->whereNull('archived_at')) // the bench: unplugged is normal
             ->whereNot(fn ($q) => $q->awaitingInstall()) // never reported + real: awaiting installation
             ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '<', self::threshold(NodeType::Sensor)))
             ->get(['id', 'park_id', 'type']);
@@ -72,8 +73,9 @@ class OfflineChecker
             $stale = $stale->concat(Node::query()
                 ->where('type', NodeType::Camera)
                 ->where('source', DataSource::Real->value) // Sim Cam only gets demo frames
+                ->whereNull('detached_at')
                 ->where('capture_mode', 'url') // a browser tab is not an outage when closed
-                ->whereHas('park', fn ($p) => $p->where('is_test', false))
+                ->whereHas('park', fn ($p) => $p->where('is_test', false)->whereNull('archived_at'))
                 ->whereNot(fn ($q) => $q->awaitingInstall())
                 ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '<', self::threshold(NodeType::Camera)))
                 ->get(['id', 'park_id', 'type']));
@@ -109,7 +111,7 @@ class OfflineChecker
 
         // Parks whose sensor nodes are all awaiting installation get that status (no alert involved).
         Park::query()->where('is_test', false)->where('status', '!=', ParkStatus::AwaitingInstall->value)
-            ->whereHas('sensorNodes', fn ($q) => $q->awaitingInstall())
+            ->whereHas('sensorNodes', fn ($q) => $q->whereNull('detached_at')->awaitingInstall())
             ->get()->each(fn (Park $p) => $this->status->recalculate($p));
 
         $this->followUp();

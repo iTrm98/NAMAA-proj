@@ -19,10 +19,13 @@ use Illuminate\Console\Command;
 #[Description('Fetch Sentinel-2 NDVI per park from the vision service and run the ndvi_drop rule.')]
 class FetchNdviCommand extends Command
 {
+    /** The vision service's MIN_VALID_PIXELS, for the printed reason. */
+    private const MIN_PIXELS = 10;
+
     public function handle(NdviService $ndvi): int
     {
         $days = max(1, min(365, (int) $this->option('days')));
-        $parks = Park::query()
+        $parks = Park::query()->parks()
             ->when($this->option('park'), fn ($q, $id) => $q->whereKey($id))
             ->orderBy('id')->get()
             ->filter(fn (Park $p) => ! empty($p->polygon));
@@ -49,6 +52,9 @@ class FetchNdviCommand extends Command
                 $this->line(sprintf('#%d %s: %d values (%d new), latest %s, baseline %s, %s',
                     $park->id, $park->name_en, $r['values'], $r['inserted'],
                     $r['rule']['latest'] ?? '-', $r['rule']['baseline'] ?? '-', $r['rule']['outcome']));
+                foreach ($r['dates'] as $d) {
+                    $this->line($this->dateLine($d));
+                }
             } catch (VisionUnavailable $e) {
                 $failed++;
                 $this->error("#{$park->id} {$park->name_en}: {$e->getMessage()}");
@@ -56,5 +62,21 @@ class FetchNdviCommand extends Command
         }
 
         return $failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** @param array<string, mixed> $d */
+    private function dateLine(array $d): string
+    {
+        $pixels = (int) ($d['pixels'] ?? 0);
+        if (($d['status'] ?? '') === 'kept') {
+            return sprintf('  %s  kept     NDVI %.2f  %d clear px', $d['date'], (float) ($d['mean'] ?? 0), $pixels);
+        }
+        $why = match ($d['reason'] ?? 'too_few_pixels') {
+            'outside_outline' => 'outside the outline (no pixel inside)',
+            'no_data' => 'no data (missing assets, all nodata or read failed)',
+            default => sprintf('only %d clear px (min %d)', $pixels, self::MIN_PIXELS),
+        };
+
+        return sprintf('  %s  dropped  %s', $d['date'], $why);
     }
 }

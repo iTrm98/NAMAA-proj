@@ -17,6 +17,7 @@ const ParkPage = lazy(() => import('@/pages/admin/ParkPage'))
 const TasksPage = lazy(() => import('@/pages/admin/TasksPage'))
 const DemoPage = lazy(() => import('@/pages/admin/DemoPage'))
 const HardwarePage = lazy(() => import('@/pages/admin/HardwarePage'))
+const ParkSetupPage = lazy(() => import('@/pages/admin/ParkSetupPage'))
 const ImpactPage = lazy(() => import('@/pages/admin/ImpactPage'))
 const MunicipalityLayout = lazy(() => import('@/pages/municipality/MunicipalityLayout'))
 const OverviewPage = lazy(() => import('@/pages/municipality/OverviewPage'))
@@ -65,6 +66,7 @@ function AppRoutes() {
         <Route path="tasks" element={<Suspense fallback={null}><TasksPage /></Suspense>} />
         <Route path="demo" element={<Suspense fallback={null}><DemoPage /></Suspense>} />
         <Route path="hardware" element={<Suspense fallback={null}><HardwarePage /></Suspense>} />
+        <Route path="park-setup" element={<Suspense fallback={null}><ParkSetupPage /></Suspense>} />
         <Route path="impact" element={<Suspense fallback={null}><ImpactPage /></Suspense>} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>

@@ -5,8 +5,8 @@ import { CameraDemoCard } from '@/components/CameraDemoCard'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NdviDemoCard } from '@/components/NdviDemoCard'
 import { SystemHealthCard } from '@/components/SystemHealthCard'
-import { Disclosure, EmptyState, GlassCard, Skeleton, toast } from '@/components/ds'
-import { useDemoStatus, useRunScenario } from '@/hooks/useOps'
+import { Chip, Disclosure, EmptyState, GlassCard, Skeleton, toast } from '@/components/ds'
+import { useDemoStatus, useDemoStory, useRunScenario } from '@/hooks/useOps'
 import { ApiError } from '@/lib/api'
 import type { ScenarioName } from '@/types'
 
@@ -55,8 +55,9 @@ const danger = `${pill} bg-[var(--urgent)] text-[#2a0a07]`
 
 /** /admin/demo: a guided story (reset, three steps, then more situations); simulated parks only. Hidden unless DEMO_MODE is on. */
 export default function DemoPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const demo = useDemoStatus()
+  const story = useDemoStory(!!demo.data)
   const run = useRunScenario()
   const [ran, setRan] = useState<StepId[]>(loadRan)
 
@@ -112,8 +113,12 @@ export default function DemoPage() {
         {STEPS.map(({ id, scenario, icon }, index) => {
           const isDone = ran.includes(id)
           const isReset = id === 'reset'
+          // The story names the park each step runs on; a step with no park is disabled.
+          const entry = isReset ? undefined : story.data?.[id as 'dry' | 'leak' | 'litter']
+          const missing = !isReset && !story.isPending && !story.isError && entry == null
+          const park = entry ? (i18n.language === 'ar' ? entry.name_ar : entry.name_en) : t('demoPage.parkFallback')
           const button = (
-            <button type="button" className={isReset ? ghost : lime} disabled={run.isPending} onClick={isReset ? undefined : () => start(scenario, { step: id })}>
+            <button type="button" className={isReset ? ghost : lime} disabled={run.isPending || missing} onClick={isReset ? undefined : () => start(scenario, { step: id })}>
               {icon}
               {runLabel(scenario)}
             </button>
@@ -128,7 +133,7 @@ export default function DemoPage() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <span className="text-xs text-text-2">{t('demoPage.step', { n: index })}</span>
                     <h2 className="m-0 text-2xl font-medium">{t(`demoPage.steps.${id}.title`)}</h2>
-                    <p className="m-0 text-lg leading-relaxed text-text-2">{t(`demoPage.steps.${id}.story`)}</p>
+                    <p className="m-0 text-lg leading-relaxed text-text-2">{t(`demoPage.steps.${id}.story`, { park })}</p>
                   </div>
                   {isDone && (
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--healthy)]/15 px-3 py-1.5 text-sm text-[var(--healthy)] [&>svg]:size-4">
@@ -138,8 +143,14 @@ export default function DemoPage() {
                   )}
                 </div>
                 <p className="m-0 text-base leading-relaxed">
-                  <strong className="font-medium text-[var(--accent-lime)]">{t('demoPage.watch')}</strong> {t(`demoPage.steps.${id}.watch`)}
+                  <strong className="font-medium text-[var(--accent-lime)]">{t('demoPage.watch')}</strong> {t(`demoPage.steps.${id}.watch`, { park })}
                 </p>
+                {id === 'litter' && entry && (
+                  <div>
+                    <Chip tone={entry.node.source === 'simulated' ? 'high' : 'lime'}>{entry.node.source === 'simulated' ? t('demoPage.simulatedCamera') : t('demoPage.standLive')}</Chip>
+                  </div>
+                )}
+                {missing && <p className="m-0 text-sm text-[var(--clean)]">{t('demoPage.noPark')}</p>}
                 <div className="flex flex-wrap gap-3">
                   {isReset ? (
                     <ConfirmDialog trigger={button} title={t('demo.confirmResetTitle')} body={t('demo.confirmResetBody')} onConfirm={() => start('reset', { step: 'reset' })} />

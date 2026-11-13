@@ -22,6 +22,7 @@ import { useParkTimeline } from '@/hooks/useTimeline'
 import { ApiError } from '@/lib/api'
 import { formatAgo, formatDateTime, formatNumber } from '@/lib/format'
 import { personName } from '@/lib/names'
+import { GeometryBadge, ParkAbout, VerifiedChip } from '@/components/ParkAbout'
 import { useBasePath, useReadOnly } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import type { ParkDetail, Priority, ReadingRange, TimelineActor, TimelineStep } from '@/types'
@@ -115,6 +116,8 @@ export default function ParkPage() {
           <div className="flex flex-wrap items-center gap-1.5">
             <StatusPill status={p.status} />
             <SourceBadge source={p.source} />
+            <GeometryBadge source={p.geometry_source} />
+            <VerifiedChip status={p.verification_status} />
             <span className="text-xs text-text-2">
               {[p.district, t(`parkType.${p.park_type}`), p.area_m2 ? t('park.area', { area: formatNumber(p.area_m2, 0) }) : null].filter(Boolean).join(' · ')}
             </span>
@@ -509,6 +512,8 @@ function SettingsTab({ park, readOnly, onEditOutline }: { park: ParkDetail; read
   const { t } = useTranslation()
   return (
     <div className="grid items-start gap-5 lg:grid-cols-2">
+      <ParkAbout park={park} readOnly={readOnly} />
+
       <GlassCard className="flex flex-col gap-3">
         <h2 className="m-0 text-[17px] font-medium">{t('parkPage.settingsRange')}</h2>
         <p className="m-0 text-2xl font-medium tabular-nums">{t('parkPage.rangeValue', { min: park.moisture_min, max: park.moisture_max })}</p>

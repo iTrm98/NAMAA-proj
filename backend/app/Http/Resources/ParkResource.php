@@ -65,6 +65,22 @@ class ParkResource extends JsonResource
             'last_reading_at' => $this->iso($this->last_reading_at),
             'source' => $this->source->value,
             'is_test' => (bool) $this->is_test,
+            'site_type' => $this->site_type->value,
+            'monitoring_mode' => $this->monitoring_mode->value,
+            'verification_status' => $this->verification_status->value,
+            'geometry_source' => $this->geometry_source->value,
+            'osm_id' => $this->osm_id,
+            'geometry_updated_at' => $this->iso($this->geometry_updated_at),
+            'archived_at' => $this->iso($this->archived_at),
+            'boundary' => $this->polygon,
+            'boundary_area_m2' => $this->area_m2,
+            'green_zone' => $this->green_zone,
+            'green_zone_area_m2' => $this->green_zone_area_m2,
+            'demo_role' => $this->demo_role,
+            'cover_photo' => $this->cover_photo_path ? [
+                'url' => "/api/admin/parks/{$this->id}/photo",
+                'at' => $this->iso($this->cover_photo_at),
+            ] : null,
             'moisture_min' => $this->moisture_min,
             'moisture_max' => $this->moisture_max,
             'has_pump' => $pumpNode !== null,
@@ -144,6 +160,17 @@ class ParkResource extends JsonResource
                 : [];
 
             $data['pump'] = $this->pump;
+
+            $data['claims'] = ($this->relationLoaded('claims') ? $this->claims : $this->claims()->orderBy('id')->get())
+                ->map(fn ($c) => [
+                    'id' => $c->id,
+                    'field' => $c->field,
+                    'value' => $c->value,
+                    'source_name' => $c->source_name,
+                    'source_url' => $c->source_url,
+                    'source_date' => $c->source_date?->toDateString(),
+                    'note' => $c->note,
+                ])->values()->all();
 
             // Where the outline and the area come from (Sprint 3.1, D1).
             $source = fn (string $field) => [

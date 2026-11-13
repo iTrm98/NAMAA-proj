@@ -452,11 +452,13 @@ class ScenarioService
         $node = $role ? $nodes->first(fn (Node $n) => $n->park->demo_role === $role) : null;
         $node ??= $nodes->firstWhere('name', config("namaa.scenario.$configKey"));
 
-        // Alhilal (Sim 3) may belong to the second demo company (namaa:demo:second-company):
-        // then the first company's offline scenario uses its last other simulated node.
+        // The configured offline node may belong to another company or be missing: take a simulated
+        // node that is neither the dry nor the leak node, else the last node that is not the dry one.
         if (! $node && $configKey === 'offline_node') {
             $dry = $this->findTarget($nodes, 'dry_node');
-            $node = $nodes->reject(fn (Node $n) => $n->id === $dry?->id)->last();
+            $leak = $this->findTarget($nodes, 'leak_node');
+            $others = $nodes->reject(fn (Node $n) => $n->id === $dry?->id);
+            $node = $others->reject(fn (Node $n) => $n->id === $leak?->id)->last() ?? $others->last();
         }
 
         return $node;
@@ -469,7 +471,7 @@ class ScenarioService
 
         if (! $node) {
             $name = config("namaa.scenario.$configKey");
-            throw new InvalidArgumentException("Simulated node [$name] not found.");
+            throw new InvalidArgumentException("No simulated node found for the [$configKey] scenario (configured: [$name]). Create a simulated sensor node first.");
         }
 
         return $node;

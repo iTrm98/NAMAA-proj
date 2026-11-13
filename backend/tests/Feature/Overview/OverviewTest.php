@@ -134,6 +134,16 @@ class OverviewTest extends TestCase
         $this->asUser($this->admin)->getJson('/api/municipality/overview')->assertForbidden();
     }
 
+    public function test_a_placeholder_node_never_asks_for_an_installation_whatever_its_name(): void
+    {
+        Node::factory()->create(['park_id' => $this->sim->id, 'name' => 'Pergola board', 'last_seen_at' => null, 'source' => DataSource::Real, 'placeholder' => true]);
+        Node::factory()->create(['park_id' => $this->sim->id, 'name' => 'Model A', 'last_seen_at' => null, 'source' => DataSource::Real]); // real board with a "placeholder" name
+
+        $setup = $this->asUser($this->admin)->getJson('/api/admin/overview')->assertOk()->json('data.needs_attention.setup');
+
+        $this->assertSame(['Model A'], array_column(array_column($setup, 'node'), 'name'));
+    }
+
     public function test_the_municipality_overview_needs_a_token(): void
     {
         $this->getJson('/api/municipality/overview')->assertUnauthorized();

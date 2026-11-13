@@ -128,6 +128,24 @@ class ParkImportTest extends TestCase
         $this->assertSame('way/9', $park->osm_id);
     }
 
+    public function test_matched_park_with_a_rough_rectangle_receives_the_osm_boundary(): void
+    {
+        $park = Park::factory()->create([
+            'company_id' => $this->company->id, 'name_en' => 'Al Aziziyah Park', 'geometry_source' => GeometrySource::RoughLegacy,
+            'polygon' => $this->polygon(39.5, 21.1, 0.01),
+        ]);
+        $osm = $this->polygon(39.8853, 21.3971, 0.0008);
+        $file = $this->file([$this->feature(['osm_id' => 'way/457991347', 'name' => 'Al Aziziyah Park'], $osm)]);
+
+        $this->import($file);
+
+        $park->refresh();
+        $this->assertSame(1, Park::count());
+        $this->assertSame($osm, $park->polygon);
+        $this->assertSame(GeometrySource::Osm, $park->geometry_source);
+        $this->assertSame('osm', $park->outline_source);
+    }
+
     public function test_ambiguous_name_is_reported_not_guessed(): void
     {
         Park::factory()->count(2)->create(['company_id' => $this->company->id, 'name_en' => 'Twin Park']);

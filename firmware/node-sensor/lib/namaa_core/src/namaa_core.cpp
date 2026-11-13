@@ -119,6 +119,12 @@ bool parseReply(const char* json, size_t len, Reply& out) {
     if (iv > 3600) iv = 3600;
     out.intervalS = (uint32_t)iv;
   }
+  if (doc["pump_max_s"].is<int>()) {
+    long pm = doc["pump_max_s"].as<long>();
+    if (pm < 1) pm = 1;
+    if (pm > (long)StandPump::kMaxRunCapS) pm = StandPump::kMaxRunCapS;
+    out.pumpMaxS = (uint32_t)pm;
+  }
   JsonVariantConst lr = doc["local_rule"];
   if (lr.is<JsonObjectConst>() && lr["min"].is<float>() && lr["target"].is<float>()) {
     float mn = lr["min"].as<float>();
@@ -180,6 +186,63 @@ bool PumpGuard::tick(uint32_t nowMs, float pct) {
     localStartMs_ = nowMs;
   }
   return serverOn || localRun_;
+}
+
+// ---------------------------------------------------------------------------
+// Demo stand pump
+// ---------------------------------------------------------------------------
+
+static uint32_t clampRunS(uint32_t s) {
+  if (s < 1) return 1;
+  if (s > StandPump::kMaxRunCapS) return StandPump::kMaxRunCapS;
+  return s;
+}
+
+StandPump::StandPump(uint32_t defaultMaxRunS, uint32_t linkTimeoutS)
+    : maxRunMs_(clampRunS(defaultMaxRunS) * 1000UL),
+      linkMs_((linkTimeoutS ? linkTimeoutS : kDefaultLinkTimeoutS) * 1000UL) {}
+
+void StandPump::onReply(bool pumpTarget, uint32_t maxRunS, uint32_t nowMs) {
+  haveReply_ = true;
+  target_ = pumpTarget;
+  lastReplyMs_ = nowMs;
+  if (maxRunS) maxRunMs_ = clampRunS(maxRunS) * 1000UL;
+  if (!pumpTarget) locked_ = false;  // server said off: the next ON is a new run
+}
+
+bool StandPump::linkOk(uint32_t nowMs) const {
+  return haveReply_ && (nowMs - lastReplyMs_ < linkMs_);
+}
+
+bool StandPump::tick(uint32_t nowMs) {
+  bool link = linkOk(nowMs);
+  bool want = link && target_ && !locked_;
+  if (want) {
+    if (!on_) {
+      on_ = true;
+      runStartMs_ = nowMs;
+    } else if (nowMs - runStartMs_ >= maxRunMs_) {
+      on_ = false;
+      locked_ = true;  // max run reached
+    }
+  } else {
+    if (on_ && !link) locked_ = true;  // link lost mid-run: no silent restart
+    on_ = false;
+  }
+  return on_;
+}
+
+uint32_t StandPump::remainingS(uint32_t nowMs) const {
+  if (!on_) return 0;
+  uint32_t ran = nowMs - runStartMs_;
+  if (ran >= maxRunMs_) return 0;
+  return (maxRunMs_ - ran + 999UL) / 1000UL;
+}
+
+bool statusLedOn(bool linkOk, bool pumpOn, uint32_t nowMs) {
+  if (!linkOk) return (nowMs / 250UL) % 2 == 0;
+  if (pumpOn) return (nowMs / 500UL) % 2 == 0;
+  return true;
 }
 
 // ---------------------------------------------------------------------------

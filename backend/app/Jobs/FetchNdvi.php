@@ -27,6 +27,7 @@ class FetchNdvi implements ShouldQueue
         public readonly int $parkId,
         public readonly int $days = 10,
         public readonly ?string $runId = null,
+        public readonly bool $replace = false,
     ) {}
 
     /** @return list<int> */
@@ -45,7 +46,7 @@ class FetchNdvi implements ShouldQueue
         }
 
         try {
-            $result = $ndvi->fetch($park, $this->days);
+            $result = $ndvi->fetch($park, $this->days, $this->replace);
         } catch (VisionUnavailable $e) {
             Log::warning('NDVI fetch failed', ['park_id' => $this->parkId, 'attempt' => $this->attempts(), 'error' => $e->getMessage()]);
             throw $e; // the queue retries (tries / backoff)

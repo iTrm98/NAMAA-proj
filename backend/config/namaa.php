@@ -36,6 +36,11 @@ return [
         // Same in demo mode since Sprint 3.1: the simulated parks irrigate with the
         // real-time pump model (a session takes about 12 min), which 180 s would cut off.
         'pump_max_run_seconds' => ['normal' => 900, 'demo' => 900],
+        // Demo stand (Phase G): the board reports every 2 s; the server switches the pump off when
+        // it has not checked in for 10 s (the board does the same on its side); the watchdog runs every 2 s.
+        'stand_interval_seconds' => ['normal' => 2, 'demo' => 2],
+        'stand_checkin_seconds' => ['normal' => 10, 'demo' => 10],
+        'stand_check_seconds' => ['normal' => 2, 'demo' => 2],
         // Simulator tick (one reading per simulated node).
         'simulator_tick_seconds' => ['normal' => 30, 'demo' => 5],
         // Relay test on the hardware page: the pump runs this long (same in demo mode).
@@ -113,12 +118,10 @@ return [
         // or this many items in one frame (or the alert open for litter_open_long_seconds).
         'litter_repeated_frames' => 3,
         'litter_repeated_items' => 5,
-        // NDVI drop: the latest value this share below the average of the previous
-        // ndvi_baseline_days, with at least ndvi_min_history values; resolves within ndvi_recover_ratio.
+        // NDVI drop (v2): the composite headline this share below the park's own baseline AND
+        // z <= ndvi.drop_z, only at high/medium confidence; resolves at z >= ndvi.recover_z or within ndvi_recover_ratio.
         'ndvi_drop_ratio' => 0.10,
         'ndvi_recover_ratio' => 0.05,
-        'ndvi_baseline_days' => 28,
-        'ndvi_min_history' => 3,
     ],
 
     // Impact, water (Sprint 3.1): NAMAA's pump time against a fixed irrigation
@@ -134,7 +137,21 @@ return [
     // value is "too small to measure reliably": shown as such, never used by ndvi_drop.
     // max_cloud: tile-level cloud cover % sent to the vision service as the STAC filter; high on
     // purpose, the per-pixel cloud mask and the minimum of valid pixels drop cloudy parks.
-    'ndvi' => ['min_pixels' => 20, 'max_cloud' => (int) env('NAMAA_NDVI_MAX_CLOUD', 80)],
+    // v2 (Sprint 6.2): zonal statistics on the green zone; green_threshold = NDVI at or above which a pixel is "green";
+    // confidence weights and caps are in NdviConfidence (section 4 of decision-table.md).
+    'ndvi' => [
+        'min_pixels' => 20,
+        'max_cloud' => (int) env('NAMAA_NDVI_MAX_CLOUD', 80),
+        'green_threshold' => 0.20,
+        'shrink_m' => 5,
+        'composite_days' => 30,
+        'min_pure_pixels' => 8,
+        'drop_z' => -2.0,
+        'recover_z' => -1.0,
+        'baseline_min_n' => 4,
+        'words' => ['sparse' => 0.20, 'moderate' => 0.40],
+        'suggest' => ['days' => 60, 'ndvi_threshold' => 0.20, 'min_clear_share' => 0.5, 'min_area_m2' => 200],
+    ],
 
     'impact' => [
         // A gap between two readings of the pump node longer than this is not
@@ -163,6 +180,9 @@ return [
     // Park selection file and OSM exports (data/parks, mounted read-write into the backend container).
     'parks_data_path' => base_path('../data/parks'),
     'max_simulated_parks' => 4,
+
+    // The demo stand pump is manual only and stops by itself after this many seconds.
+    'stand' => ['pump_max_seconds' => (int) env('STAND_PUMP_MAX_SECONDS', 30)],
 
     'camera' => [
         'url' => env('CAMERA_URL', ''),
@@ -225,7 +245,7 @@ return [
         'reading_noise_pct' => 0.3,
         // Simulated field version (solar + battery): battery % drops about 1 % per
         // 10 min and the "solar panel" keeps it at or above battery_floor_pct.
-        'battery_nodes' => ['Sim 1', 'Sim 2', 'Sim 3'],
+        'battery_nodes' => ['Sim 1', 'Sim 2', 'Sim 4'],
         'battery_drop_per_second' => 1 / 600,
         'battery_floor_pct' => 40.0,
         // Expected pump flow (L/min) set on simulated pump nodes by the scenarios.
@@ -233,8 +253,8 @@ return [
     ],
     'scenario' => [
         'dry_node' => 'Sim 1',      // Al Adel
-        'leak_node' => 'Sim 2',     // Alkhatateen
-        'offline_node' => 'Sim 3',  // Alhilal
+        'leak_node' => 'Sim 2',     // the leak demo park
+        'offline_node' => 'Sim 4',  // Al Masfalah (second company); other companies fall back to a free simulated node
         'reset_dry_pct' => 35.0,   // Al Adel after reset: above its 25 % minimum; only `dry` pushes it below
         'reset_healthy_pct' => 52.0,
         'heat_node' => 'Sim 1',     // Al Adel

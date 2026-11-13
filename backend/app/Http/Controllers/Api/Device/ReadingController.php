@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Device;
 
+use App\Enums\SiteType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Device\StoreReadingRequest;
 use App\Models\Node;
@@ -21,6 +22,16 @@ class ReadingController extends Controller
 
         $park = $node->park;
         $ingestor->ingest($node, $request->safe()->except('node_id'));
+
+        // The demo stand: the board polls every 2 s, applies the pump state and turns the relay off
+        // by itself when no reply comes for 10 s. No local rule, no automatic irrigation.
+        if ($park->site_type === SiteType::DemoStand) {
+            return response()->json([
+                'pump' => $node->has_pump && $node->pump_target,
+                'interval_s' => Namaa::timing('stand_interval_seconds'),
+                'pump_max_s' => (int) config('namaa.stand.pump_max_seconds'),
+            ], 201);
+        }
 
         return response()->json([
             // The server decides the pump; nodes without a pump always get false.

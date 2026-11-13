@@ -52,7 +52,8 @@ export interface Park {
   area_m2: number | null
   lat: number
   lng: number
-  polygon: GeoJsonPolygon
+  /** Polygon or MultiPolygon (holes allowed). */
+  polygon: GeoJsonPolygon | GeoJsonMultiPolygon
   status: ParkStatus
   status_changed_at: string | null
   last_reading_at: string | null
@@ -78,13 +79,36 @@ export interface Park {
   monitoring_mode?: 'real_sensors' | 'simulated' | 'satellite_only'
   geometry_source?: string | null
   verification_status?: string | null
-  boundary?: GeoJsonPolygon | null
+  boundary?: GeoJsonPolygon | GeoJsonMultiPolygon | null
   green_zone?: GeoJsonMultiPolygon | null
   boundary_area_m2?: number | null
   green_zone_area_m2?: number | null
   demo_role?: string | null
   cover_photo?: { url: string; at: string } | null
   archived_at?: string | null
+  /** The park's name came from a source that is not confirmed yet. */
+  name_unconfirmed?: boolean
+  /** Sprint 6.2 Phase C: the trusted satellite reading (null before the first image). */
+  satellite?: ParkSatellite | null
+}
+
+export type SatelliteReasonCode = 'too_small' | 'untraced_outline' | 'narrow' | 'partial_view' | 'old_image' | 'unverified_outline' | 'some_cloud' | 'few_dates' | 'inconsistent' | 'no_baseline' | 'no_image'
+
+export interface ParkSatellite {
+  measurable: boolean
+  green_cover_pct: number | null
+  change_vs_normal_pct: number | null
+  ndvi: number | null
+  ndvi_word: 'sparse' | 'moderate' | 'dense' | null
+  confidence: { level: 'high' | 'medium' | 'low' | 'not_measurable'; score: number | null; reasons: { code: SatelliteReasonCode; params?: Record<string, unknown> }[] }
+  image_date: string | null
+  age_days: number | null
+  measured_on: 'green_zone' | 'boundary' | null
+  flags: string[]
+  composite?: { date_from: string | null; date_to: string | null; dates: number } | null
+  baseline?: unknown
+  pure_pixels?: number | null
+  has_pixels?: boolean
 }
 
 export interface ParkNode {
@@ -226,7 +250,7 @@ export interface Alert {
 export interface Task {
   id: number
   park_id: number
-  park?: { id: number; name_ar: string; name_en: string; district: string | null; status: ParkStatus; source: Source }
+  park?: { id: number; name_ar: string; name_en: string; district: string | null; site_type?: 'park' | 'demo_stand'; status: ParkStatus; source: Source }
   alert_id: number | null
   alert?: {
     id: number
@@ -470,6 +494,10 @@ export interface HardwareNode {
   online: boolean
   status?: 'awaiting_install' | 'online' | 'offline'
   last_seen_at: string | null
+  detached_at?: string | null
+  last_rejected_at?: string | null
+  last_rejected_reason?: 'detached' | 'satellite_only' | null
+  rejected_count?: number
   seconds_since_seen: number | null
   expected_interval_s: number
   offline_after_s: number
@@ -628,4 +656,28 @@ export interface DemoStory {
   leak: DemoStoryEntry
   offline: DemoStoryEntry
   litter: DemoStoryEntry
+}
+
+// ---- Sprint 6.2: demo stand live device (GET /admin/stand/live) ----
+
+export interface StandLive {
+  node_id: number
+  name: string
+  park_id: number
+  source: Source
+  board: { online: boolean; last_seen_at: string | null; link: 'wifi' | 'usb' | null; rssi: number | null; uptime_s: number | null; fw_version: string | null }
+  moisture: { pct: number | null; raw: number | null; calibrated: boolean; at: string | null }
+  trend: { at: string; raw: number; pct: number | null }[]
+  pump: {
+    target: boolean
+    reported_on: boolean | null
+    cutoff_at: string | null
+    remaining_s: number | null
+    max_s: number
+    changed_at: string | null
+    reason: string | null
+    by: { id: number; name: string } | null
+  }
+  calibration: { raw_dry: number | null; raw_wet: number | null; dry_at: string | null; wet_at: string | null; calibrated: boolean }
+  camera: { detection_id: number; at: string; count: number; litter: boolean; people_count: number } | null
 }

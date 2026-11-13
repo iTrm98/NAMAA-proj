@@ -55,6 +55,17 @@ function NodeCard({ node, rejections, now }: { node: HardwareNode; rejections: D
         {bench && <Chip tone="muted">{t('hardware.bench')}</Chip>}
       </header>
 
+      {node.last_rejected_at && (
+        <div role="alert" className="rounded-xl border border-[var(--urgent)] bg-[color-mix(in_srgb,var(--urgent)_12%,transparent)] p-2.5 text-sm">
+          <p className="m-0 font-medium">
+            {t('hardware.rejectedWarning', { reason: t(`hardware.rejectedReason.${node.last_rejected_reason ?? 'detached'}`) })}
+          </p>
+          <p className="m-0 text-xs text-text-2">
+            {t('hardware.rejectedDetail', { at: formatDateTime(node.last_rejected_at), count: formatNumber(node.rejected_count ?? 0, 0) })}
+          </p>
+        </div>
+      )}
+
       <dl className="m-0 flex flex-col gap-1.5">
         <Row label={t('hardware.type')}>
           {t(`hardware.types.${node.type}`)}
@@ -145,6 +156,7 @@ export default function HardwarePage() {
   const nodes = useHardwareNodes(includeTest)
   const rejections = useDeviceRejections()
   const now = useNow()
+  const rejectedNodes = nodes.data?.filter((n) => n.last_rejected_at).length ?? 0
 
   function toggle(on: boolean) {
     setIncludeTest(on)
@@ -164,6 +176,11 @@ export default function HardwarePage() {
         </label>
       </section>
 
+      {rejectedNodes > 0 && (
+        <div role="alert" className="rounded-xl border border-[var(--urgent)] bg-[color-mix(in_srgb,var(--urgent)_12%,transparent)] px-4 py-2.5 text-sm font-medium">
+          {t('hardware.rejectedBanner', { count: rejectedNodes })}
+        </div>
+      )}
       {nodes.isPending && (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">
           {[0, 1, 2].map((i) => (

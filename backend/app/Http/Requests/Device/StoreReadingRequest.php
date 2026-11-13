@@ -16,6 +16,15 @@ class StoreReadingRequest extends FormRequest
         return true;
     }
 
+    /** The stand firmware sends moisture_raw and link; they are the same fields as moisture and via. */
+    protected function prepareForValidation(): void
+    {
+        $this->merge(array_filter([
+            'moisture' => $this->has('moisture') ? null : $this->input('moisture_raw'),
+            'via' => $this->has('via') ? null : $this->input('link'),
+        ], fn ($v) => $v !== null));
+    }
+
     /** @return array<string, mixed> */
     public function rules(): array
     {
@@ -34,6 +43,8 @@ class StoreReadingRequest extends FormRequest
             'uptime_s' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'fw_version' => ['nullable', 'string', 'max:32'],
             'via' => ['nullable', Rule::in(['wifi', 'usb'])],
+            // Demo stand: true on the first report after a boot / reset (the server then clears the pump target).
+            'boot' => ['nullable', 'boolean'],
             // A buffered reading: when it was measured (UTC). Not in the future, at most 24 h old.
             'recorded_at' => ['nullable', 'string', function (string $attribute, mixed $value, Closure $fail): void {
                 try {

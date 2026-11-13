@@ -220,6 +220,120 @@ void test_guard_invalid_rule_ignored() {
   TEST_ASSERT_FALSE(g.rule().valid);
 }
 
+// ---- relay level and stand pump -------------------------------------------------------
+
+void test_relay_level_mapping() {
+  // Active-low module (default on the stand): ON = LOW, OFF = HIGH.
+  TEST_ASSERT_FALSE(relayLevelHigh(true, false));
+  TEST_ASSERT_TRUE(relayLevelHigh(false, false));
+  // Active-high module: ON = HIGH, OFF = LOW.
+  TEST_ASSERT_TRUE(relayLevelHigh(true, true));
+  TEST_ASSERT_FALSE(relayLevelHigh(false, true));
+}
+
+void test_parse_reply_pump_max_and_stand_reply() {
+  Reply rep;
+  const char* j = "{\"pump\":true,\"interval_s\":2,\"pump_max_s\":30}";
+  TEST_ASSERT_TRUE(parseReply(j, strlen(j), rep));
+  TEST_ASSERT_TRUE(rep.pump);
+  TEST_ASSERT_EQUAL_UINT32(2, rep.intervalS);
+  TEST_ASSERT_EQUAL_UINT32(30, rep.pumpMaxS);
+  TEST_ASSERT_FALSE(rep.hasRule);  // stand replies carry no local_rule
+
+  const char* none = "{\"pump\":false}";
+  TEST_ASSERT_TRUE(parseReply(none, strlen(none), rep));
+  TEST_ASSERT_EQUAL_UINT32(0, rep.pumpMaxS);
+
+  const char* big = "{\"pump\":false,\"pump_max_s\":99999}";
+  TEST_ASSERT_TRUE(parseReply(big, strlen(big), rep));
+  TEST_ASSERT_EQUAL_UINT32(600, rep.pumpMaxS);
+  const char* zero = "{\"pump\":false,\"pump_max_s\":0}";
+  TEST_ASSERT_TRUE(parseReply(zero, strlen(zero), rep));
+  TEST_ASSERT_EQUAL_UINT32(1, rep.pumpMaxS);
+}
+
+void test_stand_pump_off_on_boot_until_server_said_off() {
+  StandPump p;
+  TEST_ASSERT_FALSE(p.tick(0));            // boot: off, no reply yet
+  p.onReply(true, 0, 1000);                // stale ON from before the reboot
+  TEST_ASSERT_FALSE(p.tick(1001));         // still off: needs a fresh OFF -> ON
+  TEST_ASSERT_TRUE(p.locked());
+  p.onReply(false, 0, 3000);
+  TEST_ASSERT_FALSE(p.tick(3001));
+  p.onReply(true, 0, 5000);                // operator presses ON
+  TEST_ASSERT_TRUE(p.tick(5001));
+  p.onReply(false, 0, 7000);               // operator presses OFF
+  TEST_ASSERT_FALSE(p.tick(7001));
+}
+
+void test_stand_pump_hard_cap_even_if_server_says_on() {
+  StandPump p;  // default cap 30 s
+  p.onReply(false, 0, 0);
+  p.onReply(true, 0, 1000);
+  TEST_ASSERT_TRUE(p.tick(1000));
+  TEST_ASSERT_EQUAL_UINT32(30, p.remainingS(1000));
+  for (uint32_t t = 3000; t < 31000; t += 2000) {  // server keeps saying ON every 2 s
+    p.onReply(true, 0, t);
+    TEST_ASSERT_TRUE(p.tick(t));
+  }
+  p.onReply(true, 0, 30999);
+  TEST_ASSERT_TRUE(p.tick(30999));
+  TEST_ASSERT_FALSE(p.tick(31000));        // 30 s run: cut off
+  p.onReply(true, 0, 33000);
+  TEST_ASSERT_FALSE(p.tick(33000));        // still ON on the server: stays off
+  p.onReply(false, 0, 35000);
+  p.onReply(true, 0, 37000);
+  TEST_ASSERT_TRUE(p.tick(37000));         // new run after OFF -> ON
+}
+
+void test_stand_pump_max_from_server() {
+  StandPump p;
+  p.onReply(false, 5, 0);
+  TEST_ASSERT_EQUAL_UINT32(5, p.maxRunS());
+  p.onReply(true, 5, 100);
+  TEST_ASSERT_TRUE(p.tick(100));
+  p.onReply(true, 5, 2100);
+  TEST_ASSERT_TRUE(p.tick(5099));
+  p.onReply(true, 5, 4100);
+  TEST_ASSERT_FALSE(p.tick(5100));
+}
+
+void test_stand_pump_off_without_check_in_for_10s() {
+  StandPump p;
+  p.onReply(false, 0, 0);
+  p.onReply(true, 0, 1000);
+  TEST_ASSERT_TRUE(p.tick(1000));
+  TEST_ASSERT_TRUE(p.linkOk(10999));
+  TEST_ASSERT_TRUE(p.tick(10999));
+  TEST_ASSERT_FALSE(p.tick(11000));        // 10 s without a reply: off
+  TEST_ASSERT_FALSE(p.linkOk(11000));
+  p.onReply(true, 0, 12000);               // link back, target still ON
+  TEST_ASSERT_FALSE(p.tick(12000));        // no silent restart
+  p.onReply(false, 0, 14000);
+  p.onReply(true, 0, 16000);
+  TEST_ASSERT_TRUE(p.tick(16000));
+}
+
+void test_stand_pump_millis_wrap() {
+  StandPump p;
+  uint32_t t0 = 0xFFFFFFFFu - 5000;
+  p.onReply(false, 0, t0);
+  p.onReply(true, 0, t0 + 1000);
+  TEST_ASSERT_TRUE(p.tick(t0 + 1000));
+  p.onReply(true, 0, t0 + 9000);            // wraps past zero
+  TEST_ASSERT_TRUE(p.tick(t0 + 10000));
+  TEST_ASSERT_TRUE(p.linkOk(t0 + 18999));
+}
+
+void test_status_led_pattern() {
+  TEST_ASSERT_TRUE(statusLedOn(true, false, 0));
+  TEST_ASSERT_TRUE(statusLedOn(true, false, 777));
+  TEST_ASSERT_TRUE(statusLedOn(false, false, 0));
+  TEST_ASSERT_FALSE(statusLedOn(false, false, 250));
+  TEST_ASSERT_TRUE(statusLedOn(true, true, 499));
+  TEST_ASSERT_FALSE(statusLedOn(true, true, 500));
+}
+
 // ---- ring buffer --------------------------------------------------------------------
 
 void test_ring_buffer_fifo_and_overwrite() {
@@ -333,6 +447,14 @@ int main(int, char**) {
   RUN_TEST(test_guard_offline_local_run_stops_at_max_run);
   RUN_TEST(test_guard_server_reply_ends_local_run);
   RUN_TEST(test_guard_invalid_rule_ignored);
+  RUN_TEST(test_relay_level_mapping);
+  RUN_TEST(test_parse_reply_pump_max_and_stand_reply);
+  RUN_TEST(test_stand_pump_off_on_boot_until_server_said_off);
+  RUN_TEST(test_stand_pump_hard_cap_even_if_server_says_on);
+  RUN_TEST(test_stand_pump_max_from_server);
+  RUN_TEST(test_stand_pump_off_without_check_in_for_10s);
+  RUN_TEST(test_stand_pump_millis_wrap);
+  RUN_TEST(test_status_led_pattern);
   RUN_TEST(test_ring_buffer_fifo_and_overwrite);
   RUN_TEST(test_ring_buffer_120_readings);
   RUN_TEST(test_parse_set_commands);

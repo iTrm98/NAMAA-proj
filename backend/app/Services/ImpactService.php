@@ -65,9 +65,7 @@ class ImpactService
                 'water' => $this->water(collect([$park]), $water),
                 'alerts' => $alerts->where('park_id', $park->id)->count(),
                 'tasks' => $this->tasks($parkTasks, $from, $to),
-                'ndvi' => $park->relationLoaded('latestNdvi') && $park->latestNdvi
-                    ? $park->latestNdvi->summary()
-                    : null,
+                'ndvi' => SatelliteBlock::legacy($park),
             ];
         })->values();
 

@@ -148,7 +148,8 @@ class RulesEngine
         $node = $c->node;
         $moisture = $c->reading->moisture_pct;
 
-        if (! $park->auto_irrigation || ! $node->has_pump || $moisture === null || RuleContext::faulty($c->reading)) {
+        // The demo stand's pump is manual only.
+        if ($park->site_type === \App\Enums\SiteType::DemoStand || ! $park->auto_irrigation || ! $node->has_pump || $moisture === null || RuleContext::faulty($c->reading)) {
             return;
         }
 

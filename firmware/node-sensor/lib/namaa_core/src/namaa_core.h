@@ -90,14 +90,76 @@ struct LocalRule {
 struct Reply {
   bool pump = false;
   uint32_t intervalS = 0;  // 0 = not given
+  uint32_t pumpMaxS = 0;   // 0 = not given (stand: board keeps its default cap)
   bool hasRule = false;
   LocalRule rule;
 };
 
-// Parses {"pump":bool,"interval_s":int,"local_rule":{"min":..,"target":..,"max_run_s":..}}.
-// interval_s is clamped to 2..3600. A malformed local_rule is ignored (hasRule
-// stays false). Returns false if the JSON is invalid or "pump" is missing.
+// Parses {"pump":bool,"interval_s":int,"pump_max_s":int,
+//         "local_rule":{"min":..,"target":..,"max_run_s":..}}.
+// interval_s is clamped to 2..3600, pump_max_s to 1..600. A malformed local_rule
+// is ignored (hasRule stays false). Returns false if the JSON is invalid or
+// "pump" is missing.
 bool parseReply(const char* json, size_t len, Reply& out);
+
+// ---------------------------------------------------------------------------
+// Relay level
+// ---------------------------------------------------------------------------
+
+// GPIO level that puts the relay in the wanted state. activeHigh = true: IN=HIGH
+// closes the relay; false (most cheap modules): IN=LOW closes it.
+// Returns true for HIGH, false for LOW.
+inline bool relayLevelHigh(bool on, bool activeHigh) { return on == activeHigh; }
+
+// ---------------------------------------------------------------------------
+// Demo stand pump (manual only, server decides, board enforces the safety)
+// ---------------------------------------------------------------------------
+
+// Relay decision for the demo stand. No local rule, no automatic watering:
+//  - The relay is on only while the last server reply said pump = true AND that
+//    reply is younger than linkTimeoutS (board side "no check-in -> OFF").
+//  - One run never lasts longer than maxRunS (the reply's pump_max_s, else the
+//    default), even if the server keeps saying on.
+//  - After a cut-off (max run reached or link lost while on) and after boot the
+//    pump stays off until the server has said pump = false once: a fresh ON
+//    from the dashboard is needed to start a new run.
+class StandPump {
+ public:
+  static const uint32_t kDefaultMaxRunS = 30;
+  static const uint32_t kDefaultLinkTimeoutS = 10;
+  static const uint32_t kMaxRunCapS = 600;
+
+  explicit StandPump(uint32_t defaultMaxRunS = kDefaultMaxRunS,
+                     uint32_t linkTimeoutS = kDefaultLinkTimeoutS);
+
+  // A successful server reply. maxRunS = 0 keeps the current cap.
+  void onReply(bool pumpTarget, uint32_t maxRunS, uint32_t nowMs);
+
+  // Returns the relay state to apply now.
+  bool tick(uint32_t nowMs);
+
+  bool on() const { return on_; }
+  bool linkOk(uint32_t nowMs) const;
+  // True while waiting for pump = false before a new run may start.
+  bool locked() const { return locked_; }
+  uint32_t maxRunS() const { return maxRunMs_ / 1000UL; }
+  // Seconds until the cap stops the current run (0 when off).
+  uint32_t remainingS(uint32_t nowMs) const;
+
+ private:
+  uint32_t maxRunMs_;
+  uint32_t linkMs_;
+  bool haveReply_ = false;
+  bool target_ = false;
+  uint32_t lastReplyMs_ = 0;
+  bool on_ = false;
+  uint32_t runStartMs_ = 0;
+  bool locked_ = true;  // OFF on boot until the server has said "off" once
+};
+
+// Status LED pattern: offline = fast blink (250 ms), online and pump off =
+// steady on, pump on = slow blink (500 ms).
+bool statusLedOn(bool linkOk, bool pumpOn, uint32_t nowMs);
 
 // Decides the relay state. Pure state machine; the caller passes millis().
 //

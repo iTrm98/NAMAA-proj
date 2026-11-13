@@ -3,12 +3,15 @@
 namespace App\Services;
 
 use App\Events\ReadingReceived;
+use App\Enums\DataSource;
 use App\Enums\MonitoringMode;
+use App\Enums\PumpReason;
 use App\Models\Node;
 use App\Models\Reading;
 use App\Support\Realtime;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Stores one reading from a sensor node, updates the cached state (the node's
@@ -26,9 +29,10 @@ class ReadingIngestor
     public function __construct(
         private readonly Calibration $calibration,
         private readonly RulesEngine $rules,
+        private readonly PumpService $pump,
     ) {}
 
-    /** @param array{moisture?: ?int, flow?: ?float, temperature?: ?float, humidity?: ?float, pump_on?: ?bool, water_level?: ?int, battery_pct?: ?float, recorded_at?: ?string, rssi?: ?int, uptime_s?: ?int, fw_version?: ?string, via?: ?string} $data */
+    /** @param array{moisture?: ?int, flow?: ?float, temperature?: ?float, humidity?: ?float, pump_on?: ?bool, boot?: ?bool, water_level?: ?int, battery_pct?: ?float, recorded_at?: ?string, rssi?: ?int, uptime_s?: ?int, fw_version?: ?string, via?: ?string} $data */
     public function ingest(Node $node, array $data): Reading
     {
         return DB::transaction(function () use ($node, $data) {
@@ -36,10 +40,20 @@ class ReadingIngestor
 
             $park = $node->park()->lockForUpdate()->first();
 
+            $this->standFailSafe($node, $park, $data);
+
             // A detached node, or a park that is satellite_only, does not feed the park:
             // accepted (the board gets its normal reply) but nothing is stored or evaluated.
             if ($node->detached_at !== null || $park->monitoring_mode === MonitoringMode::SatelliteOnly) {
+                $this->recordRejected($node, $node->detached_at !== null ? 'detached' : 'satellite_only');
+
                 return new Reading(['node_id' => $node->id, 'park_id' => $node->park_id, 'source' => $node->source]);
+            }
+
+            // An accepted reading means the warning is over.
+            if ($node->last_rejected_at !== null) {
+                Node::whereKey($node->id)->update(['last_rejected_at' => null, 'last_rejected_reason' => null, 'rejected_count' => 0]);
+                $node->forceFill(['last_rejected_at' => null, 'last_rejected_reason' => null, 'rejected_count' => 0])->syncOriginal();
             }
 
             $recordedAt = ! empty($data['recorded_at']) ? Carbon::parse($data['recorded_at'])->utc() : null;
@@ -115,5 +129,38 @@ class ReadingIngestor
 
             return $reading;
         });
+    }
+
+    /**
+     * Demo stand: a pump that was on must not come back by itself. A reading that follows a
+     * silence longer than stand_checkin_seconds, or that says the board just booted (boot flag
+     * or a smaller uptime), clears the pump target first; the reply then tells the board OFF.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function standFailSafe(Node $node, \App\Models\Park $park, array $data): void
+    {
+        if (! $node->has_pump || ! $node->pump_target || $park->site_type !== \App\Enums\SiteType::DemoStand || ! empty($data['recorded_at'])) {
+            return;
+        }
+
+        $rebooted = ! empty($data['boot'])
+            || (isset($data['uptime_s']) && $node->uptime_s !== null && (int) $data['uptime_s'] < $node->uptime_s);
+
+        if ($rebooted || $this->pump->silent($node)) {
+            $node->setRelation('park', $park);
+            $this->pump->set($node, false, PumpReason::AutoOffNoCheckin);
+        }
+    }
+
+    /** Remember a refused post of a real board (last time, reason, count) so the Hardware page can warn. Simulated nodes are the simulator's own. */
+    private function recordRejected(Node $node, string $reason): void
+    {
+        if ($node->source !== DataSource::Real || ! Schema::hasColumn('nodes', 'last_rejected_at')) {
+            return;
+        }
+        Node::whereKey($node->id)->update([
+            'last_rejected_at' => now(), 'last_rejected_reason' => $reason, 'rejected_count' => DB::raw('rejected_count + 1'),
+        ]);
     }
 }

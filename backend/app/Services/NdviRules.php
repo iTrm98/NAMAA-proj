@@ -4,17 +4,18 @@ namespace App\Services;
 
 use App\Enums\AlertStatus;
 use App\Enums\AlertType;
+use App\Enums\GeometrySource;
 use App\Models\Alert;
-use App\Models\NdviReading;
+use App\Models\NdviComposite;
 use App\Models\Park;
 use App\Support\Namaa;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * ndvi_drop (plant, low): the newest NDVI value is 10 % or more below the
- * average of the values in the 4 weeks before it (at least 3 values), the
- * slow sign that a park is losing green cover. It resolves once a newer value
- * is back within 5 % of that average. Run after every NDVI fetch.
+ * ndvi_drop (plant, low), v2 (decision-table.md, rule 10): the 30-day composite headline is far below the
+ * park's own baseline (z <= -2 and 10 % or more), judged only at high or medium confidence, on at least
+ * two clear dates, on a traced outline. Never from a partial view. Run after every NDVI fetch.
  */
 class NdviRules
 {
@@ -25,49 +26,59 @@ class NdviRules
     /** @return array{latest: ?float, baseline: ?float, history: int, drop: ?float, outcome: string} */
     public function check(Park $park): array
     {
+        if (! Schema::hasTable('ndvi_composites')) {
+            return ['latest' => null, 'baseline' => null, 'history' => 0, 'drop' => null, 'outcome' => 'no_data'];
+        }
+
         return DB::transaction(function () use ($park) {
-            $latest = $park->ndviReadings()->orderByDesc('date')->first();
+            $c = NdviComposite::where('park_id', $park->id)->orderByDesc('date')->first();
             $open = Alert::where('park_id', $park->id)->where('type', AlertType::NdviDrop)
                 ->where('status', AlertStatus::Open)->lockForUpdate()->first();
 
-            $result = ['latest' => $latest?->mean, 'baseline' => null, 'history' => 0, 'drop' => null, 'outcome' => 'no_data'];
-            if (! $latest) {
+            $result = [
+                'latest' => $c?->value, 'baseline' => $c?->baseline_median, 'history' => $c?->baseline_n ?? 0,
+                'drop' => $c?->rel_drop, 'outcome' => 'no_data',
+            ];
+            if (! $c) {
                 return $result;
             }
 
-            // An outline of fewer than ndvi.min_pixels valid pixels cannot be measured reliably:
-            // never raise ndvi_drop for it, and its values never count as history.
-            if ($latest->tooSmall()) {
+            if ($c->level === NdviConfidence::NOT_MEASURABLE) {
                 if ($open) {
-                    $this->alerts->resolve($open, 'ndvi_too_small');
+                    $this->alerts->resolve($open->setRelation('park', $park), 'not_measurable');
                 }
 
-                return ['outcome' => 'too_small'] + $result;
+                return ['outcome' => 'not_measurable'] + $result;
             }
+            if ($park->geometry_source !== GeometrySource::Traced) {
+                if ($open) {
+                    $this->alerts->resolve($open->setRelation('park', $park), 'unverified_outline');
+                }
 
-            $history = NdviReading::where('park_id', $park->id)
-                ->where('pixels', '>=', (int) config('namaa.ndvi.min_pixels'))
-                ->where('date', '<', $latest->date->toDateString())
-                ->where('date', '>=', $latest->date->copy()->subDays((int) Namaa::rule('ndvi_baseline_days'))->toDateString())
-                ->pluck('mean');
-            $result['history'] = $history->count();
-
-            if ($history->count() < (int) Namaa::rule('ndvi_min_history')) {
+                return ['outcome' => 'unverified_outline'] + $result;
+            }
+            // A partial view or a doubtful image: an open alert stays as it is, nothing new is raised.
+            if (! NdviConfidence::trusted($c->level)) {
+                return ['outcome' => 'low_confidence'] + $result;
+            }
+            if ($c->baseline_kind === 'none' || $c->z === null || $c->rel_drop === null) {
                 return ['outcome' => 'not_enough_history'] + $result;
             }
 
-            $baseline = (float) $history->avg();
-            $drop = $baseline > 0 ? ($baseline - $latest->mean) / $baseline : 0.0;
-            $result = ['baseline' => round($baseline, 3), 'drop' => round($drop, 3)] + $result;
             $data = [
-                'ndvi' => $latest->mean,
-                'ndvi_date' => $latest->date->toDateString(),
-                'baseline' => round($baseline, 3),
-                'drop_pct' => round($drop * 100, 1),
-                'history' => $history->count(),
+                'ndvi' => $c->value,
+                'baseline' => $c->baseline_median,
+                'mad' => $c->baseline_mad,
+                'z' => $c->z,
+                'drop_pct' => round($c->rel_drop * 100, 1),
+                'level' => $c->level,
+                'confidence' => $c->confidence,
+                'dates' => $c->dates_count,
+                'newest_date' => $c->date->toDateString(),
             ];
 
-            if ($drop >= (float) Namaa::rule('ndvi_drop_ratio')) {
+            $dropped = $c->z <= (float) config('namaa.ndvi.drop_z') && $c->rel_drop >= (float) Namaa::rule('ndvi_drop_ratio');
+            if ($dropped && $c->dates_count >= 2) {
                 if ($open) {
                     $this->alerts->touch($open, $data);
 
@@ -78,8 +89,8 @@ class NdviRules
                 return ['outcome' => 'raised'] + $result;
             }
 
-            if ($open && $drop <= (float) Namaa::rule('ndvi_recover_ratio')) {
-                $this->alerts->resolve($open, 'ndvi_recovered');
+            if ($open && ($c->z >= (float) config('namaa.ndvi.recover_z') || $c->rel_drop <= (float) Namaa::rule('ndvi_recover_ratio'))) {
+                $this->alerts->resolve($open->setRelation('park', $park), 'ndvi_recovered');
 
                 return ['outcome' => 'resolved'] + $result;
             }

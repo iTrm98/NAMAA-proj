@@ -14,7 +14,7 @@ use JsonException;
  * park is never changed (use namaa:parks:set-mode); a traced boundary or green zone is kept
  * unless --force-geometry. --dry-run prints the table and changes nothing.
  */
-#[Signature('namaa:parks:import {file : GeoJSON FeatureCollection (data/parks/makkah-parks.geojson)} {--dry-run} {--force-geometry : overwrite traced boundaries and green zones} {--company= : company id (default: the first company)}')]
+#[Signature('namaa:parks:import {file : GeoJSON FeatureCollection (data/parks/makkah-parks.geojson)} {--dry-run} {--force-geometry : overwrite traced boundaries and green zones} {--company= : company id for NEW parks (default: the first company; matched parks keep theirs)} {--claims= : claims JSON keyed by osm_id (default: namaa-park-claims.json next to the file)}')]
 #[Description('Import parks from a GeoJSON selection file (create / update / unchanged table; --dry-run changes nothing).')]
 class ImportParksCommand extends Command
 {
@@ -46,12 +46,15 @@ class ImportParksCommand extends Command
             return self::FAILURE;
         }
 
+        $claimsFile = $this->option('claims') ?: dirname($file).'/namaa-park-claims.json';
+        $claimsByOsm = is_file($claimsFile) ? (json_decode((string) file_get_contents($claimsFile), true) ?: []) : [];
+
         $dry = (bool) $this->option('dry-run');
-        $rows = $import->run($collection, (int) $companyId, $dry, (bool) $this->option('force-geometry'));
+        $rows = $import->run($collection, (int) $companyId, $dry, (bool) $this->option('force-geometry'), $claimsByOsm);
 
         $this->info(($dry ? 'DRY RUN, nothing written. ' : '')."Company {$companyId}.");
-        $this->table(['Action', 'Park', 'Slug', 'Area m2', 'Mode', 'New claims', 'Notes'], array_map(fn ($r) => [
-            $r['action'], $r['name'], $r['slug'] ?? '-', $r['area_m2'] ?? '-', $r['mode'] ?? '-', $r['claims'], implode('; ', $r['notes']),
+        $this->table(['Action', 'Park', 'Matched to', 'Company', 'Area m2', 'Parts/holes', 'Mode', 'New claims', 'Notes'], array_map(fn ($r) => [
+            $r['action'], $r['name'], $r['matched'] ?? '-', $r['company_id'] ?? '-', $r['area_m2'] ?? '-', "{$r['parts']}/{$r['holes']}", $r['mode'] ?? '-', $r['claims'], implode('; ', $r['notes']),
         ], $rows));
         $counts = array_count_values(array_column($rows, 'action'));
         $this->line(collect(['create', 'update', 'unchanged', 'ambiguous', 'skipped'])->map(fn ($a) => "{$a}: ".($counts[$a] ?? 0))->implode(', '));

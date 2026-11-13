@@ -11,7 +11,6 @@ use App\Models\Company;
 use App\Models\NdviReading;
 use App\Models\Park;
 use App\Models\User;
-use App\Services\NdviRules;
 use App\Services\NdviService;
 use App\Services\VisionUnavailable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,7 +53,7 @@ class NdviTest extends TestCase
                 $this->calls++;
 
                 return $this->visionUp
-                    ? Http::response(['park_id' => $this->park->id, 'values' => $this->values, 'dates' => $this->dates])
+                    ? Http::response(['park_id' => $this->park->id, 'measured_on' => 'boundary', 'flags' => [], 'geometry' => ['usual_pixels' => 40.0, 'pure_pixels' => 30, 'inner_width_m' => 90.0], 'values' => array_map(fn ($v) => $v + ['median' => $v['mean'], 'p90' => $v['mean'], 'pure_pixels' => 30, 'weighted_pixels' => 40.0, 'clear_pixels' => 40.0, 'clear_fraction' => 1.0, 'green_cover_pct' => 60.0], $this->values), 'dates' => $this->dates, 'composite' => null, 'pixels' => null])
                     : Http::response(['detail' => 'STAC timed out'], 504);
             },
         ]);
@@ -66,11 +65,6 @@ class NdviTest extends TestCase
         foreach ($byDate as $date => $mean) {
             NdviReading::create(['park_id' => $this->park->id, 'date' => $date, 'mean' => $mean, 'pixels' => 300]);
         }
-    }
-
-    private function check(): array
-    {
-        return app(NdviRules::class)->check($this->park);
     }
 
     public function test_fetch_upserts_and_running_it_twice_changes_nothing(): void
@@ -93,7 +87,7 @@ class NdviTest extends TestCase
 
         Http::assertSent(fn ($r) => $r->url() === 'http://vision.test/ndvi'
             && $r['park_id'] === $this->park->id
-            && $r['polygon']['type'] === 'Polygon'
+            && $r['boundary']['type'] === 'Polygon' && $r['green_zone'] === null && $r['composite_days'] === 30 && $r['shrink_m'] == 5
             && $r['date_to'] === now('Asia/Riyadh')->toDateString());
     }
 
@@ -133,71 +127,6 @@ class NdviTest extends TestCase
         $this->assertSame(1, $state['failed']);
         $this->assertSame(1, $state['values']);
         $this->assertNotNull($state['finished_at']);
-    }
-
-    public function test_drop_of_10_percent_below_the_4_week_average_raises_ndvi_drop(): void
-    {
-        $this->history(['2026-10-10' => 0.50, '2026-10-15' => 0.52, '2026-10-20' => 0.48, '2026-10-25' => 0.44]);
-
-        $result = $this->check();
-
-        $this->assertSame('raised', $result['outcome']);
-        $this->assertSame(0.5, $result['baseline']);
-        $alert = Alert::sole();
-        $this->assertSame(AlertType::NdviDrop, $alert->type);
-        $this->assertSame(TaskPriority::Low, $alert->priority);
-        $this->assertEquals(12.0, $alert->data['drop_pct']);
-
-        // Running it again keeps one alert.
-        $this->check();
-        $this->assertSame(1, Alert::count());
-    }
-
-    public function test_a_drop_under_10_percent_does_not_raise(): void
-    {
-        $this->history(['2026-10-10' => 0.50, '2026-10-15' => 0.50, '2026-10-20' => 0.50, '2026-10-25' => 0.455]);
-
-        $this->assertSame('ok', $this->check()['outcome']);
-        $this->assertSame(0, Alert::count());
-    }
-
-    public function test_values_older_than_4_weeks_are_not_in_the_average(): void
-    {
-        // The two old high values would make 0.44 a drop; inside 28 days the average is 0.45.
-        $this->history(['2026-09-01' => 0.80, '2026-09-05' => 0.80, '2026-10-10' => 0.45, '2026-10-15' => 0.45, '2026-10-20' => 0.45, '2026-10-25' => 0.44]);
-
-        $result = $this->check();
-
-        $this->assertSame(3, $result['history']);
-        $this->assertSame('ok', $result['outcome']);
-    }
-
-    public function test_it_resolves_once_back_within_5_percent(): void
-    {
-        $this->history(['2026-10-10' => 0.50, '2026-10-15' => 0.50, '2026-10-20' => 0.50, '2026-10-25' => 0.44]);
-        $this->check();
-        $alert = Alert::sole();
-
-        // 8 % below the average (0.485 of the 4 values before it): not back yet.
-        $this->history(['2026-10-30' => 0.446]);
-        $this->assertSame('still_open', $this->check()['outcome']);
-
-        $this->history(['2026-11-04' => 0.47]);
-        $result = $this->check();
-
-        $this->assertSame('resolved', $result['outcome']);
-        $this->assertSame(AlertStatus::Resolved, $alert->fresh()->status);
-    }
-
-    public function test_not_enough_history_never_raises(): void
-    {
-        $this->history(['2026-10-15' => 0.50, '2026-10-20' => 0.50, '2026-10-25' => 0.20]);
-
-        $result = $this->check();
-
-        $this->assertSame('not_enough_history', $result['outcome']);
-        $this->assertSame(2, $result['history']);
-        $this->assertSame(0, Alert::count());
     }
 
     public function test_admin_and_municipality_read_the_history_oldest_first(): void
@@ -249,7 +178,7 @@ class NdviTest extends TestCase
     {
         Queue::fake();
         $this->artisan('namaa:ndvi')->expectsOutputToContain('Queued NDVI for 1 park(s)')->assertSuccessful();
-        Queue::assertPushed(FetchNdvi::class, fn (FetchNdvi $job) => $job->days === 10);
+        Queue::assertPushed(FetchNdvi::class, fn (FetchNdvi $job) => $job->days === 35);
 
         $this->values = [['date' => now()->subDays(3)->toDateString(), 'mean' => 0.42, 'pixels' => 250]];
         $this->artisan('namaa:ndvi', ['--days' => 90, '--park' => $this->park->id, '--sync' => true])
@@ -281,47 +210,13 @@ class NdviTest extends TestCase
         ];
         $this->artisan('namaa:ndvi', ['--park' => $this->park->id, '--sync' => true])
             ->expectsOutputToContain('2026-11-11  kept     NDVI 0.31  412 clear px')
-            ->expectsOutputToContain('2026-11-06  dropped  only 4 clear px (min 10)')
+            ->expectsOutputToContain('2026-11-06  dropped  no clear pixel after the cloud mask')
             ->expectsOutputToContain('2026-11-08  dropped  outside the outline')
             ->expectsOutputToContain('2026-11-09  dropped  no data')
             ->assertSuccessful();
     }
 
     // ---- Sprint 4, 0.3: outlines too small for Sentinel-2 ----
-
-    public function test_a_small_outline_is_too_small_to_measure_and_never_raises_ndvi_drop(): void
-    {
-        $this->history(['2026-10-10' => 0.50, '2026-10-15' => 0.52, '2026-10-20' => 0.48]);
-        // A big fall, but measured on 12 pixels only (< 20): unreliable.
-        NdviReading::create(['park_id' => $this->park->id, 'date' => '2026-10-25', 'mean' => 0.20, 'pixels' => 12]);
-
-        $result = $this->check();
-
-        $this->assertSame('too_small', $result['outcome']);
-        $this->assertSame(0, Alert::count());
-    }
-
-    public function test_an_open_ndvi_drop_resolves_when_the_park_becomes_too_small(): void
-    {
-        $this->history(['2026-10-10' => 0.50, '2026-10-15' => 0.52, '2026-10-20' => 0.48, '2026-10-25' => 0.30]);
-        $this->assertSame('raised', $this->check()['outcome']);
-
-        NdviReading::create(['park_id' => $this->park->id, 'date' => '2026-10-30', 'mean' => 0.20, 'pixels' => 12]);
-
-        $this->assertSame('too_small', $this->check()['outcome']);
-        $this->assertSame(0, Alert::where('status', 'open')->count());
-    }
-
-    public function test_small_readings_do_not_count_as_history(): void
-    {
-        NdviReading::create(['park_id' => $this->park->id, 'date' => '2026-10-10', 'mean' => 0.9, 'pixels' => 5]);
-        $this->history(['2026-10-15' => 0.50, '2026-10-20' => 0.50, '2026-10-22' => 0.50, '2026-10-25' => 0.44]);
-
-        $result = $this->check();
-
-        $this->assertSame(0.5, $result['baseline'], 'the 5-pixel value is not in the average');
-        $this->assertSame('raised', $result['outcome']);
-    }
 
     public function test_the_api_marks_too_small_values_and_hides_their_mean_on_the_park(): void
     {

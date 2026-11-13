@@ -5,11 +5,13 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Map, { Layer, Source } from 'react-map-gl/maplibre'
 import { Link, useParams } from 'react-router'
+import type { Geometry } from 'geojson'
 import { toast } from 'sonner'
 import { FrameImage } from '@/components/camera'
 import { Chip, type ChipTone, EmptyState, GlassCard, Skeleton } from '@/components/ds'
 import { alertDetail, TaskPhoto } from '@/components/ops'
 import { STATUS_COLORS } from '@/components/StatusPill'
+import { isAreaGeometry, outerPoints } from '@/lib/geo'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +30,7 @@ import { parkName } from '@/hooks/useParks'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { formatAgo, formatNumber } from '@/lib/format'
+import { SatelliteNote } from '@/components/map/SatelliteNote'
 import { mapStyle } from '@/lib/mapStyle'
 import { personName, taskTitle } from '@/lib/names'
 import { wateringOf } from '@/lib/watering'
@@ -124,6 +127,7 @@ function TaskDetail({ task }: { task: WorkerTaskDetail }) {
           <Chip tone={PRIORITY_TONE[task.priority]}>{t(`priority.${task.priority}`)}</Chip>
           <Chip tone="muted">{t(`taskStatus.${task.status}`)}</Chip>
           {task.category && <Chip tone="muted">{t(`category.${task.category}`)}</Chip>}
+          {park.site_type === 'demo_stand' && <Chip tone="muted">{t('taskCard.stand')}</Chip>}
           <Chip tone="muted">{t(`source.${park.source}`)}</Chip>
         </div>
         <h1 className="m-0 text-[26px] leading-tight font-normal">{taskTitle(t, i18n.language, task)}</h1>
@@ -175,9 +179,10 @@ function TaskDetail({ task }: { task: WorkerTaskDetail }) {
 /** The park outline on a small, non-interactive map, with "Open in Maps". */
 function MiniMap({ park }: { park: Park }) {
   const { t } = useTranslation()
-  const data = useMemo(() => ({ type: 'Feature' as const, properties: {}, geometry: park.polygon }), [park.polygon])
+  const data = useMemo(() => ({ type: 'Feature' as const, properties: {}, geometry: park.polygon as Geometry }), [park.polygon])
   const bounds = useMemo(() => {
-    const points = park.polygon?.coordinates?.[0] ?? [[park.lng, park.lat]]
+    const ring = outerPoints(park.polygon)
+    const points = ring.length ? ring : [[park.lng, park.lat]]
     const lngs = points.map((c) => c[0])
     const lats = points.map((c) => c[1])
     return [
@@ -196,13 +201,14 @@ function MiniMap({ park }: { park: Park }) {
         attributionControl={{ compact: true }}
         style={{ width: '100%', height: '100%' }}
       >
-        {park.polygon?.type === 'Polygon' && (
+        {isAreaGeometry(park.polygon) && (
           <Source id="park" type="geojson" data={data}>
             <Layer id="park-fill" type="fill" paint={{ 'fill-color': color, 'fill-opacity': 0.25 }} />
             <Layer id="park-line" type="line" paint={{ 'line-color': color, 'line-width': 3 }} />
           </Source>
         )}
       </Map>
+      <SatelliteNote basemap="satellite" className="bottom-1.5" />
       <a
         href={`https://www.google.com/maps?q=${park.lat},${park.lng}`}
         target="_blank"

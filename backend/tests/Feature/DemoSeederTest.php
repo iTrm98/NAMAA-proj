@@ -22,6 +22,23 @@ class DemoSeederTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_reseeding_the_parks_never_overwrites_a_park_with_an_osm_or_traced_boundary(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $park = Park::where('name_en', 'Al Aziziyah Park')->firstOrFail();
+        $traced = ['type' => 'Polygon', 'coordinates' => [[[39.9, 21.4], [39.91, 21.4], [39.91, 21.41], [39.9, 21.4]]]];
+        $park->update(['polygon' => $traced, 'geometry_source' => 'traced', 'area_m2' => 1234]);
+        $nodes = Node::count();
+
+        $this->seed(\Database\Seeders\DemoParksSeeder::class);
+
+        $this->assertSame(3, Park::count());
+        $this->assertSame($nodes, Node::count());
+        $park->refresh();
+        $this->assertSame($traced, $park->polygon);
+        $this->assertSame(1234, $park->area_m2);
+    }
+
     public function test_demo_seed_builds_the_expected_demo(): void
     {
         $this->assertSame('sqlite', DB::connection()->getDriverName());
@@ -30,25 +47,28 @@ class DemoSeederTest extends TestCase
 
         $this->assertSame(4, User::count());
         $this->assertNull(User::where('email', 'municipality@namaa.test')->value('company_id'));
-        $this->assertSame(5, Park::count());
-        // 4 sensors, Camera 1 and Sim Cam (Sprint 3.1); the second company's park is not seeded.
-        $this->assertSame(7, Node::count());
+        $this->assertSame(3, Park::count());
+        // Model A, Camera 1, Sim 1, Sim 2 and Sim Cam (Sprint 3.1); the second company's park is not seeded.
+        $this->assertSame(5, Node::count());
         $this->assertSame('simulated', Node::where('name', 'Sim Cam')->sole()->source->value);
         $this->assertNull(Park::where('name_en', 'Al Masfalah Park')->first());
         // Data sources come from parks.json (Sprint 3.1).
         $this->assertSame('osm', Park::where('name_en', 'King Abdullah Park')->value('outline_source'));
-        $this->assertSame('approximate', Park::where('name_en', 'Garden Aziziyah')->value('outline_source'));
-        $this->assertSame(5, DB::table('personal_access_tokens')->where('abilities', '["device"]')->count());
+        $this->assertSame('osm', Park::where('name_en', 'Al Aziziyah Park')->value('outline_source'));
+        $this->assertSame(27, count(Park::where('name_en', 'Al Aziziyah Park')->firstOrFail()->polygon['coordinates'][0]));
+        $this->assertNull(Park::where('name_en', 'Alhilal Park')->first());
+        $this->assertNull(Park::where('name_en', 'Garden Aziziyah')->first());
+        $this->assertSame(3, DB::table('personal_access_tokens')->where('abilities', '["device"]')->count());
 
         // Real parks: no fake history.
         $real = Park::where('source', 'real')->pluck('id');
-        $this->assertCount(2, $real);
+        $this->assertCount(1, $real);
         $this->assertSame(0, Reading::whereIn('park_id', $real)->count());
         $this->assertSame(0, NdviReading::whereIn('park_id', $real)->count());
-        $this->assertSame(2, Park::whereIn('id', $real)->where('status', ParkStatus::Offline)->count());
+        $this->assertSame(1, Park::whereIn('id', $real)->where('status', ParkStatus::Offline)->count());
 
         // Simulated parks: 7 days x 144 readings each, no seeded NDVI (satellite data is fetched, never invented).
-        $this->assertSame(3 * 1008, Reading::where('source', 'simulated')->count());
+        $this->assertSame(2 * 1008, Reading::where('source', 'simulated')->count());
         $this->assertSame(0, NdviReading::count());
 
         $adel = Park::where('name_en', 'Al Adel Park')->firstOrFail();
@@ -59,7 +79,7 @@ class DemoSeederTest extends TestCase
         $this->assertSame(TaskStatus::Open, $task->status);
         $this->assertNull($task->assigned_to);
 
-        foreach (['Alkhatateen Park' => [AlertType::Leak, 42], 'Alhilal Park' => [AlertType::Dry, 65]] as $name => [$type, $minutes]) {
+        foreach (['Al Aziziyah Park' => [AlertType::Leak, 42]] as $name => [$type, $minutes]) {
             $park = Park::where('name_en', $name)->firstOrFail();
             $this->assertSame(ParkStatus::Ok, $park->status);
             $alert = Alert::where('park_id', $park->id)->where('type', $type)->firstOrFail();

@@ -11,22 +11,20 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 /**
- * NDVI for every park with an outline (or one with --park). Queued by default
- * (the daily schedule); --sync runs here and prints the result per park, e.g.
- * the 90-day backfill: php artisan namaa:ndvi --days=90 --sync
+ * NDVI for every real park with an outline (or one with --park=ID). The demo stand and archived parks are
+ * never measured. Queued by default (the daily schedule); --sync runs here and prints the result per park,
+ * e.g. the recompute: php artisan namaa:ndvi --days=60 --sync --park=all --replace
  */
-#[Signature('namaa:ndvi {--days=10 : days back from today} {--park= : one park id} {--sync : run now instead of queueing}')]
-#[Description('Fetch Sentinel-2 NDVI per park from the vision service and run the ndvi_drop rule.')]
+#[Signature('namaa:ndvi {--days=35 : days back from today} {--park=all : one park id, or all} {--sync : run now instead of queueing} {--replace : delete the window\'s v2 values and composites once the new answer has arrived}')]
+#[Description('Fetch Sentinel-2 NDVI per park (green zone, composite, confidence) from the vision service and run the ndvi_drop rule.')]
 class FetchNdviCommand extends Command
 {
-    /** The vision service's MIN_VALID_PIXELS, for the printed reason. */
-    private const MIN_PIXELS = 10;
-
     public function handle(NdviService $ndvi): int
     {
         $days = max(1, min(365, (int) $this->option('days')));
+        $one = $this->option('park');
         $parks = Park::query()->parks()
-            ->when($this->option('park'), fn ($q, $id) => $q->whereKey($id))
+            ->when($one && $one !== 'all', fn ($q) => $q->whereKey((int) $one))
             ->orderBy('id')->get()
             ->filter(fn (Park $p) => ! empty($p->polygon));
 
@@ -38,7 +36,7 @@ class FetchNdviCommand extends Command
 
         if (! $this->option('sync')) {
             foreach ($parks as $park) {
-                FetchNdvi::dispatch($park->id, $days);
+                FetchNdvi::dispatch($park->id, $days, null, (bool) $this->option('replace'));
             }
             $this->info("Queued NDVI for {$parks->count()} park(s), last $days days.");
 
@@ -48,10 +46,16 @@ class FetchNdviCommand extends Command
         $failed = 0;
         foreach ($parks as $park) {
             try {
-                $r = $ndvi->fetch($park, $days);
-                $this->line(sprintf('#%d %s: %d values (%d new), latest %s, baseline %s, %s',
+                $r = $ndvi->fetch($park, $days, (bool) $this->option('replace'));
+                if ($r['skipped']) {
+                    $this->warn("#{$park->id} {$park->name_en}: skipped ({$r['skipped']})");
+
+                    continue;
+                }
+                $this->line(sprintf('#%d %s: %d values (%d new), headline %s, green cover %s%%, %s %s, %d composite date(s), drop rule: %s',
                     $park->id, $park->name_en, $r['values'], $r['inserted'],
-                    $r['rule']['latest'] ?? '-', $r['rule']['baseline'] ?? '-', $r['rule']['outcome']));
+                    $r['headline'] ?? '-', $r['green_cover_pct'] ?? '-', $r['level'] ?? '-',
+                    $r['confidence'] === null ? '' : "({$r['confidence']})", $r['composite_dates'], $r['rule']['outcome']));
                 foreach ($r['dates'] as $d) {
                     $this->line($this->dateLine($d));
                 }
@@ -67,16 +71,14 @@ class FetchNdviCommand extends Command
     /** @param array<string, mixed> $d */
     private function dateLine(array $d): string
     {
-        $pixels = (int) ($d['pixels'] ?? 0);
         if (($d['status'] ?? '') === 'kept') {
-            return sprintf('  %s  kept     NDVI %.2f  %d clear px', $d['date'], (float) ($d['mean'] ?? 0), $pixels);
+            return sprintf('  %s  kept     NDVI %.2f  %d clear px (%d pure)  clear %s', $d['date'], (float) ($d['mean'] ?? 0), (int) ($d['pixels'] ?? 0), (int) ($d['pure_pixels'] ?? 0), isset($d['clear_fraction']) ? round($d['clear_fraction'] * 100).'%' : '-');
         }
-        $why = match ($d['reason'] ?? 'too_few_pixels') {
+
+        return sprintf('  %s  dropped  %s', $d['date'], match ($d['reason'] ?? 'no_clear_pixels') {
             'outside_outline' => 'outside the outline (no pixel inside)',
             'no_data' => 'no data (missing assets, all nodata or read failed)',
-            default => sprintf('only %d clear px (min %d)', $pixels, self::MIN_PIXELS),
-        };
-
-        return sprintf('  %s  dropped  %s', $d['date'], $why);
+            default => 'no clear pixel after the cloud mask',
+        });
     }
 }

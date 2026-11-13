@@ -168,6 +168,7 @@
     "overview": "Overview",
     "parks": "Parks",
     "tools": "Tools",
+    "stand": "Live device",
     "city": "City",
     "companies": "Companies",
     "parkSetup": "Park setup"
@@ -216,7 +217,7 @@
     "litter_repeated_many_items": "{{count}} items in one frame",
     "litter_repeated_came_back": "Litter keeps coming back here",
     "litter_repeated_open_long": "Litter has not been collected for a long time",
-    "ndvi_drop": "NDVI {{value}}, {{drop}} % below the 4-week average ({{baseline}})"
+    "ndvi_drop": "NDVI {{value}}, {{drop}} % below this park's normal ({{baseline}})"
   },
   "action": {
     "dry": "Check that the irrigation runs: valve open, pump working, drippers not blocked. Water the area. If the irrigation looks fine, check that the sensor is still pushed into the soil.",
@@ -352,11 +353,11 @@
       },
       "leak": {
         "title": "Leak",
-        "body": "Alkhatateen shows water flowing with the pump off: an urgent leak alert within 3 readings."
+        "body": "Al Aziziyah Park shows water flowing with the pump off: an urgent leak alert within 3 readings."
       },
       "offline": {
         "title": "Sensor offline",
-        "body": "Alhilal's sensor stops reporting: after 30 seconds the park turns grey; after 2 minutes the alert is ready for a task."
+        "body": "A simulated sensor stops reporting: after 30 seconds the park turns grey; after 2 minutes the alert is ready for a task."
       },
       "recover": {
         "title": "Recover",
@@ -682,13 +683,29 @@
     "greenHint": "Click to add points around a green area; click the first point (or double-click) to close it. It is merged into the green zone.",
     "cutHint": "Click to draw the area to cut out of the green zone (a lawn-free patch, a building); click the first point to close it.",
     "cutNeedsGreen": "Draw a green area first, then cut out of it.",
-    "mergeFailed": "Could not merge this shape. Try drawing it again."
+    "mergeFailed": "Could not merge this shape. Try drawing it again.",
+    "suggest": "Suggest green zone",
+    "suggesting": "Looking at satellite pixels…",
+    "draftWarning": "Draft from satellite — dried-out lawns are missing; add them back.",
+    "draftEmpty": "No green area found in the satellite pixels. Draw the green zone by hand.",
+    "draftOk": "Draft loaded. Edit it, then save.",
+    "suggestUnavailable": "Satellite data is not available right now. Try again later.",
+    "suggestInvalid": "Cannot suggest a green zone yet: check the boundary first.",
+    "suggestFailed": "Could not get a suggestion."
   },
   "scheduler": {
     "stalled": "Scheduler stalled",
     "stalledBody": "Scheduled jobs (simulator, offline checks, verification) are not running. Check the scheduler container."
   },
   "hardware": {
+    "rejectedBanner_one": "{{count}} board is sending data but the server rejects it",
+    "rejectedBanner_other": "{{count}} boards are sending data but the server rejects it",
+    "rejectedWarning": "Board is sending data but the server rejects it ({{reason}}).",
+    "rejectedDetail": "Last rejected {{at}}, {{count}} rejected in total.",
+    "rejectedReason": {
+      "detached": "detached from the park",
+      "satellite_only": "park is satellite-only"
+    },
     "awaitingLine": "Sensor awaiting installation",
     "title": "Hardware",
     "intro": "Every node of your company: live status, calibration, relay test, tokens and camera feeds.",
@@ -830,7 +847,8 @@
   },
   "taskCard": {
     "escalated": "Escalated",
-    "overdue": "Overdue"
+    "overdue": "Overdue",
+    "stand": "Stand"
   },
   "overview": {
     "countAlerts_one": "{{count}} alert",
@@ -1168,7 +1186,7 @@
       },
       "offline": {
         "title": "Sensor offline",
-        "story": "Alhilal's sensor stops reporting.",
+        "story": "A simulated sensor stops reporting.",
         "watch": "The map: the park turns grey after 30 seconds; Overview: the alert is ready after 2 minutes.",
         "ends": "Recover brings the sensor back and the alert resolves."
       },
@@ -1212,6 +1230,9 @@
   },
   "map": {
     "esri": "Esri imagery",
+    "satelliteNote": "Background photo · not live · date varies",
+    "legendSimulated": "Simulated sensors",
+    "legendSatellite": "Satellite only",
     "cluster_one": "{{count}} park, zoom in",
     "cluster_other": "{{count}} parks, zoom in",
     "detailSatellite": "Watched by satellite only. No sensor installed.",
@@ -1282,6 +1303,7 @@
     "claimsEmpty": "No claims recorded for this park.",
     "claimSource": "Source: {{name}}",
     "photo": "Cover photo",
+    "nameUnconfirmed": "Name unconfirmed",
     "photoNone": "No cover photo yet.",
     "photoAdd": "Upload photo",
     "photoReplace": "Replace photo",
@@ -1295,5 +1317,97 @@
     "photoFormat": "Use a JPEG, PNG or WebP image up to 5 MB.",
     "photoAlt": "Cover photo of {{park}}",
     "loadError": "Could not save the photo."
+  },
+  "stand": {
+    "banner": "Live hardware on the demo stand — not a park",
+    "title": "Live device",
+    "none": "Your company has no demo stand board.",
+    "offlineBanner": "Board offline. The rest of the app works as usual.",
+    "camera": "Camera",
+    "cameraEmpty": "No frame yet.",
+    "litterDetected": "Litter detected",
+    "clean": "Clean",
+    "blurOn": "Person blur on",
+    "moisture": "Soil moisture",
+    "raw": "Raw: {{value}}",
+    "notCalibrated": "Not calibrated: raw value only",
+    "notCalibratedShort": "Not calibrated",
+    "calibrated": "Calibrated",
+    "trend": "Moisture trend",
+    "trendHint": "Last ~5 minutes",
+    "trendEmpty": "Not enough readings yet.",
+    "pump": "Pump",
+    "reportedByBoard": "as reported by the board",
+    "pumpUnknown": "Unknown",
+    "pumpPending": "Waiting for the board",
+    "on": "ON",
+    "off": "OFF",
+    "turnOn": "Turn ON",
+    "turnOff": "Turn OFF",
+    "onNeedsBoard": "Turning ON needs the board online.",
+    "autoOff": "Auto-off in {{seconds}} s",
+    "maxHint": "The pump switches off by itself after {{seconds}} s.",
+    "board": "Board",
+    "status": "Status",
+    "online": "Online",
+    "offline": "Offline",
+    "lastReading": "Last reading",
+    "link": "Link",
+    "signal": "Signal",
+    "linkType": {
+      "wifi": "Wi-Fi",
+      "usb": "USB bridge"
+    },
+    "calibration": "Calibration",
+    "calStep1": "Dry: hold the sensor in air or dry soil, then press Record dry.",
+    "calStep2": "Wet: put the sensor in water, then press Record wet.",
+    "recordDry": "Record dry",
+    "recordWet": "Record wet",
+    "rawDry": "Raw dry",
+    "rawWet": "Raw wet",
+    "point": {
+      "dry": "dry",
+      "wet": "wet"
+    },
+    "recorded": "Recorded {{point}}"
+  },
+  "satellitePopup": {
+    "sat_title": "Satellite · every ~5 days",
+    "sensor_title": "Sensor · live",
+    "simulated": "Simulated sensors",
+    "noSensor": "No sensor · satellite only",
+    "moisture": "Moisture {{value}}% (minimum {{min}}%)",
+    "moistureCaption": "Soil moisture · minimum {{min}}%",
+    "cover": "Green cover",
+    "estimated": "estimated from satellite",
+    "vsNormal": "{{value}} vs normal",
+    "ndvi": "NDVI {{value}}",
+    "word_sparse": "sparse",
+    "word_moderate": "moderate",
+    "word_dense": "dense",
+    "image": "Image {{date}} · {{ago}}",
+    "today": "today",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "conf_high": "High",
+    "conf_medium": "Medium",
+    "conf_low": "Low",
+    "conf_not_measurable": "Not measurable",
+    "confidence": "Confidence",
+    "notMeasurable": "Not measurable from satellite — {{reason}}",
+    "noImage": "No satellite image yet",
+    "reason_too_small": "too small",
+    "reason_untraced_outline": "Outline not traced yet — includes paths and open land",
+    "reason_narrow": "narrow area, edges blur the value",
+    "reason_partial_view": "Partial view — clouds cover part of the park",
+    "reason_old_image": "Old image",
+    "reason_unverified_outline": "Outline not checked yet",
+    "reason_some_cloud": "Some cloud in the image",
+    "reason_few_dates": "Few clear images lately",
+    "reason_inconsistent": "Recent images disagree",
+    "reason_no_baseline": "No normal level to compare with yet",
+    "reason_no_image": "No usable image",
+    "legendNewest": "Newest image: {{date}} · each park shows its own date",
+    "pixelsDate": "Pixels: {{date}}"
   }
 }

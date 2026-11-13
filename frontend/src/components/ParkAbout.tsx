@@ -27,7 +27,7 @@ export function VerifiedChip({ status }: { status: string | null | undefined }) 
 }
 
 /** The cover photo, fetched with the Bearer token (never a public URL). */
-function CoverPhoto({ park }: { park: ParkDetail }) {
+function CoverPhoto({ park, readOnly }: { park: ParkDetail; readOnly: boolean }) {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
@@ -35,8 +35,8 @@ function CoverPhoto({ park }: { park: ParkDetail }) {
   const hasPhoto = !!park.cover_photo
 
   const photo = useQuery({
-    queryKey: ['admin', 'parks', park.id, 'photo', park.cover_photo?.at ?? null],
-    queryFn: ({ signal }) => apiBlob(`/admin/parks/${park.id}/photo`, signal),
+    queryKey: [readOnly ? 'municipality' : 'admin', 'parks', park.id, 'photo', park.cover_photo?.at ?? null],
+    queryFn: ({ signal }) => apiBlob(`/${readOnly ? 'municipality' : 'admin'}/parks/${park.id}/photo`, signal),
     enabled: hasPhoto,
     staleTime: Infinity,
     retry: false,
@@ -109,7 +109,8 @@ function CoverPhoto({ park }: { park: ParkDetail }) {
         </div>
       )}
       {hasPhoto && url && <img src={url} alt={t('parkAbout.photoAlt', { park: parkName(park, i18n.language) })} className="max-h-56 w-full rounded-[18px] object-cover" />}
-      {!hasPhoto && <p className="m-0 text-sm text-text-2">{t('parkAbout.photoNone')}</p>}
+      {!hasPhoto && !readOnly && <p className="m-0 text-sm text-text-2">{t('parkAbout.photoNone')}</p>}
+      {!readOnly && (
       <div className="flex flex-wrap gap-2">
         <input ref={input} type="file" accept={TYPES.join(',')} className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => pick(e.target.files?.[0])} />
         <button type="button" className={btn} disabled={busy} onClick={() => input.current?.click()}>
@@ -123,7 +124,8 @@ function CoverPhoto({ park }: { park: ParkDetail }) {
           </button>
         )}
       </div>
-      <span className="text-xs text-text-2">{t('parkAbout.photoHint')}</span>
+      )}
+      {!readOnly && <span className="text-xs text-text-2">{t('parkAbout.photoHint')}</span>}
     </div>
   )
 }
@@ -164,6 +166,7 @@ export function ParkAbout({ park, readOnly }: { park: ParkDetail; readOnly: bool
           <div className="flex flex-wrap items-center gap-1.5">
             <GeometryBadge source={park.geometry_source} />
             <VerifiedChip status={park.verification_status} />
+            {park.name_unconfirmed && <Chip tone="high">{t('parkAbout.nameUnconfirmed')}</Chip>}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -190,7 +193,7 @@ export function ParkAbout({ park, readOnly }: { park: ParkDetail; readOnly: bool
             )}
           </div>
         </div>
-        {!readOnly && <CoverPhoto park={park} />}
+        {(!readOnly || !!park.cover_photo) && <CoverPhoto park={park} readOnly={readOnly} />}
       </div>
     </GlassCard>
   )

@@ -39,33 +39,28 @@ class VisionClient
     }
 
     /**
-     * POST /ndvi for one polygon and a date range.
+     * POST /ndvi (v2): zonal statistics on the green zone (or the boundary), per date and as a 30-day composite.
      *
-     * @param  array<string, mixed>  $polygon  GeoJSON Polygon, [lng, lat]
-     * @return list<array{date: string, mean: float, pixels: int}>
+     * @param  array<string, mixed>  $boundary  GeoJSON Polygon or MultiPolygon, [lng, lat]
+     * @param  array<string, mixed>|null  $greenZone
+     * @return array<string, mixed>  measured_on, flags, geometry, values, dates, composite, reflectance, pixels
      */
-    public function ndvi(int $parkId, array $polygon, string $from, string $to): array
-    {
-        return $this->ndviDetailed($parkId, $polygon, $from, $to)['values'];
-    }
-
-    /**
-     * Same call, plus one entry per satellite date found (kept or dropped with the reason).
-     *
-     * @param  array<string, mixed>  $polygon
-     * @return array{values: list<array{date: string, mean: float, pixels: int}>, dates: list<array{date: string, status: string, reason?: string, mean?: float, pixels: int}>}
-     */
-    public function ndviDetailed(int $parkId, array $polygon, string $from, string $to): array
+    public function ndvi(int $parkId, array $boundary, ?array $greenZone, string $from, string $to, bool $pixels = false): array
     {
         try {
             $body = Http::timeout((int) config('namaa.vision.ndvi_timeout_seconds'))
                 ->acceptJson()
                 ->post($this->url('/ndvi'), [
                     'park_id' => $parkId,
-                    'polygon' => $polygon,
+                    'boundary' => $boundary,
+                    'green_zone' => $greenZone,
                     'date_from' => $from,
                     'date_to' => $to,
                     'max_cloud' => (int) config('namaa.ndvi.max_cloud'),
+                    'shrink_m' => (float) config('namaa.ndvi.shrink_m'),
+                    'composite_days' => (int) config('namaa.ndvi.composite_days'),
+                    'green_threshold' => (float) config('namaa.ndvi.green_threshold'),
+                    'pixels' => $pixels,
                 ])
                 ->throw()
                 ->json();
@@ -73,7 +68,43 @@ class VisionClient
             throw new VisionUnavailable('Vision /ndvi failed: '.$e->getMessage(), previous: $e);
         }
 
-        return ['values' => array_values($body['values'] ?? []), 'dates' => array_values($body['dates'] ?? [])];
+        return $body + ['values' => [], 'dates' => [], 'composite' => null, 'pixels' => null, 'flags' => [], 'geometry' => []];
+    }
+
+    /**
+     * POST /ndvi/suggest-zone: a DRAFT green zone from the pixels that are green on most clear dates.
+     *
+     * @param  array<string, mixed>  $boundary
+     * @return array{draft: ?array<string, mixed>, area_m2: float, pixels: int, clear_dates: int, flags: list<string>}
+     */
+    public function suggestZone(array $boundary): array
+    {
+        $cfg = config('namaa.ndvi.suggest');
+        try {
+            $body = Http::timeout((int) config('namaa.vision.ndvi_timeout_seconds'))
+                ->acceptJson()
+                ->post($this->url('/ndvi/suggest-zone'), [
+                    'boundary' => $boundary,
+                    'date_to' => now('Asia/Riyadh')->toDateString(),
+                    'days' => $cfg['days'],
+                    'ndvi_threshold' => $cfg['ndvi_threshold'],
+                    'min_clear_share' => $cfg['min_clear_share'],
+                    'min_area_m2' => $cfg['min_area_m2'],
+                    'max_cloud' => (int) config('namaa.ndvi.max_cloud'),
+                ])
+                ->throw()
+                ->json();
+        } catch (ConnectionException|RequestException $e) {
+            throw new VisionUnavailable('Vision /ndvi/suggest-zone failed: '.$e->getMessage(), previous: $e);
+        }
+
+        return [
+            'draft' => $body['draft'] ?? null,
+            'area_m2' => (float) ($body['area_m2'] ?? 0),
+            'pixels' => (int) ($body['pixels'] ?? 0),
+            'clear_dates' => (int) ($body['clear_dates'] ?? 0),
+            'flags' => array_values($body['flags'] ?? []),
+        ];
     }
 
     /** GET /health within 3 s. @return array<string, mixed>|null null when it does not answer */

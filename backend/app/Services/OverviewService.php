@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AlertCategory;
 use App\Enums\AlertType;
+use App\Enums\SiteType;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use App\Models\ActivityLog;
@@ -13,6 +14,7 @@ use App\Models\Park;
 use App\Models\Task;
 use App\Enums\NodeType;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * The overview page in one payload (Sprint 6, B2): KPIs, the "right now" strip
@@ -42,7 +44,11 @@ class OverviewService
         $done = Task::whereIn('park_id', $ids)->where('status', TaskStatus::Done)
             ->where('done_at', '>=', now()->subDays(self::DAYS))
             ->get(['id', 'verified', 'time_to_resolve_min']);
-        $awaiting = Node::awaitingInstall()->whereNull('detached_at')->whereIn('park_id', $ids)->orderBy('id')->get(['id', 'park_id', 'name', 'type']);
+        $awaiting = Node::awaitingInstall()->whereNull('detached_at')->whereIn('park_id', $ids)
+            // Placeholder nodes (flag set by stand:setup, any name) and stand boards never ask for an installation.
+            ->when(Schema::hasColumn('nodes', 'placeholder'), fn ($q) => $q->where('placeholder', false))
+            ->whereDoesntHave('park', fn ($q) => $q->where('site_type', SiteType::DemoStand->value))
+            ->orderBy('id')->get(['id', 'park_id', 'name', 'type']);
 
         $count = fn (array $types) => $alerts->filter(fn (Alert $a) => in_array($a->type, $types, true));
 

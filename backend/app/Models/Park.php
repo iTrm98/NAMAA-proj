@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Schema;
 
 #[Fillable([
     'company_id', 'name_ar', 'name_en', 'district', 'park_type', 'area_m2',
@@ -30,7 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'area_source', 'area_reference', 'area_by', 'area_at', 'ndvi_recompute_at',
     'site_type', 'slug', 'osm_id', 'green_zone', 'green_zone_area_m2', 'geometry_source', 'geometry_updated_at',
     'monitoring_mode', 'verification_status', 'verified_by', 'verified_at', 'archived_at', 'demo_role',
-    'cover_photo_path', 'cover_photo_at',
+    'cover_photo_path', 'cover_photo_at', 'name_unconfirmed',
 ])]
 class Park extends Model
 {
@@ -82,6 +83,7 @@ class Park extends Model
             'verified_at' => 'datetime',
             'archived_at' => 'datetime',
             'cover_photo_at' => 'datetime',
+            'name_unconfirmed' => 'boolean',
         ];
     }
 
@@ -216,6 +218,30 @@ class Park extends Model
     public function latestNdvi(): HasOne
     {
         return $this->hasOne(NdviReading::class)->latestOfMany('date');
+    }
+
+    /** The newest composite: the satellite headline. @return HasOne<NdviComposite, $this> */
+    public function latestComposite(): HasOne
+    {
+        return $this->hasOne(NdviComposite::class)->latestOfMany('date');
+    }
+
+    /** @return HasOne<NdviGrid, $this> */
+    public function ndviGrid(): HasOne
+    {
+        return $this->hasOne(NdviGrid::class);
+    }
+
+    /** Relations that carry the satellite numbers. @return list<string> */
+    public static function satelliteRelations(): array
+    {
+        return ['latestNdvi', 'latestComposite'];
+    }
+
+    /** True for a real park that the satellite job may measure: not the demo stand, not archived. */
+    public function isSatelliteEligible(): bool
+    {
+        return $this->site_type === SiteType::Park && $this->archived_at === null;
     }
 
     /** Leaves out the test bench park (unless an admin asks for it). @param Builder<Park> $query */

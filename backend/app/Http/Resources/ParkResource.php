@@ -7,6 +7,7 @@ use App\Enums\PumpReason;
 use App\Http\Resources\Concerns\FormatsTimes;
 use App\Models\Node;
 use App\Models\Park;
+use App\Services\SatelliteBlock;
 use App\Support\Namaa;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -70,6 +71,7 @@ class ParkResource extends JsonResource
             'verification_status' => $this->verification_status->value,
             'geometry_source' => $this->geometry_source->value,
             'osm_id' => $this->osm_id,
+            'name_unconfirmed' => (bool) ($this->name_unconfirmed ?? false),
             'geometry_updated_at' => $this->iso($this->geometry_updated_at),
             'archived_at' => $this->iso($this->archived_at),
             'boundary' => $this->polygon,
@@ -101,7 +103,9 @@ class ParkResource extends JsonResource
                 'last_frame_at' => $this->iso($camera->last_seen_at),
             ] : null,
             // Newest Sentinel-2 value (map NDVI layer); null before the first fetch.
-            'ndvi' => $this->relationLoaded('latestNdvi') && $this->latestNdvi ? $this->latestNdvi->summary() : null,
+            'ndvi' => SatelliteBlock::legacy($this->resource),
+            // The satellite numbers with their trust level (api.md, Sprint 6.2 Phases B and C); null before the first fetch.
+            'satellite' => SatelliteBlock::for($this->resource),
             'latest' => $sensor?->last_seen_at ? [
                 'node_id' => $sensor->id,
                 'moisture_pct' => $sensor->last_moisture_pct,

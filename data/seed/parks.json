@@ -30,24 +30,6 @@
       ]
     },
     {
-      "key": "aziziyah",
-      "name_en": "Garden Aziziyah",
-      "name_ar": "حديقة العزيزية",
-      "district": "Al Mursalat",
-      "lat": 21.4150694,
-      "lng": 39.8664169,
-      "park_type": "public_park",
-      "area_m2": 6000,
-      "source": "real",
-      "scenario": "real",
-      "polygon_approximate": true,
-      "outline_source": {"type": "approximate", "reference": "Rectangle of the estimated area around the park centre (seed data), not verified", "by": null, "at": null},
-      "area_source": {"type": "approximate", "reference": "Estimate (seed data), not verified", "by": null, "at": null},
-      "nodes": [
-        { "name": "Model B", "type": "sensor", "has_pump": false }
-      ]
-    },
-    {
       "key": "al_adel",
       "name_en": "Al Adel Park",
       "name_ar": "حديقة العدل",
@@ -69,39 +51,23 @@
       ]
     },
     {
-      "key": "alkhatateen",
-      "name_en": "Alkhatateen Park",
-      "name_ar": "حديقة الخطاطين",
+      "key": "al_aziziyah",
+      "name_en": "Al Aziziyah Park",
+      "name_ar": "متنزه العزيزية",
       "district": "Al Aziziyah",
-      "lat": 21.3971781,
-      "lng": 39.8852504,
+      "lat": 21.3971207,
+      "lng": 39.8853075,
       "park_type": "public_park",
-      "area_m2": 35000,
+      "area_m2": 24983,
       "source": "simulated",
       "scenario": "healthy",
-      "polygon_approximate": true,
-      "outline_source": {"type": "approximate", "reference": "Rectangle of the estimated area around the park centre (seed data), not verified", "by": null, "at": null},
-      "area_source": {"type": "approximate", "reference": "Estimate (seed data), not verified", "by": null, "at": null},
+      "polygon_approximate": false,
+      "polygon_source": "OpenStreetMap way/457991347 (ODbL)",
+      "outline_source": {"type": "osm", "reference": "OpenStreetMap way/457991347 (ODbL)", "by": null, "at": "2026-11-13"},
+      "area_source": {"type": "osm", "reference": "Computed from the OpenStreetMap outline (way/457991347)", "by": null, "at": "2026-11-13"},
+      "polygon": {"type": "Polygon", "coordinates": [[[39.8851245,21.3981451],[39.8845523,21.3971147],[39.8844902,21.3969728],[39.8844752,21.3968501],[39.8844808,21.3967397],[39.884494,21.3966451],[39.8845411,21.3965452],[39.88459,21.3964803],[39.8846389,21.3964208],[39.8847274,21.3963559],[39.8848234,21.3962928],[39.8849796,21.3962718],[39.8851226,21.3962665],[39.8852525,21.3962823],[39.8853956,21.3963156],[39.885516,21.3963664],[39.8856289,21.3964243],[39.8857494,21.3965119],[39.8858548,21.396617],[39.885964,21.3967415],[39.8860524,21.3968887],[39.8861145,21.3970622],[39.8861428,21.3972444],[39.8861371,21.3973969],[39.8860882,21.3975511],[39.8859546,21.3977368],[39.8851245,21.3981451]]]},
       "nodes": [
         { "name": "Sim 2", "type": "sensor", "has_pump": true }
-      ]
-    },
-    {
-      "key": "alhilal",
-      "name_en": "Alhilal Park",
-      "name_ar": "حديقة الهلال",
-      "district": "Al Khalidiyyah",
-      "lat": 21.4021764,
-      "lng": 39.7894742,
-      "park_type": "public_park",
-      "area_m2": 12000,
-      "source": "simulated",
-      "scenario": "healthy",
-      "polygon_approximate": true,
-      "outline_source": {"type": "approximate", "reference": "Rectangle of the estimated area around the park centre (seed data), not verified", "by": null, "at": null},
-      "area_source": {"type": "approximate", "reference": "Estimate (seed data), not verified", "by": null, "at": null},
-      "nodes": [
-        { "name": "Sim 3", "type": "sensor", "has_pump": true }
       ]
     },
     {

@@ -35,6 +35,20 @@ class MunicipalityTest extends TestCase
         Alert::factory()->create(['park_id' => $this->parkB->id]);
     }
 
+    public function test_it_streams_the_cover_photo_read_only(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $this->asUser($this->viewer)->getJson("/api/municipality/parks/{$this->parkA->id}/photo")->assertNotFound();
+
+        \Illuminate\Support\Facades\Storage::disk('local')->put('park-photos/a.jpg', 'jpeg-bytes');
+        $this->parkA->forceFill(['cover_photo_path' => 'park-photos/a.jpg'])->save();
+
+        $this->asUser($this->viewer)->get("/api/municipality/parks/{$this->parkA->id}/photo")->assertOk();
+        $this->asUser($this->viewer)->postJson("/api/municipality/parks/{$this->parkA->id}/photo")->assertStatus(405);
+        $this->asUser(User::factory()->admin()->create(['company_id' => $this->parkA->company_id]))
+            ->getJson("/api/municipality/parks/{$this->parkA->id}/photo")->assertForbidden();
+    }
+
     public function test_it_reads_every_company(): void
     {
         $this->asUser($this->viewer)->getJson('/api/municipality/parks')->assertOk()

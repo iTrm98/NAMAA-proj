@@ -18,21 +18,40 @@ use Laravel\Sanctum\HasApiTokens;
     'park_id', 'type', 'name', 'has_pump', 'pump_target', 'dry_value', 'wet_value',
     'last_seen_at', 'detached_at', 'last_moisture_pct', 'last_flow', 'last_temperature',
     'last_humidity', 'last_pump_on', 'last_battery_pct', 'last_litter_count', 'expected_flow_l_min', 'source', 'rssi', 'uptime_s', 'fw_version', 'via', 'capture_mode', 'camera_url',
+    'last_rejected_at', 'last_rejected_reason', 'rejected_count', 'placeholder', 'calibrated_dry_at', 'calibrated_wet_at',
 ])]
 class Node extends Model
 {
     /** @use HasFactory<NodeFactory> */
     use HasApiTokens, HasFactory;
 
+    /** A moved, attached or detached node starts with a clean rejection warning. */
+    protected static function booted(): void
+    {
+        static::saving(function (Node $node) {
+            if ($node->exists && array_key_exists('last_rejected_at', $node->getAttributes())
+                && $node->isDirty(['park_id', 'detached_at']) && ! $node->isDirty('last_rejected_at')) {
+                $node->last_rejected_at = null;
+                $node->last_rejected_reason = null;
+                $node->rejected_count = 0;
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
             'type' => NodeType::class,
             'has_pump' => 'boolean',
+            'placeholder' => 'boolean',
             'pump_target' => 'boolean',
             'dry_value' => 'integer',
             'wet_value' => 'integer',
             'last_seen_at' => 'datetime',
+            'last_rejected_at' => 'datetime',
+            'calibrated_dry_at' => 'datetime',
+            'calibrated_wet_at' => 'datetime',
+            'rejected_count' => 'integer',
             'last_moisture_pct' => 'float',
             'last_flow' => 'float',
             'last_temperature' => 'float',
@@ -54,6 +73,12 @@ class Node extends Model
     public function isAwaitingInstall(): bool
     {
         return $this->source === DataSource::Real && $this->last_seen_at === null;
+    }
+
+    /** A board on the demo stand (not a park): manual pump only, short check-in rules. */
+    public function isStand(): bool
+    {
+        return $this->park?->site_type === \App\Enums\SiteType::DemoStand;
     }
 
     /** @param Builder<Node> $query */

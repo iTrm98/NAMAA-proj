@@ -38,7 +38,9 @@ class RecomputeNdvi implements ShouldQueue
     public function handle(NdviService $ndvi): void
     {
         $park = Park::find($this->parkId);
-        if (! $park || empty($park->polygon)) {
+        if (! $park || empty($park->polygon) || ! $park->isSatelliteEligible()) {
+            Park::whereKey($this->parkId)->update(['ndvi_recompute_at' => null]);
+
             return;
         }
 

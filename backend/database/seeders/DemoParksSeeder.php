@@ -39,6 +39,13 @@ class DemoParksSeeder extends Seeder
             }
             $source = DataSource::from($data['source']);
 
+            // Re-runnable: a park that already exists is left alone. Its boundary (geometry_source
+            // osm or traced, e.g. from namaa:parks:import or the outline editor) is never replaced
+            // by the file's outline.
+            if (Park::where('company_id', $company->id)->where('name_en', $data['name_en'])->exists()) {
+                continue;
+            }
+
             $park = Park::create(self::dataSources($data) + [
                 'company_id' => $company->id,
                 'name_ar' => $data['name_ar'],

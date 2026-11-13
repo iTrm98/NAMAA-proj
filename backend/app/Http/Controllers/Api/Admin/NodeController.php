@@ -46,7 +46,7 @@ class NodeController extends Controller
         $raw = $node->latestReading->moisture_raw;
         $before = $node->only(['dry_value', 'wet_value']);
 
-        $node->update([$field => $raw, 'last_moisture_pct' => $calibration->moisturePct($node->fill([$field => $raw]), $raw)]);
+        $node->update([$field => $raw] + (\Illuminate\Support\Facades\Schema::hasColumn('nodes', 'calibrated_dry_at') ? ["calibrated_{$point}_at" => now()] : []) + ['last_moisture_pct' => $calibration->moisturePct($node->fill([$field => $raw]), $raw)]);
 
         $logger->log('node.calibrated', $node, ['before' => $before, 'after' => $node->only(['dry_value', 'wet_value']) + ['point' => $point, 'raw' => $raw]]);
         $this->broadcast($node, 'calibration');

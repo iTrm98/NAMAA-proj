@@ -76,18 +76,27 @@ class ParkApiTest extends TestCase
 
     public function test_the_list_has_no_n_plus_one(): void
     {
-        foreach (range(1, 5) as $i) {
-            $park = Park::factory()->create(['company_id' => $this->company->id]);
-            Node::factory()->create(['park_id' => $park->id]);
-        }
+        $count = function (int $extra): int {
+            foreach (range(1, $extra) as $i) {
+                $park = Park::factory()->create(['company_id' => $this->company->id]);
+                Node::factory()->create(['park_id' => $park->id]);
+            }
+            $this->as($this->admin); // token creation outside the count
+            \DB::flushQueryLog();
+            \DB::enableQueryLog();
+            $this->getJson('/api/admin/parks')->assertOk();
 
-        $this->as($this->admin); // token creation outside the count
-        \DB::enableQueryLog();
-        $this->getJson('/api/admin/parks')->assertOk()->assertJsonCount(6, 'data');
-        $queries = count(\DB::getQueryLog());
+            return count(\DB::getQueryLog());
+        };
 
-        // token lookup + token touch + user + parks + nodes + latest pump log of each node + count subquery (in the parks query)
-        $this->assertLessThanOrEqual(7, $queries);
+        $few = $count(3);
+        $many = $count(5); // 8 more parks in total than the first run started with
+
+        // The count must not grow with the number of parks.
+        $this->assertSame($few, $many);
+        // token lookup + token touch + user + parks (with the open-alert count subquery) + nodes + latest pump log
+        // + latest NDVI reading + latest composite
+        $this->assertLessThanOrEqual(8, $many);
     }
 
     public function test_park_detail_has_nodes_and_open_alerts(): void

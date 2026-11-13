@@ -56,6 +56,8 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
     Route::post('parks/{park}/pump', [AdminParkController::class, 'pump']);
     Route::get('parks/{park}/detections', [AdminDetectionController::class, 'index']);
     Route::get('parks/{park}/ndvi', [AdminNdviController::class, 'index']);
+    Route::get('parks/{park}/ndvi/pixels', [AdminNdviController::class, 'pixels']);
+    Route::post('parks/{park}/green-zone/suggest', [AdminNdviController::class, 'suggest']);
     Route::get('parks/{park}/timeline', [AdminParkController::class, 'timeline']);
     Route::get('parks/{park}/claims', [AdminParkClaimController::class, 'index']);
     Route::post('parks/{park}/claims', [AdminParkClaimController::class, 'store']);
@@ -77,6 +79,9 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
 
     Route::get('workers', [AdminWorkerController::class, 'index']);
 
+    Route::get('stand/live', [\App\Http\Controllers\Api\Admin\StandController::class, 'live']);
+    Route::post('stand/pump', [\App\Http\Controllers\Api\Admin\StandController::class, 'pump']);
+    Route::post('stand/calibrate', [\App\Http\Controllers\Api\Admin\StandController::class, 'calibrate']);
     Route::get('nodes', [AdminNodeController::class, 'index']);
     Route::post('nodes/{node}/calibration', [AdminNodeController::class, 'calibrate']);
     Route::post('nodes/{node}/relay-test', [AdminNodeController::class, 'relayTest']);
@@ -110,6 +115,7 @@ Route::prefix('municipality')->middleware(['auth:sanctum', 'user.token', 'role:m
     Route::get('parks', [MunicipalityParkController::class, 'index']);
     Route::get('parks/{park}', [MunicipalityParkController::class, 'show']);
     Route::get('parks/{park}/readings', [MunicipalityParkController::class, 'readings']);
+    Route::get('parks/{park}/photo', [MunicipalityParkController::class, 'photo']);
     Route::get('parks/{park}/ndvi', [MunicipalityParkController::class, 'ndvi']);
     Route::get('parks/{park}/timeline', [MunicipalityParkController::class, 'timeline']);
     Route::get('overview', [MunicipalityParkController::class, 'overview']);

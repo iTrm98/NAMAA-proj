@@ -37,7 +37,7 @@ class ParkAuditCommand extends Command
             if ($i > 0 && ! app()->runningUnitTests()) {
                 sleep(self::PAUSE_SECONDS);
             }
-            $outline = $park->polygon['coordinates'][0] ?? [];
+            $outline = \App\Services\ParkOutline::outerRing($park->polygon); // MultiPolygon: the largest part
             $source = $park->outline_source instanceof \BackedEnum ? $park->outline_source->value : (string) $park->outline_source;
 
             try {

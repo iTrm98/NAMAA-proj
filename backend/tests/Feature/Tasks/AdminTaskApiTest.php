@@ -56,6 +56,18 @@ class AdminTaskApiTest extends TestCase
         return User::factory()->admin()->create();
     }
 
+    public function test_task_park_carries_the_site_type(): void
+    {
+        $task = Task::factory()->create(['park_id' => $this->park->id, 'alert_id' => $this->alert->id]);
+
+        $this->asAdmin()->getJson("/api/admin/tasks/{$task->id}")
+            ->assertOk()->assertJsonPath('data.park.site_type', 'park');
+
+        $this->park->update(['site_type' => \App\Enums\SiteType::DemoStand]);
+        $this->asAdmin()->getJson("/api/admin/tasks/{$task->id}")
+            ->assertOk()->assertJsonPath('data.park.site_type', 'demo_stand');
+    }
+
     public function test_admin_creates_a_task_from_an_alert(): void
     {
         Event::fake([TaskCreated::class]);

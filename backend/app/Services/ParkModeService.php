@@ -27,6 +27,9 @@ class ParkModeService
 {
     public const ROLES = ['dry', 'leak', 'offline'];
 
+    /** The note on the alert.resolved log of an alert closed by archiving. */
+    public const ARCHIVE_NOTE = 'Park archived';
+
     private const TIME = 'Y-m-d\TH:i:s\Z';
 
     public function __construct(
@@ -233,6 +236,8 @@ class ParkModeService
         $plan = $needsDetach
             ? $this->apply($park, MonitoringMode::SatelliteOnly, null, true)
             : ['park' => $park->name_en, 'park_id' => $park->id, 'nodes' => [], 'alerts' => 0, 'tasks' => 0];
+        // Every open alert (ndvi_drop too) is resolved with the note "Park archived".
+        $plan['alerts'] = Alert::open()->where('park_id', $park->id)->count();
         $plan['archive'] = true;
         $plan['dry_run'] = $dryRun;
 
@@ -241,6 +246,9 @@ class ParkModeService
         }
 
         DB::transaction(function () use ($park, $needsDetach) {
+            foreach (Alert::open()->where('park_id', $park->id)->get() as $alert) {
+                $this->alerts->resolve($alert->setRelation('park', $park), self::ARCHIVE_NOTE);
+            }
             if ($needsDetach) {
                 $this->apply($park, MonitoringMode::SatelliteOnly);
             }

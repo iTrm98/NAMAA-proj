@@ -4,8 +4,9 @@ import turfDifference from '@turf/difference'
 import turfUnion from '@turf/union'
 import type { Feature, MultiPolygon, Polygon } from 'geojson'
 import type { Map as MapLibreMap } from 'maplibre-gl'
-import { Eraser, Pencil, RotateCcw, Save, Scissors, Sprout, TriangleAlert, X } from 'lucide-react'
+import { Eraser, Pencil, Wand2, RotateCcw, Save, Scissors, Sprout, TriangleAlert, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import Map, { Layer, NavigationControl, Source } from 'react-map-gl/maplibre'
 import { toast } from 'sonner'
@@ -15,8 +16,10 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { type OutlineWarning, useSaveOutline } from '@/hooks/useOps'
 import { parkName } from '@/hooks/useParks'
-import { ApiError } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { formatNumber } from '@/lib/format'
+import { outerPoints } from '@/lib/geo'
+import { SatelliteNote } from '@/components/map/SatelliteNote'
 import { type Basemap, attributionFor, mapStyle, MAPTILER_KEY } from '@/lib/mapStyle'
 import type { ParkDetail } from '@/types'
 
@@ -88,20 +91,48 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
   const [drawing, setDrawing] = useState<Target | null>(null)
   const [basemap, setBasemap] = useState<Basemap>('esri')
   const [checked, setChecked] = useState(false)
+  const [draftNote, setDraftNote] = useState<string | null>(null)
+  const [draftWarning, setDraftWarning] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const [warnings, setWarnings] = useState<OutlineWarning[]>([])
-  const ring = initialBoundary?.coordinates?.[0] ?? [[park.lng, park.lat]]
+  // A multi-part boundary is shown read-only (Terra Draw edits single polygons); redrawing replaces it.
+  const multiBoundary = initialBoundary?.type === 'MultiPolygon' ? (initialBoundary as MultiPolygon) : null
+  const [multiShown, setMultiShown] = useState(multiBoundary !== null)
+  const ringPts = outerPoints(initialBoundary)
+  const ring = ringPts.length ? ringPts : [[park.lng, park.lat]]
 
   const setGreen = useCallback((next: MultiPolygon | null) => {
     greenRef.current = next
     setGreenState(next)
   }, [])
+  const suggest = useMutation({
+    mutationFn: () => api<{ data: { draft: MultiPolygon | null } }>(`/admin/parks/${park.id}/green-zone/suggest`, { method: 'POST' }).then((r) => r.data.draft),
+    onSuccess: (draft) => {
+      if (draft) {
+        // Only a draft: it becomes the editable green zone; nothing is saved until the user saves.
+        setGreen(draft)
+        setDraftWarning(true)
+        setDraftNote(t('outline.draftOk'))
+      } else {
+        setDraftNote(t('outline.draftEmpty'))
+      }
+    },
+    onError: (e) => {
+      setDraftWarning(false)
+      setDraftNote(e instanceof ApiError ? (e.status === 503 ? t('outline.suggestUnavailable') : e.status === 422 ? t('outline.suggestInvalid') : t('outline.suggestFailed')) : t('outline.suggestFailed'))
+    },
+  })
   const greenArea = green ? Math.round(turfArea(toFeature(green))) : null
 
   const refresh = useCallback(() => {
     const polygon = currentPolygon(drawRef.current)
-    setBoundaryArea(polygon ? Math.round(turfArea(polygon)) : null)
-  }, [])
+    if (polygon) {
+      setMultiShown(false)
+      setBoundaryArea(Math.round(turfArea(polygon)))
+    } else if (multiBoundary && drawRef.current?.getSnapshot().length === 0 && targetRef.current === 'boundary') {
+      setBoundaryArea(Math.round(turfArea(toFeature(multiBoundary))))
+    }
+  }, [multiBoundary])
 
   const loadCurrent = useCallback(() => {
     const draw = drawRef.current
@@ -111,13 +142,15 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
     targetRef.current = 'boundary'
     setDrawing(null)
     setGreen(initialGreen)
+    setDraftWarning(false)
+    setMultiShown(multiBoundary !== null)
     if (initialBoundary?.type === 'Polygon') {
       const id = crypto.randomUUID()
       draw.addFeatures([{ id, type: 'Feature', geometry: initialBoundary, properties: { mode: MODE_POLYGON } }])
       draw.selectFeature(id)
     }
     refresh()
-  }, [initialBoundary, initialGreen, refresh, setGreen])
+  }, [initialBoundary, initialGreen, multiBoundary, refresh, setGreen])
 
   const onLoad = useCallback(
     (map: MapLibreMap) => {
@@ -185,6 +218,7 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
     if (target === 'boundary') {
       draw.clear()
       setBoundaryArea(null)
+      setMultiShown(false)
     }
     targetRef.current = target
     draw.setMode(MODE_POLYGON)
@@ -198,12 +232,12 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
     targetRef.current = 'boundary'
     setDrawing(null)
     // A cancelled boundary redraw leaves nothing on the canvas: put the saved one back.
-    if (!currentPolygon(draw)) loadCurrent()
+    if (!currentPolygon(draw) && !multiShown) loadCurrent()
   }
 
   const submit = () => {
     const boundary = currentPolygon(drawRef.current)
-    if (!boundary) {
+    if (!boundary && !multiShown) {
       setErrors([t('outline.needPolygon')])
       return
     }
@@ -211,7 +245,7 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
     setWarnings([])
     save.mutate(
       {
-        boundary,
+        ...(boundary ? { boundary } : {}),
         ...(green || initialGreen ? { green_zone: green } : {}),
         imagery: basemap === 'esri' ? 'esri' : 'maptiler',
         checked,
@@ -250,6 +284,12 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
               maxZoom={20}
             >
               <NavigationControl position="top-left" showCompass={false} />
+              {multiShown && multiBoundary && (
+                <Source id="boundary-multi" type="geojson" data={toFeature(multiBoundary)}>
+                  <Layer id="boundary-multi-fill" type="fill" paint={{ 'fill-color': BOUNDARY, 'fill-opacity': 0.12 }} />
+                  <Layer id="boundary-multi-line" type="line" paint={{ 'line-color': BOUNDARY, 'line-width': 2 }} />
+                </Source>
+              )}
               {greenData && (
                 <Source id="green-zone" type="geojson" data={greenData}>
                   <Layer id="green-zone-fill" type="fill" paint={{ 'fill-color': GREEN, 'fill-opacity': 0.35 }} />
@@ -258,6 +298,7 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
               )}
             </Map>
           )}
+          <SatelliteNote basemap={basemap} className="bottom-8" />
           <div className="absolute end-2 top-2 flex flex-col gap-1 rounded-md bg-[var(--solid-over-map)] px-3 py-2 text-sm" dir={i18n.dir()}>
             <span className="inline-flex items-center gap-2">
               <i className="size-3 rounded-sm" style={{ background: BOUNDARY }} aria-hidden />
@@ -297,6 +338,10 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
               <Sprout />
               {t('outline.addGreen')}
             </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setDraftNote(null); suggest.mutate() }} disabled={drawing !== null || suggest.isPending}>
+              <Wand2 />
+              {suggest.isPending ? t('outline.suggesting') : t('outline.suggest')}
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => startDraw('cutout')} disabled={drawing !== null || !green}>
               <Scissors />
               {t('outline.cutOut')}
@@ -313,6 +358,14 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
             </Button>
           )}
         </div>
+
+        {draftWarning && (
+          <p className="m-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--clean)]/15 p-3 text-sm text-[#FFE2A0]" role="status">
+            <TriangleAlert className="size-4 shrink-0" aria-hidden />
+            {t('outline.draftWarning')}
+          </p>
+        )}
+        {draftNote && <p className="m-0 text-sm text-text-2" role="status">{draftNote}</p>}
 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked} onChange={(e) => setChecked(e.target.checked)} />

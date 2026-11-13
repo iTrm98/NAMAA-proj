@@ -24,33 +24,28 @@ use Random\Engine\Mt19937;
 use Random\Randomizer;
 
 /**
- * History for the three SIMULATED parks only: 7 days of readings, the demo
- * alerts and tasks, activity logs and 90 days of NDVI. Real parks get nothing:
+ * History for the two SIMULATED parks only: 7 days of readings, the demo
+ * alerts and tasks, and activity logs (no NDVI is seeded; satellite values come from the fetch job). Real parks get nothing:
  * their history must come from the boards and the satellite job.
  *
  * - Al Adel:     drying out -> status dry, OPEN dry alert, OPEN unassigned task.
- * - Alkhatateen: healthy; RESOLVED leak 3 days ago, DONE + verified task (Ahmed, 42 min).
- * - Alhilal:     healthy; RESOLVED dry alert 5 days ago, DONE + verified task (Khalid, 65 min).
+ * - Al Aziziyah: healthy; RESOLVED leak 3 days ago, DONE + verified task (Ahmed, 42 min).
  */
 class DemoHistorySeeder extends Seeder
 {
     private const SCENARIOS = [
         'al_adel' => 'drying_out',
-        'alkhatateen' => 'leak',
-        'alhilal' => 'dry_fixed',
+        'al_aziziyah' => 'leak',
     ];
 
     private User $admin;
 
     private User $ahmed;
 
-    private User $khalid;
-
     public function run(): void
     {
         $this->admin = User::where('email', DemoAccountsSeeder::ADMIN_EMAIL)->firstOrFail();
         $this->ahmed = User::where('email', DemoAccountsSeeder::WORKER1_EMAIL)->firstOrFail();
-        $this->khalid = User::where('email', DemoAccountsSeeder::WORKER2_EMAIL)->firstOrFail();
 
         $end = CarbonImmutable::now('UTC')->startOfMinute();
         $end = $end->subMinutes($end->minute % ReadingSimulator::STEP_MIN);
@@ -73,8 +68,7 @@ class DemoHistorySeeder extends Seeder
 
                 $statusChangedAt = match ($key) {
                     'al_adel' => $this->dryingOut($park, $node, $result, $end),
-                    'alkhatateen' => $this->leakHistory($park, $node, $result),
-                    'alhilal' => $this->dryHistory($park, $node, $result),
+                    'al_aziziyah' => $this->leakHistory($park, $node, $result),
                 };
 
                 $this->cacheLatest($park, $node, $result['rows'], $statusChangedAt);
@@ -115,29 +109,11 @@ class DemoHistorySeeder extends Seeder
             'readings' => 2,
         ]);
 
-        $this->doneTask($park, $alert, $this->ahmed, 'Fix leak at Alkhatateen Park', TaskPriority::Urgent, $e, $result['rows'], [
+        $this->doneTask($park, $alert, $this->ahmed, 'Fix leak at Al Aziziyah Park', TaskPriority::Urgent, $e, $result['rows'], [
             'created' => 4, 'assigned' => 7, 'started' => 15,
         ], 'Replaced a cracked fitting on the main line near the east gate. Ran the pump for a short test: no flow with the pump off.');
 
         return CarbonImmutable::parse($result['rows'][0]['created_at']);
-    }
-
-    /** Resolved dry alert 5 days ago, fixed and verified by Khalid in 65 minutes. */
-    private function dryHistory(Park $park, Node $node, array $result): CarbonImmutable
-    {
-        $e = $result['events'];
-
-        $alert = $this->alert($park, $node, AlertType::Dry, AlertSeverity::Critical, $e['alert_at'], $e['resolved_at'], [
-            'moisture_pct' => ReadingSimulator::valueAt($result['rows'], $e['alert_at'], 'moisture_pct'),
-            'moisture_min' => $park->moisture_min,
-            'readings' => 3,
-        ]);
-
-        $this->doneTask($park, $alert, $this->khalid, 'Irrigate Alhilal Park', TaskPriority::High, $e, $result['rows'], [
-            'created' => 5, 'assigned' => 9, 'started' => 30,
-        ], 'Cleared blocked drippers on the north beds and watered the area with the pump.');
-
-        return $e['resolved_at']; // dry -> ok
     }
 
     /**

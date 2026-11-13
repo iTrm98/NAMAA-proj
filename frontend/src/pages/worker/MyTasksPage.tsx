@@ -81,6 +81,7 @@ function ActiveCard({ task }: { task: Task }) {
         <Chip tone={PRIORITY_TONE[task.priority]}>{t(`priority.${task.priority}`)}</Chip>
         <Chip tone="muted">{t(`taskStatus.${task.status}`)}</Chip>
         {task.category && <Chip tone="muted">{t(`category.${task.category}`)}</Chip>}
+        {task.park?.site_type === 'demo_stand' && <Chip tone="muted">{t('taskCard.stand')}</Chip>}
       </div>
       <span className="text-lg font-medium">{taskTitle(t, i18n.language, task)}</span>
       {task.park && (

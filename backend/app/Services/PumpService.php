@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\PumpReason;
+use App\Enums\SiteType;
 use App\Events\PumpChanged;
 use App\Jobs\EndRelayTest;
 use App\Models\Node;
@@ -127,8 +128,14 @@ class PumpService
             'reason' => $last?->reason->value,
             'by' => $last?->user ? ['id' => $last->user->id, 'name' => $last->user->name] : null,
             'cutoff_at' => $iso($this->cutoffAt($node, $last)),
-            'max_run_seconds' => Namaa::timing('pump_max_run_seconds'),
+            'max_run_seconds' => $this->maxRun($node),
         ];
+    }
+
+    /** Max run time of a node's pump: the stand has its own, shorter limit. */
+    public function maxRun(Node $node): int
+    {
+        return $node->isStand() ? (int) config('namaa.stand.pump_max_seconds') : Namaa::timing('pump_max_run_seconds');
     }
 
     /** When a pump that is on will be switched off by the safety cut-off (null when off). */
@@ -141,7 +148,7 @@ class PumpService
         $last ??= $this->lastChange($node);
         $since = $last && $last->target ? $last->created_at : now();
 
-        return $since->copy()->addSeconds(Namaa::timing('pump_max_run_seconds'));
+        return $since->copy()->addSeconds($this->maxRun($node));
     }
 
     /**
@@ -153,7 +160,9 @@ class PumpService
         $count = 0;
         $maxRun = Namaa::timing('pump_max_run_seconds');
 
-        Node::query()->where('has_pump', true)->where('pump_target', true)->with('park')->each(function (Node $node) use (&$count, $maxRun) {
+        Node::query()->where('has_pump', true)->where('pump_target', true)
+            ->whereDoesntHave('park', fn ($p) => $p->where('site_type', SiteType::DemoStand->value))
+            ->with('park')->each(function (Node $node) use (&$count, $maxRun) {
             $last = $this->lastChange($node);
 
             // No "on" log: the start time is unknown, so switch it off now.
@@ -163,5 +172,36 @@ class PumpService
         });
 
         return $count;
+    }
+
+    /**
+     * Demo stand watchdog: a pump that is on goes off after the stand's max run time
+     * (auto_off_max) or when the board has not checked in for stand_checkin_seconds
+     * (auto_off_no_checkin). Returns the number of pumps switched off.
+     */
+    public function standWatchdog(): int
+    {
+        $count = 0;
+
+        Node::query()->where('has_pump', true)->where('pump_target', true)
+            ->whereHas('park', fn ($p) => $p->where('site_type', SiteType::DemoStand->value))
+            ->with('park')->each(function (Node $node) use (&$count) {
+                $last = $this->lastChange($node);
+                $since = $last && $last->target ? $last->created_at : null;
+
+                if ($since === null || $since->lte(now()->subSeconds($this->maxRun($node)))) {
+                    $count += (int) $this->set($node, false, PumpReason::AutoOffMax);
+                } elseif ($this->silent($node)) {
+                    $count += (int) $this->set($node, false, PumpReason::AutoOffNoCheckin);
+                }
+            });
+
+        return $count;
+    }
+
+    /** A stand board that has not reported for stand_checkin_seconds (or never). */
+    public function silent(Node $node): bool
+    {
+        return $node->last_seen_at === null || $node->last_seen_at->lte(now()->subSeconds(Namaa::timing('stand_checkin_seconds')));
     }
 }

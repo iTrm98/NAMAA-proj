@@ -3,6 +3,8 @@
 // Every report interval: read the enabled sensors and POST them to
 // /api/device/readings (Wi-Fi), or print them as `NAMAA:{json}` for the USB bridge.
 // The reply sets the pump target, the next interval and the offline local rule.
+// STAND_PROFILE (demo stand): manual pump only, no local rule, relay OFF on boot,
+// after STAND_LINK_TIMEOUT_S without a reply and after pump_max_s per run.
 // The hardware-free logic (payload, reply, pump guard, buffer, serial parsing)
 // lives in lib/namaa_core and has host unit tests. Type `help` on the serial port.
 #include <Arduino.h>
@@ -91,7 +93,10 @@ static void saveRule(const LocalRule& r) {
 // State
 // ---------------------------------------------------------------------------
 
-static PumpGuard guard;
+static PumpGuard guard;  // field profile: server target + offline local rule
+#if STAND_PROFILE
+static StandPump standPump(STAND_PUMP_MAX_S, STAND_LINK_TIMEOUT_S);  // stand: manual only
+#endif
 static RingBuffer<Reading, OFFLINE_BUFFER_SIZE> backlog;
 
 static uint32_t intervalS = REPORT_INTERVAL_DEFAULT_S;
@@ -142,7 +147,7 @@ static uint32_t lcdNextMs = 0;
 
 static void setRelay(bool on) {
 #if FEATURE_RELAY
-  digitalWrite(PIN_RELAY, (on == (bool)RELAY_ACTIVE_HIGH) ? HIGH : LOW);
+  digitalWrite(PIN_RELAY, relayLevelHigh(on, RELAY_ACTIVE_HIGH) ? HIGH : LOW);
   if (on != relayOn) LOG("pump %s", on ? "ON" : "OFF");
   relayOn = on;
 #else
@@ -353,6 +358,14 @@ static void applyReply(const char* json, size_t len, uint32_t now) {
     return;
   }
   guard.onReply(rep.pump, now);
+#if STAND_PROFILE
+  standPump.onReply(rep.pump, rep.pumpMaxS, now);
+  if (rep.hasRule) {
+    static bool warned = false;
+    if (!warned) LOG("local_rule ignored: the stand pump is manual only");
+    warned = true;
+  }
+#else
   if (rep.hasRule) {
     const LocalRule& old = guard.rule();
     if (!old.valid || old.minPct != rep.rule.minPct || old.targetPct != rep.rule.targetPct ||
@@ -363,9 +376,59 @@ static void applyReply(const char* json, size_t len, uint32_t now) {
     }
     guard.setRule(rep.rule);
   }
+#endif
   if (rep.intervalS) intervalS = rep.intervalS;
   lastOkMs = now;
   everOk = true;
+}
+
+// Applies the relay decision; called from loop() and between blocking sends.
+static void serviceRelay(uint32_t now) {
+#if FEATURE_RELAY
+#if STAND_PROFILE
+  bool wasOn = standPump.on();
+  bool on = standPump.tick(now);
+  if (wasOn && !on && standPump.locked()) {
+    if (standPump.linkOk(now))
+      LOG("pump cut off: max run %lus reached", (unsigned long)standPump.maxRunS());
+    else
+      LOG("pump cut off: no server reply for %ds", STAND_LINK_TIMEOUT_S);
+  }
+  setRelay(on);
+#else
+  // While a local run is going, follow the soil closely so it stops at target.
+  static uint32_t soilNextMs = 0;
+  if (guard.localRunActive() && (int32_t)(now - soilNextMs) >= 0) {
+    soilNextMs = now + 2000;
+    lastPct = moisturePct(readSoilRaw(), cfg.dryRaw, cfg.wetRaw);
+  }
+  setRelay(guard.tick(now, lastPct));  // includes the max-run safety cut-off
+#endif
+#else
+  (void)now;
+#endif
+}
+
+static void statusLedUpdate(uint32_t now) {
+#if FEATURE_STATUS_LED
+  static int8_t last = -1;  // 0 off, 1 green (online), 2 blue (pump on), 3 red (offline)
+#if STAND_PROFILE
+  bool link = standPump.linkOk(now);
+#else
+  bool link = everOk && now - lastOkMs < intervalS * 3000UL;
+#endif
+  bool lit = statusLedOn(link, relayOn, now);
+  int8_t want = !lit ? 0 : (!link ? 3 : (relayOn ? 2 : 1));
+  if (want == last) return;
+  last = want;
+#if STATUS_LED_RGB
+  neopixelWrite(PIN_STATUS_LED, want == 3 ? 24 : 0, want == 1 ? 24 : 0, want == 2 ? 32 : 0);
+#else
+  digitalWrite(PIN_STATUS_LED, lit ? HIGH : LOW);
+#endif
+#else
+  (void)now;
+#endif
 }
 
 static void reportFailed(const Reading& r, bool keep) {
@@ -392,6 +455,7 @@ static void flushBacklog(const char* via) {
   char body[384];
   for (int i = 0; i < FLUSH_PER_CYCLE && !backlog.empty(); i++) {
     esp_task_wdt_reset();
+    serviceRelay(millis());  // each send can block: keep the relay safety running
     const Reading& r = backlog.front();
     int64_t age = (int64_t)time(nullptr) - epochAt(time(nullptr), millis(), r.takenMs);
     if (age > 23 * 3600) { backlog.pop(); continue; }  // server rejects > 24 h
@@ -478,7 +542,8 @@ static void printHelp() {
 static void printShow() {
   char tp[12];
   tokenPrefix(cfg.token.c_str(), tp, sizeof tp);
-  Serial.printf("fw %s, board %s\n", FW_VERSION, BOARD_NAME);
+  Serial.printf("fw %s, board %s, profile %s\n", FW_VERSION, BOARD_NAME,
+                STAND_PROFILE ? "demo stand (manual pump)" : "field");
   Serial.printf("mode %s%s\n", usbActive() ? "usb" : "wifi", usbAuto ? " (auto, Wi-Fi failed)" : "");
   Serial.printf("wifi1 \"%s\"  wifi2 \"%s\"\n", cfg.ssid1.c_str(), cfg.ssid2.c_str());
   if (wifiState == WifiState::Connected)
@@ -491,6 +556,12 @@ static void printShow() {
   Serial.printf("time %s, interval %lus, failed posts %lu, buffered %u\n",
                 timeValid() ? "synced" : "not synced", (unsigned long)intervalS,
                 (unsigned long)guard.failures(), (unsigned)backlog.size());
+#if STAND_PROFILE
+  uint32_t nowMs = millis();
+  Serial.printf("stand pump: max run %lus, link %s, %s\n", (unsigned long)standPump.maxRunS(),
+                standPump.linkOk(nowMs) ? "ok" : "lost (relay forced OFF)",
+                standPump.locked() ? "waiting for OFF from the server before a new run" : "armed");
+#endif
   const LocalRule& lr = guard.rule();
   if (lr.valid)
     Serial.printf("local rule min %.0f%% target %.0f%% max run %lus\n", lr.minPct, lr.targetPct,
@@ -502,8 +573,9 @@ static void printShow() {
   Serial.printf("features soil=%d dht=%d(DHT%d) relay=%d(active %s) flow=%d(%.0f p/L) level=%d lcd=%d\n",
                 FEATURE_SOIL, FEATURE_DHT, DHT_TYPE, FEATURE_RELAY, RELAY_ACTIVE_HIGH ? "HIGH" : "LOW",
                 FEATURE_FLOW, (double)FLOW_PULSES_PER_LITRE, FEATURE_WATER_LEVEL, FEATURE_LCD);
-  Serial.printf("pins soil=%d level=%d dht=%d flow=%d relay=%d sda=%d scl=%d\n", PIN_SOIL,
-                PIN_WATER_LEVEL, PIN_DHT, PIN_FLOW, PIN_RELAY, PIN_I2C_SDA, PIN_I2C_SCL);
+  Serial.printf("pins soil=%d level=%d dht=%d flow=%d relay=%d sda=%d scl=%d led=%d(%s)\n",
+                PIN_SOIL, PIN_WATER_LEVEL, PIN_DHT, PIN_FLOW, PIN_RELAY, PIN_I2C_SDA, PIN_I2C_SCL,
+                PIN_STATUS_LED, FEATURE_STATUS_LED ? "on" : "off");
   Serial.printf("pump %s%s\n", relayOn ? "ON" : "OFF", guard.localRunActive() ? " (local rule)" : "");
 }
 
@@ -629,8 +701,14 @@ static void serialLoop(uint32_t now) {
 
 void setup() {
 #if FEATURE_RELAY
-  digitalWrite(PIN_RELAY, RELAY_ACTIVE_HIGH ? LOW : HIGH);  // off before the pin drives
+  // OFF level first, then output: the relay never clicks on at boot.
+  digitalWrite(PIN_RELAY, relayLevelHigh(false, RELAY_ACTIVE_HIGH) ? HIGH : LOW);
   pinMode(PIN_RELAY, OUTPUT);
+  digitalWrite(PIN_RELAY, relayLevelHigh(false, RELAY_ACTIVE_HIGH) ? HIGH : LOW);
+#endif
+#if FEATURE_STATUS_LED && !STATUS_LED_RGB
+  pinMode(PIN_STATUS_LED, OUTPUT);
+  digitalWrite(PIN_STATUS_LED, LOW);
 #endif
   Serial.begin(115200);
   delay(300);
@@ -647,7 +725,9 @@ void setup() {
   esp_task_wdt_add(NULL);
 
   loadSettings();
-  guard.setRule(loadRule());
+#if !STAND_PROFILE
+  guard.setRule(loadRule());  // the stand never waters on its own
+#endif
 
   analogReadResolution(12);
 #if FEATURE_DHT
@@ -692,16 +772,8 @@ void loop() {
     if (!usbAwaiting && (int32_t)(now - nextReportMs) >= 0) report(millis());
   }
 
-#if FEATURE_RELAY
-  // While a local run is going, follow the soil closely so it stops at target.
-  static uint32_t soilNextMs = 0;
-  if (guard.localRunActive() && (int32_t)(now - soilNextMs) >= 0) {
-    soilNextMs = now + 2000;
-    lastPct = moisturePct(readSoilRaw(), cfg.dryRaw, cfg.wetRaw);
-  }
-  setRelay(guard.tick(millis(), lastPct));  // includes the max-run safety cut-off
-#endif
-
+  serviceRelay(millis());
+  statusLedUpdate(millis());
   lcdUpdate(now);
   delay(10);
 }

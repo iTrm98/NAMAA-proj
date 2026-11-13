@@ -3,12 +3,15 @@
 namespace App\Services;
 
 use App\Console\Commands\BenchSetup;
+use App\Enums\DataSource;
 use App\Enums\MonitoringMode;
+use App\Enums\NodeType;
 use App\Enums\SiteType;
 use App\Models\Node;
 use App\Models\Park;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 /**
@@ -25,6 +28,9 @@ class StandSetup
 
     /** The boards that sit on the table today. */
     public const DEFAULT_NODES = ['Model A', 'Model B', 'Camera 1'];
+
+    /** The bench board that is not flashed yet: created on the stand by every real run, with a device token returned once. */
+    public const BENCH_BOARD = 'Bench Board';
 
     public function __construct(
         private readonly ParkModeService $modes,
@@ -53,7 +59,8 @@ class StandSetup
         if ($move) {
             $moving = $nodeIds !== null
                 ? Node::with('park')->whereIn('id', $nodeIds)->get()
-                : Node::with('park')->whereIn('name', self::DEFAULT_NODES)
+                : Node::with('park')->where(fn ($q) => $q->whereIn('name', self::DEFAULT_NODES)
+                    ->when(Schema::hasColumn('nodes', 'placeholder'), fn ($q) => $q->orWhere('placeholder', true)))
                     ->whereHas('park', fn ($p) => $p->where('company_id', $stand->company_id))->get();
 
             if ($nodeIds !== null && $moving->count() !== count(array_unique($nodeIds))) {
@@ -72,6 +79,8 @@ class StandSetup
             'stand' => ['id' => $stand->id, 'from' => $stand->name_en, 'to' => self::NAME_EN, 'site_type' => 'demo_stand'],
             'moves' => $moving->map(fn (Node $n) => ['node_id' => $n->id, 'name' => $n->name, 'from_park' => $n->park->name_en])->all(),
             'satellite_only' => [],
+            'bench_board' => Node::where('park_id', $stand->id)->where('name', self::BENCH_BOARD)->exists() ? 'exists' : 'create',
+            'bench_board_token' => null,
             'dry_run' => $dryRun,
         ];
 
@@ -84,14 +93,15 @@ class StandSetup
             return $plan;
         }
 
-        DB::transaction(function () use ($stand, $moving, $emptied, $origins) {
+        DB::transaction(function () use ($stand, $moving, $emptied, $origins, $nodeIds, &$plan) {
             $before = ['site_type' => $stand->site_type?->value, 'name_en' => $stand->name_en, 'name_ar' => $stand->name_ar];
             $stand->update(['site_type' => SiteType::DemoStand, 'name_en' => self::NAME_EN, 'name_ar' => self::NAME_AR, 'is_test' => true]);
             $this->logger->log('park.updated', $stand, ['before' => $before, 'after' => ['site_type' => 'demo_stand', 'name_en' => self::NAME_EN, 'name_ar' => self::NAME_AR]], companyId: $stand->company_id);
 
             foreach ($moving as $node) {
                 $from = $node->park_id;
-                $node->update(['park_id' => $stand->id, 'detached_at' => null]);
+                $node->update(['park_id' => $stand->id, 'detached_at' => null]
+                    + ($nodeIds === null && Schema::hasColumn('nodes', 'placeholder') ? ['placeholder' => true] : []));
                 $this->logger->log('node.updated', $node, ['before' => ['park_id' => $from], 'after' => ['park_id' => $stand->id, 'reason' => 'stand_setup']], companyId: $stand->company_id);
             }
 
@@ -102,6 +112,16 @@ class StandSetup
                 $this->status->recalculate($park->refresh());
             }
             $this->status->recalculate($stand->refresh());
+
+            if ($plan['bench_board'] === 'create') {
+                $board = Node::create([
+                    'park_id' => $stand->id, 'type' => NodeType::Sensor, 'name' => self::BENCH_BOARD,
+                    'has_pump' => true, 'pump_target' => false, 'source' => DataSource::Real, 'capture_mode' => 'url',
+                ]);
+                $this->logger->log('node.created', $board, ['after' => ['name' => $board->name, 'type' => 'sensor', 'park_id' => $stand->id, 'reason' => 'stand_setup']], companyId: $stand->company_id);
+                // Shown once by the command; never written to a file or a log.
+                $plan['bench_board_token'] = $board->createToken('device', ['device'])->plainTextToken;
+            }
         });
 
         return $plan;

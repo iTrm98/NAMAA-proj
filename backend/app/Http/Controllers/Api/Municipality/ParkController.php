@@ -20,6 +20,7 @@ use App\Services\ReadingSeries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -31,7 +32,7 @@ class ParkController extends Controller
 {
     public function index(): AnonymousResourceCollection
     {
-        $parks = Park::parks()->withoutTest()->with(['nodes.latestPumpLog', 'company', 'latestNdvi'])
+        $parks = Park::parks()->withoutTest()->with(['nodes.latestPumpLog', 'company', ...Park::satelliteRelations()])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('company_id')
             ->orderBy('id')
@@ -41,11 +42,20 @@ class ParkController extends Controller
     }
 
     /** GET /api/municipality/parks/{park}: the admin park detail, read-only. */
+    /** GET /api/municipality/parks/{park}/photo: read-only stream of the cover photo (no upload or delete). */
+    public function photo(Park $park): StreamedResponse
+    {
+        abort_if($park->is_test, 404);
+        abort_unless($park->cover_photo_path && Storage::disk('local')->exists($park->cover_photo_path), 404);
+
+        return Storage::disk('local')->response($park->cover_photo_path);
+    }
+
     public function show(Park $park, PumpService $pump): ParkResource
     {
         abort_if($park->is_test, 404);
 
-        $park->load(['nodes', 'company', 'latestNdvi', 'openAlerts.detection', 'activeTasks.assignee', 'activeTasks.alert', 'outlineBy:id,name', 'areaBy:id,name'])
+        $park->load(['nodes', 'company', ...Park::satelliteRelations(), 'openAlerts.detection', 'activeTasks.assignee', 'activeTasks.alert', 'outlineBy:id,name', 'areaBy:id,name'])
             ->loadCount(['openAlerts as open_alerts_count']);
 
         return (new ParkResource($park))->detailed()->withPump($pump->state($park));
@@ -128,7 +138,7 @@ class ParkController extends Controller
     /** GET /api/municipality/impact?days=30&company_id=: the impact figures plus a row per company. */
     public function impact(ImpactRequest $request, ImpactService $impact): JsonResponse
     {
-        $parks = Park::parks()->withoutTest()->with(['company', 'latestNdvi'])
+        $parks = Park::parks()->withoutTest()->with(['company', ...Park::satelliteRelations()])
             ->when($request->validated('company_id'), fn ($q, $id) => $q->where('company_id', $id))
             ->orderBy('company_id')->orderBy('id')->get();
         $days = $request->days();

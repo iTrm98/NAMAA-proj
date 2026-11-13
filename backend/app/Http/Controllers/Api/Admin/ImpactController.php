@@ -16,7 +16,7 @@ class ImpactController extends Controller
         $parks = Park::forCompany($request->user()->company_id)
             ->parks()
             ->unless($request->boolean('include_test'), fn ($q) => $q->withoutTest())
-            ->with('latestNdvi')->orderBy('id')->get();
+            ->with(Park::satelliteRelations())->orderBy('id')->get();
 
         return response()->json(['data' => $impact->summary($parks, $request->days())]);
     }

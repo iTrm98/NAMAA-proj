@@ -100,6 +100,38 @@ def test_ndvi_validation_unchanged(client):
     assert r.status_code == 422
 
 
+def test_ndvi_accepts_a_multipolygon_with_holes(client, monkeypatch):
+    seen = {}
+
+    def fake(boundary, green_zone, *args):
+        seen["polygon"] = boundary
+        return {"values": []}
+
+    monkeypatch.setattr("app.ndvi.compute_ndvi_v2", fake)
+    outer = [[39.80, 21.40], [39.82, 21.40], [39.82, 21.42], [39.80, 21.42], [39.80, 21.40]]
+    hole = [[39.805, 21.405], [39.81, 21.405], [39.81, 21.41], [39.805, 21.41], [39.805, 21.405]]
+    part2 = [[39.90, 21.40], [39.91, 21.40], [39.91, 21.41], [39.90, 21.41], [39.90, 21.40]]
+    body = {"type": "MultiPolygon", "coordinates": [[outer, hole], [part2]]}
+    r = client.post("/ndvi", json={"polygon": body, "date_from": "2026-11-01", "date_to": "2026-11-05"})
+    assert r.status_code == 200
+    assert seen["polygon"]["type"] == "MultiPolygon"
+    assert len(seen["polygon"]["coordinates"]) == 2 and len(seen["polygon"]["coordinates"][0]) == 2
+
+    bad = {"type": "MultiPolygon", "coordinates": [[outer[:-1]]]}
+    r = client.post("/ndvi", json={"polygon": bad, "date_from": "2026-11-01", "date_to": "2026-11-05"})
+    assert r.status_code == 422
+
+
+def test_ndvi_geometry_handles_multipolygon_holes():
+    from shapely.geometry import shape
+
+    outer = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]]
+    hole = [[1, 1], [2, 1], [2, 2], [1, 2], [1, 1]]
+    part2 = [[10, 0], [11, 0], [11, 1], [10, 1], [10, 0]]
+    g = shape({"type": "MultiPolygon", "coordinates": [[outer, hole], [part2]]})
+    assert g.area == 16 - 1 + 1
+
+
 def test_default_confidence_follows_the_model(tmp_path, monkeypatch):
     from app.waste import WasteConfig, DEFAULT_CONFIDENCE_COCO, DEFAULT_CONFIDENCE_CUSTOM
 

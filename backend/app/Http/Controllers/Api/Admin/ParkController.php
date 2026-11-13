@@ -35,7 +35,7 @@ class ParkController extends Controller
             ->when($request->boolean('include_test'),
                 fn ($q) => $q->unless($request->boolean('include_archived'), fn ($q) => $q->whereNull('archived_at')),
                 fn ($q) => $q->parks()->withoutTest())
-            ->with(['nodes.latestPumpLog', 'latestNdvi'])
+            ->with(['nodes.latestPumpLog', ...Park::satelliteRelations()])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('id')
             ->get();
@@ -160,7 +160,7 @@ class ParkController extends Controller
 
     private function detail(Park $park): ParkResource
     {
-        $park->load(['nodes', 'latestNdvi', 'openAlerts.detection', 'activeTasks.assignee', 'activeTasks.alert', 'outlineBy:id,name', 'areaBy:id,name', 'claims'])
+        $park->load(['nodes', ...Park::satelliteRelations(), 'openAlerts.detection', 'activeTasks.assignee', 'activeTasks.alert', 'outlineBy:id,name', 'areaBy:id,name', 'claims'])
             ->loadCount(['openAlerts as open_alerts_count']);
 
         return (new ParkResource($park))->detailed()->withPump($this->pump->state($park));

@@ -332,10 +332,10 @@ docker compose exec backend php artisan namaa:scenario reset     # back to the s
 docker compose exec backend php artisan namaa:scenario dry       # Al Adel below its minimum: high-priority dry alert after 2 readings
 docker compose exec backend php artisan namaa:scenario heat      # Al Adel at about 42 °C: the open dry alert becomes heat stress (urgent), no second alert
 docker compose exec backend php artisan namaa:scenario escalate  # the newest open, not started task reaches its due time: priority up (or Overdue) within 10 s
-docker compose exec backend php artisan namaa:scenario leak      # Alkhatateen: water flows with the pump off, urgent leak alert within 3 readings
+docker compose exec backend php artisan namaa:scenario leak      # Al Aziziyah: water flows with the pump off, urgent leak alert within 3 readings
 docker compose exec backend php artisan namaa:scenario blockage  # Al Adel's pump runs but the flow drops to a third: blockage alert after 3 readings
 docker compose exec backend php artisan namaa:scenario battery   # Al Adel's battery drops to 15 %: low battery alert after 2 readings
-docker compose exec backend php artisan namaa:scenario offline   # Alhilal stops reporting: grey after 30 s, ready for a task after 2 min
+docker compose exec backend php artisan namaa:scenario offline   # Al Masfalah (Sim 4, second company; Sim 2 as fallback) stops reporting: grey after 30 s, ready for a task after 2 min
 docker compose exec backend php artisan namaa:scenario litter    # Sim Cam (the simulated camera on Al Adel) "sees" the photos in data/samples/litter/: litter alert after 2 frames
 docker compose exec backend php artisan namaa:scenario recover   # ends heat, leak, blockage, low battery and the offline sensor; a running litter feed switches to data/samples/clean/
 ```

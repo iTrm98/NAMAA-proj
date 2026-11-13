@@ -38,6 +38,26 @@ class ParkOutline
     }
 
     /** Distinct points of the ring (without the closing point). @param list<array{0: float, 1: float}> $ring */
+    /** The outer ring of a Polygon, or of the largest part of a MultiPolygon ([] when there is none). @param array<string, mixed>|null $geometry @return list<array{0: float, 1: float}> */
+    public static function outerRing(?array $geometry): array
+    {
+        if (($geometry['type'] ?? null) === 'MultiPolygon') {
+            $best = [];
+            $bestArea = -1.0;
+            foreach ($geometry['coordinates'] ?? [] as $poly) {
+                $ring = $poly[0] ?? [];
+                $a = $ring === [] ? 0.0 : self::area(self::closed($ring));
+                if ($a > $bestArea) {
+                    [$best, $bestArea] = [$ring, $a];
+                }
+            }
+
+            return $best;
+        }
+
+        return $geometry['coordinates'][0] ?? [];
+    }
+
     public static function points(array $ring): int
     {
         return count(array_unique(array_map(fn ($p) => $p[0].','.$p[1], array_slice(self::closed($ring), 0, -1))));
@@ -89,7 +109,7 @@ class ParkOutline
         $area = (int) round(self::area($ring));
         $before = [
             'area_m2' => $park->area_m2,
-            'points' => isset($park->polygon['coordinates'][0]) ? self::points($park->polygon['coordinates'][0]) : 0,
+            'points' => ($outer = self::outerRing($park->polygon)) !== [] ? self::points($outer) : 0,
             'outline_source' => $park->outline_source,
         ];
 

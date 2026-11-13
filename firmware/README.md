@@ -7,6 +7,8 @@
 
 Bring-up in short: plug the board into USB, flash it with one command, set Wi-Fi and the node token over the serial monitor, then watch its readings on the admin **Hardware** page (`/admin/hardware`). The network side (hotspot, firewall, order of steps) is in the root [README](../README.md#36-hardware-bring-up).
 
+**Demo stand (Sprint 6.2).** The envs `esp32` and `esp32s3` now build the demo stand profile (`STAND_PROFILE=1`): soil probe, relay (active-LOW, classic GPIO26 / S3 GPIO5), status LED, raw soil every 2 s, pump manual only with board-side cut-offs. Wiring, flashing, calibration and the pre-demo checklist: [docs/hardware/STAND.md](../docs/hardware/STAND.md). The field node profile described below builds as `esp32_field` / `esp32s3_field`.
+
 All commands below run from `firmware/node-sensor/` unless stated otherwise.
 
 ---

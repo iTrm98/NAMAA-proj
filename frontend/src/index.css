@@ -291,3 +291,13 @@
 .maplibregl-map, .maplibregl-ctrl, .maplibregl-ctrl-attrib, .maplibregl-popup-content {
   font-family: var(--font-sans);
 }
+
+/* Map markers fade in; no motion for reduced-motion users. */
+@keyframes namaa-marker-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.namaa-marker { animation: namaa-marker-in 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .namaa-marker { animation: none; }
+}

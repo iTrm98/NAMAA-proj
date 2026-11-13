@@ -13,7 +13,7 @@ import { parkName, useParks } from '@/hooks/useParks'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const WIDE = ['/admin/tasks', '/admin/demo', '/admin/impact', '/admin/hardware', '/admin/park-setup']
+const WIDE = ['/admin/stand', '/admin/tasks', '/admin/demo', '/admin/impact', '/admin/hardware', '/admin/park-setup']
 
 /** /admin: top bar (logo, PillNav, Live, language, bell, account), quick-action rail, park list (map and park pages), main area. */
 export default function AdminLayout() {
@@ -53,13 +53,15 @@ function AdminNav() {
             ? '/admin/impact'
             : pathname.startsWith('/admin/hardware')
               ? '/admin/hardware'
+              : pathname.startsWith('/admin/stand')
+                ? '/admin/stand'
               : pathname.startsWith('/admin/park-setup')
                 ? '/admin/park-setup'
               : pathname.startsWith('/admin/demo')
                 ? '/admin/demo'
                 : undefined
 
-  const tools = [{ to: '/admin/hardware', label: t('nav.hardware') }, { to: '/admin/park-setup', label: t('nav.parkSetup') }, ...(demo.data ? [{ to: '/admin/demo', label: t('nav.demo') }] : [])]
+  const tools = [{ to: '/admin/hardware', label: t('nav.hardware') }, { to: '/admin/stand', label: t('nav.stand') }, { to: '/admin/park-setup', label: t('nav.parkSetup') }, ...(demo.data ? [{ to: '/admin/demo', label: t('nav.demo') }] : [])]
 
   return (
     <PillNav

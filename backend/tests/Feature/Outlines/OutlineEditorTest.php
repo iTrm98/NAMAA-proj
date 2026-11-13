@@ -146,14 +146,14 @@ class OutlineEditorTest extends TestCase
         $old = NdviReading::factory()->create(['park_id' => $this->park->id, 'date' => now('Asia/Riyadh')->subDays(120)->toDateString(), 'mean' => 0.2]);
         $drop = Alert::factory()->create(['park_id' => $this->park->id, 'type' => AlertType::NdviDrop]);
 
-        $values = array_map(fn ($ago) => ['date' => now('Asia/Riyadh')->subDays($ago)->toDateString(), 'mean' => 0.55, 'pixels' => 300], [25, 15, 5, 1]);
-        Http::fake(['vision.test/ndvi' => Http::response(['park_id' => $this->park->id, 'values' => $values])]);
+        $values = array_map(fn ($ago) => ['date' => now('Asia/Riyadh')->subDays($ago)->toDateString(), 'mean' => 0.55, 'median' => 0.55, 'p90' => 0.6, 'pixels' => 300, 'pure_pixels' => 250, 'clear_fraction' => 0.95, 'green_cover_pct' => 80.0], [25, 15, 5, 1]);
+        Http::fake(['vision.test/ndvi' => Http::response(['park_id' => $this->park->id, 'measured_on' => 'boundary', 'geometry' => ['pure_pixels' => 250, 'usual_pixels' => 300.0, 'inner_width_m' => 90.0], 'values' => $values, 'composite' => null])]);
 
         (new RecomputeNdvi($this->park->id))->handle(app(NdviService::class));
 
         $this->assertSame(4, NdviReading::where('park_id', $this->park->id)->where('date', '>=', now('Asia/Riyadh')->subDays(90)->toDateString())->count());
         $this->assertSame(0, NdviReading::where('park_id', $this->park->id)->where('mean', 0.40)->count(), 'old values replaced');
-        $this->assertModelExists($old);
+        $this->assertModelMissing($old); // the first v2 answer replaces every v1 value
         $this->assertSame('resolved', $drop->refresh()->status->value);
         $this->assertNull($this->park->refresh()->ndvi_recompute_at);
     }

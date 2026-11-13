@@ -142,7 +142,7 @@ export function useUpdatePark(parkId: number) {
 
 /** PUT /api/admin/parks/{id}/outline (Sprint 3.1): the editor's outline and its source. */
 export interface OutlineBody {
-  boundary?: Polygon
+  boundary?: Polygon | MultiPolygon
   green_zone?: MultiPolygon | null
   imagery: 'esri' | 'maptiler'
   checked: boolean

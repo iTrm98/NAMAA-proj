@@ -40,7 +40,7 @@ class SimulatorTest extends TestCase
         $realPark = Park::factory()->create(['company_id' => $this->company->id]);
         $this->real = Node::factory()->withPump()->create(['park_id' => $realPark->id, 'name' => 'Model A', 'last_moisture_pct' => 40]);
 
-        foreach (['Sim 1' => 21.7, 'Sim 2' => 50.0, 'Sim 3' => 55.0] as $name => $pct) {
+        foreach (['Sim 1' => 21.7, 'Sim 2' => 50.0, 'Sim 4' => 55.0] as $name => $pct) {
             $park = Park::factory()->simulated()->create(['company_id' => $this->company->id, 'moisture_min' => 25, 'moisture_max' => 70, 'status' => ParkStatus::Ok]);
             $this->sim[$name] = Node::factory()->simulated()->withPump()->create([
                 'park_id' => $park->id, 'name' => $name, 'last_moisture_pct' => $pct, 'pump_target' => false,
@@ -91,7 +91,7 @@ class SimulatorTest extends TestCase
         $this->assertNotNull(Alert::open()->where('node_id', $this->sim['Sim 1']->id)->where('type', AlertType::Dry)->first());
         $this->assertSame(ParkStatus::Dry, $this->sim['Sim 1']->park->refresh()->status);
 
-        foreach (['Sim 2', 'Sim 3'] as $name) {
+        foreach (['Sim 2', 'Sim 4'] as $name) {
             $this->assertSame(ParkStatus::Ok, $this->sim[$name]->park->refresh()->status);
             $pct = $this->latest($this->sim[$name])->moisture_pct;
             $this->assertGreaterThanOrEqual(30, $pct);
@@ -133,17 +133,30 @@ class SimulatorTest extends TestCase
         $this->assertSame(AlertStatus::Resolved, Alert::where('node_id', $node->id)->where('type', AlertType::Leak)->sole()->status);
     }
 
+    public function test_offline_scenario_falls_back_to_a_free_simulated_node_and_fails_clearly_without_one(): void
+    {
+        // Without the configured node (Sim 4) the offline scenario takes a node that is neither the dry nor the leak one.
+        config(['namaa.scenario.offline_node' => 'Sim 9']);
+        $this->artisan('namaa:scenario offline')->assertSuccessful();
+        $this->assertTrue(\Illuminate\Support\Facades\Cache::get("namaa:sim:{$this->sim['Sim 4']->id}:offline", false));
+
+        // Only the dry node exists: a clear message, nothing broken.
+        $this->sim['Sim 2']->delete();
+        $this->sim['Sim 4']->delete();
+        $this->artisan('namaa:scenario offline')->expectsOutputToContain('No simulated node found')->assertFailed();
+    }
+
     public function test_offline_scenario_stops_one_node_until_recover(): void
     {
         $this->artisan('namaa:scenario offline')->assertSuccessful();
         $this->tick(2);
 
-        $this->assertSame(0, Reading::where('node_id', $this->sim['Sim 3']->id)->count());
+        $this->assertSame(0, Reading::where('node_id', $this->sim['Sim 4']->id)->count());
         $this->assertSame(2, Reading::where('node_id', $this->sim['Sim 2']->id)->count());
 
         $this->artisan('namaa:scenario recover')->assertSuccessful();
         $this->tick(1);
-        $this->assertSame(1, Reading::where('node_id', $this->sim['Sim 3']->id)->count());
+        $this->assertSame(1, Reading::where('node_id', $this->sim['Sim 4']->id)->count());
     }
 
     public function test_after_watering_the_stage_ends_and_al_adel_dries_in_real_time_until_the_next_dry_scenario(): void
@@ -234,7 +247,7 @@ class SimulatorTest extends TestCase
         $this->assertEqualsWithDelta(35, $this->latest($alAdel)->moisture_pct, 1.0);
         $this->assertEqualsWithDelta(50, $this->latest($this->sim['Sim 2'])->moisture_pct, 1.0, 'healthy parks keep their soil');
         $this->assertTrue($this->sim['Sim 2']->park->refresh()->auto_irrigation, 'reset turns automatic irrigation on for healthy parks');
-        $this->assertTrue($this->sim['Sim 3']->park->refresh()->auto_irrigation);
+        $this->assertTrue($this->sim['Sim 4']->park->refresh()->auto_irrigation);
         $this->assertSame(0.0, $this->latest($this->sim['Sim 2'])->flow, 'reset also ends a leak');
         $this->tick(2);
         $this->assertNull(Alert::open()->where('node_id', $alAdel->id)->where('type', AlertType::Dry)->first(), 'reset does not start the story');
@@ -280,11 +293,11 @@ class SimulatorTest extends TestCase
         $this->asUser($admin)->postJson('/api/admin/demo/scenario', ['name' => 'reset', 'full' => true])->assertOk()->assertJsonPath('data.full', true);
         $this->assertTrue((bool) $this->sim['Sim 2']->park->refresh()->auto_irrigation);
 
-        $this->sim['Sim 3']->park->update(['auto_irrigation' => false]);
+        $this->sim['Sim 4']->park->update(['auto_irrigation' => false]);
         $this->artisan('namaa:scenario reset')->assertSuccessful();
-        $this->assertFalse((bool) $this->sim['Sim 3']->park->refresh()->auto_irrigation);
+        $this->assertFalse((bool) $this->sim['Sim 4']->park->refresh()->auto_irrigation);
         $this->artisan('namaa:scenario reset --full')->assertSuccessful();
-        $this->assertTrue((bool) $this->sim['Sim 3']->park->refresh()->auto_irrigation);
+        $this->assertTrue((bool) $this->sim['Sim 4']->park->refresh()->auto_irrigation);
     }
 
     public function test_reset_brings_a_healthy_park_outside_its_range_back(): void
@@ -384,7 +397,7 @@ class SimulatorTest extends TestCase
             app(Simulator::class)->tick();
         }
         $this->assertEqualsWithDelta($first - 6, $this->latest($this->sim['Sim 1'])->battery_pct, 0.5);
-        $this->assertNotNull($this->latest($this->sim['Sim 3'])->battery_pct);
+        $this->assertNotNull($this->latest($this->sim['Sim 4'])->battery_pct);
         $this->assertNull(Alert::open()->where('type', AlertType::LowBattery)->first());
     }
 
@@ -463,7 +476,7 @@ class SimulatorTest extends TestCase
         app(ScenarioService::class)->run('dry');
         $this->sim['Sim 1']->park->update(['auto_irrigation' => false]); // let it dry to the floor
 
-        // 10 min of 5 s ticks: Al Adel dries to its floor, Sim 2 runs its pump to the top, Sim 3 wanders.
+        // 10 min of 5 s ticks: Al Adel dries to its floor, Sim 2 runs its pump to the top, Sim 4 wanders.
         $this->sim['Sim 2']->update(['pump_target' => true]);
         $this->tick(60);
         $this->sim['Sim 2']->update(['pump_target' => false]);

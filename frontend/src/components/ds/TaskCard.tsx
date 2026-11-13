@@ -37,6 +37,7 @@ export function TaskCard({ task, compact, progress, onClick, className, category
         <Chip tone={PRIORITY_TONE[task.priority]}>{t(`priority.${task.priority}`)}</Chip>
         {category && <Chip tone="muted">{category}</Chip>}
         {!hideStatus && <Chip tone="muted">{t(`taskStatus.${task.status}`)}</Chip>}
+        {task.park?.site_type === 'demo_stand' && <Chip tone="muted">{t('taskCard.stand')}</Chip>}
         {task.escalated_at && <Chip tone="urgent">{t('taskCard.escalated')}</Chip>}
         {task.overdue && <Chip tone="high">{t('taskCard.overdue')}</Chip>}
       </div>

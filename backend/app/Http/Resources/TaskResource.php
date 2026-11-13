@@ -32,6 +32,7 @@ class TaskResource extends JsonResource
                 'district' => $this->park->district,
                 'status' => $this->park->status->value,
                 'source' => $this->park->source->value,
+                'site_type' => $this->park->site_type?->value ?? 'park',
             ]),
             'alert_id' => $this->alert_id,
             'alert' => $this->whenLoaded('alert', fn () => $this->alert ? [

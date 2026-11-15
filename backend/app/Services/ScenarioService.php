@@ -344,6 +344,8 @@ class ScenarioService
     private function resetCamera(?int $companyId, ?User $by): array
     {
         $this->feed->stop();
+        // Reset always leaves the stand camera in Demo mode.
+        CameraMode::set(CameraMode::DEMO);
         $resolved = 0;
 
         $alerts = Alert::open()
@@ -492,6 +494,39 @@ class ScenarioService
             'leak' => $this->findTarget($nodes, 'leak_node'),
             'offline' => $this->findTarget($nodes, 'offline_node'),
         ];
+    }
+
+    /** Scenarios listed by GET /admin/demo/story (the panel buttons), in panel order. */
+    public const PANEL = ['reset', 'dry', 'heat', 'leak', 'blockage', 'offline', 'litter', 'recover'];
+
+    /**
+     * The park and node each panel scenario acts on (null park for reset / recover: all simulated parks).
+     *
+     * @return list<array{name: string, park_id: ?int, name_ar: ?string, name_en: ?string, node_id: ?int, kind: string, available: bool}>
+     */
+    public function panel(?int $companyId): array
+    {
+        $nodes = $this->simulatedNodes($companyId);
+        $keys = ['dry' => 'dry_node', 'heat' => 'heat_node', 'leak' => 'leak_node', 'blockage' => 'blockage_node', 'offline' => 'offline_node'];
+        $rows = [];
+
+        foreach (self::PANEL as $name) {
+            if ($name === 'litter') {
+                $node = CameraFeed::cameraOf($companyId)?->loadMissing('park');
+                $kind = 'camera';
+                $available = $node !== null && CameraFeed::photos('litter') !== [];
+            } else {
+                $node = isset($keys[$name]) ? $this->findTarget($nodes, $keys[$name]) : null;
+                $kind = 'sensor';
+                $available = isset($keys[$name]) ? $node !== null : $nodes->isNotEmpty();
+            }
+            $rows[] = [
+                'name' => $name, 'park_id' => $node?->park_id, 'name_ar' => $node?->park?->name_ar, 'name_en' => $node?->park?->name_en,
+                'node_id' => $node?->id, 'kind' => $kind, 'available' => $available,
+            ];
+        }
+
+        return $rows;
     }
 
     /** Forget every forced and simulated state of a node (a park leaving the simulation). */

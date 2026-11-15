@@ -51,6 +51,21 @@ if errorlevel 1 (
 )
 
 echo.
+echo Optional hardware bridges (each opens in its own window)
+choice /c yn /n /m "Start camera bridge? (y/n) "
+if errorlevel 2 goto skip_camera
+if exist "ml\.venv\Scripts\python.exe" (
+    start "NAMAA - Camera bridge" /d "%~dp0" cmd /k "ml\.venv\Scripts\python.exe tools\camera_bridge.py --camera 1 --port 8090"
+) else (
+    echo     ml\.venv not found. Camera bridge not started.
+)
+:skip_camera
+choice /c yn /n /m "Start USB board bridge? (y/n) "
+if errorlevel 2 goto skip_board
+start "NAMAA - USB board bridge" /d "%~dp0" cmd /k "python tools\usb-bridge\usb_bridge.py --port COM3 --token-file"
+:skip_board
+
+echo.
 echo [3/5] VS Code
 start "" code "%~dp0."
 

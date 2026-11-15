@@ -39,6 +39,8 @@ trait CameraTestHelpers
     {
         Storage::fake('local');
         config(['namaa.camera.url' => 'http://camera.test', 'namaa.vision.url' => 'http://vision.test']);
+        // Most camera tests send a litter frame once: no 2-of-3 persistence unless a test turns it on.
+        config(['namaa.camera.persistence' => ['window' => 1, 'needed' => 1, 'min_iou' => 0.2]]);
 
         $this->company = Company::factory()->create();
         $this->admin = User::factory()->admin()->create(['company_id' => $this->company->id]);

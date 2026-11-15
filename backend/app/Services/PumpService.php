@@ -25,7 +25,7 @@ use InvalidArgumentException;
  */
 class PumpService
 {
-    public function __construct(private readonly ActivityLogger $logger) {}
+    public function __construct(private readonly ActivityLogger $logger, private readonly GatewayClient $gateway) {}
 
     /** Returns false when the target already had that value (nothing logged). */
     public function set(Node $node, bool $on, PumpReason $reason, ?User $user = null): bool
@@ -34,11 +34,16 @@ class PumpService
             throw new InvalidArgumentException("Node {$node->id} has no pump.");
         }
 
-        if ($node->pump_target === $on) {
-            return false;
-        }
+        if ($node->isGatewayZone()) {
+            // The Gateway runs the pump: send the command, never write pump_target (throws GatewayUnreachable, 502).
+            $this->gateway->command((string) $node->zone, $on);
+        } else {
+            if ($node->pump_target === $on) {
+                return false;
+            }
 
-        $node->update(['pump_target' => $on]);
+            $node->update(['pump_target' => $on]);
+        }
 
         $log = PumpLog::create([
             'node_id' => $node->id,
@@ -161,6 +166,7 @@ class PumpService
         $maxRun = Namaa::timing('pump_max_run_seconds');
 
         Node::query()->where('has_pump', true)->where('pump_target', true)
+            ->withoutZone()
             ->whereDoesntHave('park', fn ($p) => $p->where('site_type', SiteType::DemoStand->value))
             ->with('park')->each(function (Node $node) use (&$count, $maxRun) {
             $last = $this->lastChange($node);
@@ -184,6 +190,7 @@ class PumpService
         $count = 0;
 
         Node::query()->where('has_pump', true)->where('pump_target', true)
+            ->withoutZone()
             ->whereHas('park', fn ($p) => $p->where('site_type', SiteType::DemoStand->value))
             ->with('park')->each(function (Node $node) use (&$count) {
                 $last = $this->lastChange($node);

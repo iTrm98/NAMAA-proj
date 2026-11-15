@@ -34,7 +34,8 @@ class DetectionResource extends JsonResource
             'inference_ms' => $this->inference_ms,
             'image_w' => $this->image_w,
             'image_h' => $this->image_h,
-            'origin' => $this->origin,
+            // Frames played from data/samples (the litter scenario) are stored as `scenario` and shown as `sample`.
+            'origin' => $this->origin === 'scenario' ? 'sample' : $this->origin,
             // Municipality viewers fetch through their own read-only route.
             'image_url' => $this->imagePath($prefix),
             // Small variants (about 960 px / 320 px wide): the UI uses these, never the original.

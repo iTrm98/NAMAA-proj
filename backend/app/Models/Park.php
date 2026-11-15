@@ -256,6 +256,18 @@ class Park extends Model
         $query->where('site_type', SiteType::Park->value)->whereNull('archived_at');
     }
 
+    /**
+     * Parks the maps and lists show: real parks plus, when namaa.parks.require_checked_zone is on,
+     * only those whose green zone is traced and ticked "checked" (Sprint 6.3). @param Builder<Park> $query
+     */
+    public function scopeShown(Builder $query): void
+    {
+        $query->parks();
+        if (config('namaa.parks.require_checked_zone')) {
+            $query->whereNotNull('green_zone')->where('verification_status', VerificationStatus::Verified->value);
+        }
+    }
+
     /** @param Builder<Park> $query */
     public function scopeForCompany(Builder $query, int $companyId): void
     {

@@ -27,7 +27,7 @@ class CategoryPriorityTest extends TestCase
     public function test_every_alert_type_maps_to_its_category(): void
     {
         $expected = [
-            'leak' => 'water', 'no_flow' => 'water', 'blockage' => 'water', 'over' => 'water',
+            'leak' => 'water', 'no_flow' => 'water', 'blockage' => 'water', 'over' => 'water', 'tank_low' => 'water', 'heat' => 'plant',
             'dry' => 'plant', 'heat_stress' => 'plant', 'ndvi_drop' => 'plant',
             'litter' => 'cleanliness',
             'litter_repeated' => 'cleanliness',

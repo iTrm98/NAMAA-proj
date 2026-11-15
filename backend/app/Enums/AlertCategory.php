@@ -16,8 +16,8 @@ enum AlertCategory: string
     public static function fromType(AlertType $type): self
     {
         return match ($type) {
-            AlertType::Leak, AlertType::NoFlow, AlertType::Blockage, AlertType::Over => self::Water,
-            AlertType::Dry, AlertType::HeatStress, AlertType::NdviDrop => self::Plant,
+            AlertType::Leak, AlertType::NoFlow, AlertType::Blockage, AlertType::Over, AlertType::TankLow => self::Water,
+            AlertType::Dry, AlertType::HeatStress, AlertType::NdviDrop, AlertType::Heat => self::Plant,
             AlertType::Litter, AlertType::LitterRepeated => self::Cleanliness,
             AlertType::Offline, AlertType::SensorFault, AlertType::LowBattery => self::Devices,
         };

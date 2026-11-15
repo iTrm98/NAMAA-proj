@@ -11,7 +11,8 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 
 $rules = @(
     @{ Name = 'NAMAA backend'; Port = 8000 },
-    @{ Name = 'NAMAA reverb'; Port = 8080 }
+    @{ Name = 'NAMAA reverb'; Port = 8080 },
+    @{ Name = 'NAMAA camera bridge'; Port = 8090 }
 )
 
 foreach ($r in $rules) {
@@ -31,3 +32,4 @@ Write-Host 'The rules apply to Private networks only. Mobile Hotspot and your ho
 Write-Host 'To remove them (admin PowerShell):'
 Write-Host '  Remove-NetFirewallRule -DisplayName "NAMAA backend"'
 Write-Host '  Remove-NetFirewallRule -DisplayName "NAMAA reverb"'
+Write-Host '  Remove-NetFirewallRule -DisplayName "NAMAA camera bridge"'

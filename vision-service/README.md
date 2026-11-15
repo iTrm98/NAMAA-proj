@@ -35,15 +35,14 @@ Multipart field `image`: JPEG or PNG, at most 5 MB.
 | Default | COCO model `yolo26n.pt` (the smallest Ultralytics YOLO26), downloaded **at image build time** to `/opt/namaa/weights/`. Only the litter-like COCO classes count: `bottle`, `cup`, `wine glass`, `fork`, `knife`, `spoon`, `bowl`, `banana`, `apple`, `orange`, `sandwich`, `hot dog`, `pizza`, `donut`, `cake`. Bags, balls and other things people carry are left out on purpose |
 | `vision-service/models/litter.pt` exists | That custom model is used for litter, with **all** its classes. The COCO model still runs for `person` (privacy blur) |
 
-Current `litter.pt`: YOLO11s, one class `litter`, trained on the balanced PlastOPol + TACO + BePLi set (`ml/runs/litter-s640-balanced/weights/best.pt`, see `ml/README.md`). Copy it to `vision-service/models/litter.pt` and restart `vision`.
+Current `litter.pt`: YOLO11s, one class `litter`, litter v2 (balanced PlastOPol + TACO + BePLi + extra ground-level sets + COCO background images) trained and run at 960 px (`ml/runs/litter-v2-s960/weights/best.pt`, see `ml/MODEL_CARD.md`). The previous 640 model is kept locally as `models/litter_old_s640.pt`; to roll back set `WASTE_MODEL=models/litter_old_s640.pt`, `WASTE_CUSTOM_IMGSZ=640`, `WASTE_CONFIDENCE=0.1775`. Copy it to `vision-service/models/litter.pt` and restart `vision`.
 
 | Litter confidence | Value | Val precision / recall | Use |
 |---|---|---|---|
-| Best F1 (**default with a custom model**) | `0.1775` | 0.647 / 0.538 | Balanced alerts |
-| Recall 0.70 | `0.039` | 0.320 / 0.700 | Option: catch more, more false alarms. Set `WASTE_CONFIDENCE=0.039` |
+| Best F1 on the v2 val set (**default with a custom model**) | `0.185` | public-test 0.615 / 0.448 | Balanced alerts; 0.36 false boxes per non-litter photo |
 | COCO fallback (no custom model) | `0.35` | n/a | High precision, finds about 1 litter object in 170 on public-test (recall 0.006) |
 
-Both thresholds were picked on the balanced val split, never on public-test. Results on our own demo tray: not measured yet.
+The threshold was picked on the v2 val split, never on public-test. Results on our own demo tray: not measured yet.
 
 Weights are never committed (`vision-service/models/*.pt` is git-ignored). The real training pipeline and results are in [../ml/README.md](../ml/README.md) and [../ml/MODEL_CARD.md](../ml/MODEL_CARD.md); [training/README.md](training/README.md) is the older generic guide.
 
@@ -53,11 +52,12 @@ Weights are never committed (`vision-service/models/*.pt` is git-ignored). The r
 |---|---|---|
 | `WASTE_MODEL` | `models/litter.pt` if present | Path of a custom litter model |
 | `WASTE_COCO_MODEL` | `/opt/namaa/weights/yolo26n.pt` | COCO model (litter fallback + people) |
-| `WASTE_CONFIDENCE` | `0.1775` with a custom model, `0.35` without | Minimum confidence for a litter item |
+| `WASTE_CONFIDENCE` | `0.185` with a custom model, `0.35` without | Minimum confidence for a litter item |
 | `WASTE_PERSON_CONFIDENCE` | `0.25` | Minimum confidence for a person box (low on purpose: blurring too much is better than too little) |
 | `WASTE_CLASSES` | the list above | Comma-separated COCO class names that count as litter |
 | `WASTE_MAX_MB` | `5` | Largest accepted upload |
-| `WASTE_IMGSZ` | `640` | Inference size |
+| `WASTE_IMGSZ` | `640` | Inference size of the COCO model (people, fallback litter) |
+| `WASTE_CUSTOM_IMGSZ` | `960` | Inference size of the custom litter model; must match its training size |
 
 ## Licence: Ultralytics is AGPL-3.0
 

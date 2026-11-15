@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('health', HealthController::class);
 Route::get('demo/status', [DemoController::class, 'status']);
+Route::post('namaa/ingest', [\App\Http\Controllers\Api\GatewayController::class, 'ingest'])->middleware('throttle:600,1');
 
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -81,13 +82,20 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'user.token', 'role:admin'])
 
     Route::get('stand/live', [\App\Http\Controllers\Api\Admin\StandController::class, 'live']);
     Route::post('stand/pump', [\App\Http\Controllers\Api\Admin\StandController::class, 'pump']);
+    Route::post('stand/auto', [\App\Http\Controllers\Api\Admin\StandController::class, 'auto']);
+    Route::post('stand/test', [\App\Http\Controllers\Api\Admin\StandController::class, 'test']);
     Route::post('stand/calibrate', [\App\Http\Controllers\Api\Admin\StandController::class, 'calibrate']);
+    Route::post('stand/camera-mode', [\App\Http\Controllers\Api\Admin\StandController::class, 'cameraMode']);
+    Route::get('stand/test-frame', [\App\Http\Controllers\Api\Admin\StandController::class, 'testFrame'])->middleware('throttle:240,1');
+    Route::post('stand/test-snapshot', [\App\Http\Controllers\Api\Admin\StandController::class, 'testSnapshot'])->middleware('throttle:30,1');
+    Route::get('stand/readiness', [\App\Http\Controllers\Api\Admin\StandController::class, 'readiness']);
     Route::get('nodes', [AdminNodeController::class, 'index']);
     Route::post('nodes/{node}/calibration', [AdminNodeController::class, 'calibrate']);
     Route::post('nodes/{node}/relay-test', [AdminNodeController::class, 'relayTest']);
     Route::post('nodes/{node}/token', [AdminNodeController::class, 'token']);
     Route::patch('nodes/{node}/camera', [AdminNodeController::class, 'camera']);
     Route::post('nodes/{node}/frame', [AdminNodeController::class, 'frame'])->middleware('throttle:30,1');
+    Route::get('nodes/{node}/snapshot', [AdminNodeController::class, 'snapshot'])->middleware('throttle:30,1');
     Route::post('nodes/{node}/camera-test', [AdminNodeController::class, 'cameraTest']);
 
     Route::get('system/status', [AdminSystemController::class, 'status']);

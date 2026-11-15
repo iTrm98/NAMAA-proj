@@ -1,6 +1,7 @@
 import { BatteryLow, Check, CloudOff, Droplet, Filter, Flame, FlaskConical, Play, RotateCcw, Satellite, Sun, Trash2, TrendingUp, Undo2 } from 'lucide-react'
 import { type ReactNode, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { DemoScenarios } from '@/components/DemoPanel'
 import { CameraDemoCard } from '@/components/CameraDemoCard'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NdviDemoCard } from '@/components/NdviDemoCard'
@@ -99,6 +100,11 @@ export default function DemoPage() {
         <span className="text-base text-text-2">{t('demo.intro')}</span>
       </section>
 
+      <GlassCard>
+        <DemoScenarios />
+      </GlassCard>
+
+      <Disclosure title={t('demoPage.guided')} className="text-base">
       <GlassCard padding={18} className="flex items-center gap-3" role="status" aria-live="polite">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-lime)] text-[#14180a] [&>svg]:size-5">
           <Play />
@@ -234,6 +240,7 @@ export default function DemoPage() {
 
       <Disclosure title={t('health.title')}>
         <SystemHealthCard />
+      </Disclosure>
       </Disclosure>
     </div>
   )

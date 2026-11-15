@@ -1,27 +1,26 @@
-import { ArrowLeft, BatteryMedium, CheckCircle2, ClipboardPlus, Droplets, Eye, Gauge, Leaf, Loader2, MapPinned, Power, ShieldAlert, Thermometer } from 'lucide-react'
+import { ArrowLeft, BatteryMedium, CheckCircle2, Droplets, Eye, Leaf, Loader2, MapPinned } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { toast } from 'sonner'
 import { CameraCard } from '@/components/camera'
-import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { CreateTaskDialog, type TaskSeed } from '@/components/CreateTaskDialog'
 import { DataSources } from '@/components/DataSources'
-import { Chip, type ChipTone, EmptyState, GlassCard, Kpi, Segmented, Skeleton, Toggle } from '@/components/ds'
+import { Chip, type ChipTone, EmptyState, GlassCard, Kpi, Segmented, Skeleton } from '@/components/ds'
 import { NdviCard } from '@/components/NdviCard'
-import { alertDetail, categoryFrame, DueBadge, EscalatedBadge, PriorityBadge, TaskStatusBadge, useCountdown } from '@/components/ops'
+import { alertDetail, categoryFrame, DueBadge, EscalatedBadge, PriorityBadge, TaskStatusBadge } from '@/components/ops'
 import { ReadingCharts } from '@/components/ReadingCharts'
 import { SourceBadge, StatusPill } from '@/components/StatusPill'
 import { Badge } from '@/components/ui/badge'
-import { sortAlerts, sortTasks, useDemoStatus, useSwitchPump, useUpdatePark } from '@/hooks/useOps'
+import { sortAlerts, sortTasks, useDemoStatus } from '@/hooks/useOps'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { parkName, usePark } from '@/hooks/useParks'
 import { useParkTimeline } from '@/hooks/useTimeline'
 import { ApiError } from '@/lib/api'
-import { formatAgo, formatDateTime, formatNumber } from '@/lib/format'
+import { formatAgo, formatDate, formatDateTime, formatNumber } from '@/lib/format'
 import { personName } from '@/lib/names'
+import { ParkActions } from '@/components/ParkActions'
 import { GeometryBadge, ParkAbout, VerifiedChip } from '@/components/ParkAbout'
 import { useBasePath, useReadOnly } from '@/lib/scope'
 import { cn } from '@/lib/utils'
@@ -33,7 +32,6 @@ const OutlineEditor = lazy(() => import('@/components/OutlineEditor').then((m) =
 type Tab = 'live' | 'camera' | 'satellite' | 'history' | 'settings'
 const PRIORITY_TONE: Record<Priority, ChipTone> = { urgent: 'urgent', high: 'high', normal: 'normal', low: 'muted' }
 const BTN = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors disabled:opacity-50'
-const BTN_PRIMARY = `${BTN} bg-[var(--accent-lime)] text-[var(--on-accent)] hover:brightness-95`
 const BTN_GHOST = `${BTN} border border-[var(--glass-border-strong)] text-[var(--text)] hover:bg-white/10`
 
 export default function ParkPage() {
@@ -101,7 +99,6 @@ export default function ParkPage() {
   }
   const firstAlert = sortAlerts(p.open_alerts)[0]
   const l = p.latest
-  const ndvi = p.ndvi
 
   return (
     <div className="flex flex-col gap-5 p-1">
@@ -140,24 +137,20 @@ export default function ParkPage() {
             badge={{ tone: l.moisture_pct < p.moisture_min ? 'high' : 'muted', children: t('parkPage.minChip', { min: p.moisture_min }) }}
           />
         )}
-        {l?.temperature != null && <Kpi icon={<Thermometer />} value={l.temperature} digits={1} suffix="°" label={t('park.temperature')} />}
-        {l?.humidity != null && <Kpi icon={<Gauge />} value={l.humidity} digits={0} suffix="%" label={t('park.humidity')} />}
-        {ndvi && !ndvi.too_small && ndvi.mean != null && <Kpi icon={<Leaf />} value={ndvi.mean} digits={2} label={t('parkPage.greenCover')} />}
-        {!readOnly && (
-          <button type="button" className={cn(BTN_PRIMARY, 'ms-auto')} onClick={() => setSeed({ park: p })}>
-            <ClipboardPlus className="size-4" aria-hidden />
-            {t('parkPage.sendWorker')}
-          </button>
+        {!readOnly && p.actions && (
+          <div className="ms-auto flex flex-col items-end gap-1.5">
+            <ParkActions park={p} />
+            {p.has_pump && p.pump_target != null && <span className="text-xs text-text-2">{t(p.pump_target ? 'parkActions.pumpRunning' : 'parkActions.pumpStopped')}</span>}
+          </div>
         )}
       </section>
 
       <Segmented options={tabs} value={tab} onChange={setTab} ariaLabel={t('parkPage.tabsLabel')} className="w-fit max-w-full overflow-x-auto" />
 
-      {tab === 'live' && <LiveTab park={p} firstAlert={firstAlert} onCreate={readOnly ? undefined : setSeed} />}
+      {tab === 'live' && <LiveTab park={p} firstAlert={firstAlert} />}
       {tab === 'camera' && p.camera && (
-        <div className="grid items-start gap-5 lg:grid-cols-[2fr_1fr]">
+        <div className="max-w-3xl">
           <CameraCard parkId={p.id} />
-          <DetectorCard />
         </div>
       )}
       {tab === 'satellite' && <NdviCard parkId={p.id} />}
@@ -176,7 +169,7 @@ export default function ParkPage() {
 
 // ---- Live ----
 
-function LiveTab({ park, firstAlert, onCreate }: { park: ParkDetail; firstAlert: ParkDetail['open_alerts'][number] | undefined; onCreate?: (seed: TaskSeed) => void }) {
+function LiveTab({ park, firstAlert }: { park: ParkDetail; firstAlert: ParkDetail['open_alerts'][number] | undefined }) {
   const { t, i18n } = useTranslation()
   const demo = useDemoStatus()
   const [picked, setPicked] = useState<ReadingRange | null>(null)
@@ -209,7 +202,7 @@ function LiveTab({ park, firstAlert, onCreate }: { park: ParkDetail; firstAlert:
         </GlassCard>
 
         <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-5">
-          {park.has_pump && <PumpCard park={park} />}
+          <SatelliteBlock park={park} />
           {firstAlert ? (
             <AnimatePresence initial={false}>
               {alerts.map((alert) => (
@@ -221,7 +214,7 @@ function LiveTab({ park, firstAlert, onCreate }: { park: ParkDetail; firstAlert:
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
-                  <AlertCard park={park} alert={alert} onCreate={onCreate} />
+                  <AlertCard park={park} alert={alert} />
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -267,103 +260,44 @@ function TaskTitle({ task }: { task: ParkDetail['open_tasks'][number] }) {
   return <span className="truncate font-medium">{task.title_key ? t(task.title_key, { park: i18n.language === 'ar' ? (task.title_park?.name_ar ?? '') : (task.title_park?.name_en ?? '') }) : task.title}</span>
 }
 
-/** Pump: state, last change and reason, safety limit, automatic irrigation, On/Off with confirmation. */
-function PumpCard({ park }: { park: ParkDetail }) {
+/** Satellite in one glance: green cover big, a plain word and the image date; the full view is the Satellite tab. */
+function SatelliteBlock({ park }: { park: ParkDetail }) {
   const { t } = useTranslation()
-  const pump = park.pump
-  const demo = useDemoStatus()
-  const switchPump = useSwitchPump(park.id)
-  const readOnly = useReadOnly()
-  const updatePark = useUpdatePark(park.id)
-  const target = pump?.target ?? park.pump_target ?? false
-  const countdown = useCountdown(target ? pump?.cutoff_at : null)
-  const who = pump?.by?.name ?? t('pump.system')
-
-  function setPump(on: boolean) {
-    switchPump.mutate(on, {
-      onSuccess: () => toast.success(t('pump.switched')),
-      onError: () => toast.error(t('common.error')),
-    })
+  const [params, setParams] = useSearchParams()
+  const sat = park.satellite
+  const open = () => {
+    const next = new URLSearchParams(params)
+    next.set('tab', 'satellite')
+    setParams(next, { replace: true })
   }
-
-  function setAuto(on: boolean) {
-    updatePark.mutate(
-      { auto_irrigation: on },
-      {
-        onSuccess: () => toast.success(on ? t('pump.autoOn') : t('pump.autoOff')),
-        onError: () => toast.error(t('common.error')),
-      },
-    )
-  }
-
   return (
-    <GlassCard className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="m-0 flex items-center gap-2 text-[17px] font-medium">
-          <Power className="size-4 text-text-2" aria-hidden />
-          {t('pump.title')}
-        </h2>
-        <Chip tone={target ? 'ok' : 'muted'}>{target ? t('pump.on') : t('pump.off')}</Chip>
-      </div>
-      <dl className="m-0 flex flex-col text-[13px]">
-        {pump?.changed_at && (
-          <div className="flex items-start justify-between gap-3 border-b border-[var(--glass-border)] py-2">
-            <dt className="text-text-2">{t('pump.lastChange')}</dt>
-            <dd className="m-0 text-end" title={formatDateTime(pump.changed_at)}>
-              {formatAgo(pump.changed_at)} · {who}
-              {pump.reason && ` · ${t(`pumpReason.${pump.reason}`)}`}
-            </dd>
-          </div>
-        )}
-        {pump && (
-          <div className="flex items-start justify-between gap-3 border-b border-[var(--glass-border)] py-2">
-            <dt className="text-text-2">{t('parkPage.safetyLimit')}</dt>
-            <dd className="m-0 text-end">{t('pump.maxRun', { n: Math.round(pump.max_run_seconds / 60) })}</dd>
-          </div>
-        )}
-        {pump?.reported_on != null && (
-          <div className="flex items-start justify-between gap-3 py-2">
-            <dt className="text-text-2">{t('pump.reported')}</dt>
-            <dd className="m-0 text-end">{pump.reported_on ? t('pump.on') : t('pump.off')}</dd>
-          </div>
-        )}
-      </dl>
-      {target && countdown && (
-        <p className="m-0 flex items-center gap-1.5 text-xs text-[var(--clean)]">
-          <ShieldAlert className="size-3.5" aria-hidden />
-          {t('pump.cutoffIn', { time: countdown })}
-        </p>
+    <GlassCard className="flex flex-col gap-2">
+      <h2 className="m-0 flex items-center gap-2 text-[17px] font-medium">
+        <Leaf className="size-4 text-text-2" aria-hidden />
+        {t('parkPage.tabSatellite')}
+      </h2>
+      {sat?.measurable && sat.green_cover_pct != null ? (
+        <>
+          <span className="text-[44px] leading-none font-light tabular-nums">
+            {formatNumber(sat.green_cover_pct, 0)}
+            <span className="text-xl text-text-2">%</span>
+          </span>
+          <span className="text-xs text-text-2">
+            {t('parkPage.greenCover')}
+            {sat.image_date ? ` · ${formatDate(sat.image_date)}` : ''}
+          </span>
+        </>
+      ) : (
+        <p className="m-0 text-sm text-text-2">{sat ? t('parkPage.satelliteNotMeasurable') : t('parkPage.satelliteNone')}</p>
       )}
-      <div className="flex items-center justify-between gap-3">
-        <span>
-          <span className="block text-[13px]">{t('pump.autoTitle')}</span>
-          <span className="block text-xs text-text-2">{t('pump.autoHelp', { mid: Math.round((park.moisture_min + park.moisture_max) / 2) })}</span>
-        </span>
-        <Toggle checked={park.auto_irrigation} onChange={setAuto} label={t('pump.autoTitle')} disabled={readOnly || updatePark.isPending} />
-      </div>
-      {park.auto_irrigation && target && pump?.reason === 'rule' && (
-        <p className="m-0 flex items-center gap-1.5 text-xs text-[var(--water)]">
-          <Droplets className="size-3.5" aria-hidden />
-          {t('pump.autoRunning')}
-        </p>
-      )}
-      {!readOnly && (
-        <ConfirmDialog
-          trigger={
-            <button type="button" className={target ? BTN_GHOST : BTN_PRIMARY} disabled={switchPump.isPending}>
-              {target ? t('pump.turnOff') : t('pump.turnOn')}
-            </button>
-          }
-          title={target ? t('pump.confirmOffTitle') : t('pump.confirmOnTitle')}
-          body={t('pump.confirmBody', { n: demo.data ? 5 : 30 })}
-          onConfirm={() => setPump(!target)}
-        />
-      )}
+      <button type="button" className="w-fit text-[13px] text-[var(--accent-lime)] hover:underline" onClick={open}>
+        {t('parkPage.satelliteDetails')}
+      </button>
     </GlassCard>
   )
 }
 
-function AlertCard({ park, alert, onCreate }: { park: ParkDetail; alert: ParkDetail['open_alerts'][number]; onCreate?: (seed: TaskSeed) => void }) {
+function AlertCard({ park, alert }: { park: ParkDetail; alert: ParkDetail['open_alerts'][number] }) {
   const { t } = useTranslation()
   const demo = useDemoStatus()
   const hasTask = park.open_tasks.some((task) => task.alert_id === alert.id)
@@ -378,53 +312,12 @@ function AlertCard({ park, alert, onCreate }: { park: ParkDetail; alert: ParkDet
         {t('parkPage.alertRaised', { ago: formatAgo(alert.created_at) })}
         {alertDetail(t, alert.type, alert.data) && ` · ${alertDetail(t, alert.type, alert.data)}`}
       </span>
-      {onCreate && !hasTask && alert.task_ready && (
-        <button type="button" className={BTN_GHOST} onClick={() => onCreate({ park, alert: { id: alert.id, type: alert.type, priority: alert.priority } })}>
-          <ClipboardPlus className="size-4" aria-hidden />
-          {t('alerts.createTask')}
-        </button>
-      )}
       {!hasTask && !alert.task_ready && (
         <span className="flex items-center gap-1 text-xs text-text-2">
           <Eye className="size-3.5" aria-hidden />
           {t('alerts.watching', { n: demo.data ? 2 : 30 })}
         </span>
       )}
-    </GlassCard>
-  )
-}
-
-// ---- Camera ----
-
-/** Measured scores of the litter model, copied from ml/MODEL_CARD.md (public test set, IoU 0.5). */
-const DETECTOR = { precision: 0.627, recall: 0.412, map50: 0.471, threshold: 0.1775, cpuMs: 77 }
-
-function DetectorCard() {
-  const { t } = useTranslation()
-  const rows: [string, string][] = [
-    [t('parkPage.precision'), formatNumber(DETECTOR.precision * 100, 0) + '%'],
-    [t('parkPage.recall'), formatNumber(DETECTOR.recall * 100, 0) + '%'],
-    [t('parkPage.map50'), formatNumber(DETECTOR.map50, 2)],
-    [t('parkPage.threshold'), String(DETECTOR.threshold)],
-    [t('parkPage.speed'), t('parkPage.ms', { n: DETECTOR.cpuMs })],
-  ]
-  return (
-    <GlassCard className="flex flex-col gap-3">
-      <div>
-        <h2 className="m-0 text-[17px] font-medium">{t('parkPage.detector')}</h2>
-        <span className="text-xs text-text-2" dir="ltr">
-          {t('parkPage.detectorModel')}
-        </span>
-      </div>
-      <dl className="m-0 flex flex-col text-[13px]">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between gap-3 border-b border-[var(--glass-border)] py-2 last:border-0">
-            <dt className="text-text-2">{k}</dt>
-            <dd className="m-0 tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="m-0 text-xs text-text-2">{t('parkPage.measuredNote')}</p>
     </GlassCard>
   )
 }

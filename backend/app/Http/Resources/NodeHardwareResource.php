@@ -80,6 +80,9 @@ class NodeHardwareResource extends JsonResource
             'camera' => $isCamera ? [
                 'capture_mode' => $this->capture_mode,
                 'camera_url' => $this->camera_url,
+                'camera_roi' => $this->camera_roi,
+                'litter_threshold' => $this->litter_threshold,
+                'effective_threshold' => $this->litter_threshold ?? (float) config('namaa.camera.litter_threshold'),
                 'effective_url' => $this->capture_mode === 'url' ? (CameraPipeline::urlFor($this->resource) ?: null) : null,
                 'last_frame_at' => $this->iso($seen),
                 'last_count' => $this->last_litter_count,

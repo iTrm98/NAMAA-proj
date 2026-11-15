@@ -1,0 +1,9 @@
+# Litter AI v2 without non-commercial data: PlastOPol + TACO + extra sets with a commercial-use licence
+# + COCO background images whose own licence allows commercial use. No BePLi.
+# Lists are written by build_v2.py. `test` is the public commercial-safe test split (unchanged).
+path: C:/dev/NAMAA-proj/ml/data/yolo
+train: C:/dev/NAMAA-proj/ml/data/extra/lists/v2_commercial_safe_train.txt
+val: C:/dev/NAMAA-proj/ml/data/extra/lists/v2_commercial_safe_val.txt
+test: C:/dev/NAMAA-proj/ml/data/yolo/lists/commercial_safe_test.txt
+names:
+  0: litter

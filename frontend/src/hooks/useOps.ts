@@ -14,6 +14,7 @@ import type {
   TaskStatus,
   Worker,
   WorkerTaskDetail,
+  DemoStatus,
   DemoStory,
 } from '@/types'
 
@@ -165,14 +166,21 @@ export function useSaveOutline(parkId: number) {
 
 // ---- demo ----
 
-export function useDemoStatus() {
+function useDemoStatusQuery<T>(select: (d: DemoStatus) => T) {
   return useQuery({
     queryKey: ['demo', 'status'],
-    queryFn: ({ signal }) => api<{ demo_mode: boolean }>('/demo/status', { signal }).then((r) => r.demo_mode),
+    queryFn: ({ signal }) => api<DemoStatus>('/demo/status', { signal }),
+    select,
     staleTime: 5 * 60_000,
     retry: false,
   })
 }
+
+/** True when DEMO_MODE is on. */
+export const useDemoStatus = () => useDemoStatusQuery((d) => d.demo_mode)
+
+/** The demo status with the map settings (basemap, bounds). */
+export const useDemoInfo = () => useDemoStatusQuery((d) => d)
 
 export function useDemoStory(enabled: boolean) {
   return useQuery({

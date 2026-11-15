@@ -1,4 +1,5 @@
 import { Bell, LogOut, Sprout } from 'lucide-react'
+import { Link as RouterLink } from 'react-router'
 import { DropdownMenu } from 'radix-ui'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -33,7 +34,12 @@ export function Logo({ to }: { to: string }) {
 }
 
 /** Account avatar (lime) with a menu: who is signed in, sign out. */
-export function AccountMenu() {
+export interface AccountMenuItem {
+  to: string
+  label: string
+}
+
+export function AccountMenu({ items, itemsTitle }: { items?: AccountMenuItem[]; itemsTitle?: string }) {
   const { t } = useTranslation()
   const { user } = useAuth()
   const logout = useLogout()
@@ -60,6 +66,19 @@ export function AccountMenu() {
             </div>
           </div>
           <DropdownMenu.Separator className="my-1 h-px bg-[var(--glass-border)]" />
+          {items && items.length > 0 && (
+            <>
+              {itemsTitle && <div className="px-3 pt-1 pb-0.5 text-xs text-text-2">{itemsTitle}</div>}
+              {items.map((item) => (
+                <DropdownMenu.Item key={item.to} asChild>
+                  <RouterLink to={item.to} className="flex min-h-10 cursor-pointer items-center rounded-xl px-3 text-sm text-[var(--text)] no-underline outline-none data-[highlighted]:bg-white/10">
+                    {item.label}
+                  </RouterLink>
+                </DropdownMenu.Item>
+              ))}
+              <DropdownMenu.Separator className="my-1 h-px bg-[var(--glass-border)]" />
+            </>
+          )}
           <DropdownMenu.Item
             onSelect={() => void logout()}
             className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-3 text-sm outline-none data-[highlighted]:bg-white/10"
@@ -88,7 +107,7 @@ export function BellButton({ count, onClick }: { count: number; onClick: () => v
 }
 
 /** The top bar of the admin and municipality shells (logo, nav, live, language, extras, account). */
-export function TopBar({ home, nav, extras, readOnly }: { home: string; nav?: ReactNode; extras?: ReactNode; readOnly?: boolean }) {
+export function TopBar({ home, nav, extras, readOnly, menuItems, menuTitle }: { home: string; nav?: ReactNode; extras?: ReactNode; readOnly?: boolean; menuItems?: AccountMenuItem[]; menuTitle?: string }) {
   const { t } = useTranslation()
   return (
     <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-6 pt-5 pb-3 max-md:px-4">
@@ -99,7 +118,7 @@ export function TopBar({ home, nav, extras, readOnly }: { home: string; nav?: Re
         <LiveDot />
         <LanguageToggle />
         {extras}
-        <AccountMenu />
+        <AccountMenu items={menuItems} itemsTitle={menuTitle} />
       </div>
     </header>
   )

@@ -92,6 +92,22 @@ export interface Park {
   satellite?: ParkSatellite | null
 }
 
+// ---- Sprint 6.3: park actions (ParkResource.actions) ----
+
+export type ParkActionKey = 'stop_pump' | 'send_worker' | 'water_now' | 'view_task' | 'toggle_auto' | 'create_task' | 'open_hardware'
+
+export interface ParkAction {
+  key: ParkActionKey
+  alert_id?: number | null
+  task_id?: number | null
+  node_id?: number | null
+}
+
+export interface ParkActions {
+  primary: ParkAction | null
+  menu: ParkAction[]
+}
+
 export type SatelliteReasonCode = 'too_small' | 'untraced_outline' | 'narrow' | 'partial_view' | 'old_image' | 'unverified_outline' | 'some_cloud' | 'few_dates' | 'inconsistent' | 'no_baseline' | 'no_image'
 
 export interface ParkSatellite {
@@ -145,6 +161,8 @@ export interface ParkDetail extends Park {
   open_alerts: OpenAlert[]
   open_tasks: Task[]
   pump: PumpState | null
+  /** Sprint 6.3: the one primary action and the "more" menu. */
+  actions?: ParkActions
   /** Sprint 3.1: where the outline and the area come from. */
   sources: { outline: DataSourceInfo; area: DataSourceInfo }
   /** Sprint 6.2 Phase A: sourced facts about the park (detail only). */
@@ -192,6 +210,8 @@ export type AlertType =
   | 'litter'
   | 'litter_repeated'
   | 'ndvi_drop'
+  | 'tank_low'
+  | 'heat'
 /** What the problem is and who handles it (derived from the type on the server). */
 export type AlertCategory = 'water' | 'plant' | 'cleanliness' | 'devices'
 export type TaskStatus = 'open' | 'in_progress' | 'done' | 'cancelled'
@@ -342,7 +362,7 @@ export interface Detection {
   inference_ms: number | null
   image_w: number | null
   image_h: number | null
-  origin: 'camera' | 'upload' | 'scenario' | 'browser'
+  origin: 'camera' | 'upload' | 'scenario' | 'browser' | 'sample'
   /** API path (fetched with the Bearer token; never a public URL) */
   image_url: string
   /** Small and display-size variants (api.md); the UI never loads the full-size original. */
@@ -652,6 +672,7 @@ export type ParkClaimInput = Omit<ParkClaim, 'id'>
 /** GET /admin/demo/story (Sprint 6.2): the park each demo step runs on; null when none is set up. */
 export type DemoStoryEntry = { park_id: number; name_ar: string; name_en: string; node: { id: number; name: string; source: Source } } | null
 export interface DemoStory {
+  scenarios?: DemoScenarioInfo[]
   dry: DemoStoryEntry
   leak: DemoStoryEntry
   offline: DemoStoryEntry
@@ -680,4 +701,134 @@ export interface StandLive {
   }
   calibration: { raw_dry: number | null; raw_wet: number | null; dry_at: string | null; wet_at: string | null; calibrated: boolean }
   camera: { detection_id: number; at: string; count: number; litter: boolean; people_count: number } | null
+  camera_node: {
+    node_id: number
+    camera_roi: [number, number][] | null
+    litter_threshold: number | null
+    effective_threshold: number
+    default_threshold: number
+    mode: CameraMode
+    has_url: boolean
+    online: boolean
+  } | null
+}
+
+// ---- Live device: camera Test mode and the pre-demo check ----
+
+export type CameraMode = 'test' | 'demo'
+
+export interface TestBox {
+  label: string
+  confidence: number
+  /** [x1, y1, x2, y2] in photo pixels */
+  box: [number, number, number, number]
+  inside: boolean
+  passed: boolean
+}
+
+/** GET /admin/stand/test-frame: one blurred frame with its boxes; nothing is stored. */
+export interface TestFrame {
+  image: string
+  image_w: number
+  image_h: number
+  items: TestBox[]
+  count: number
+  total: number
+  top_confidence: number | null
+  inference_ms: number | null
+  threshold: number
+  people_count: number
+  tray_set: boolean
+  at: string
+}
+
+export interface ReadinessCheck {
+  key: string
+  ok: boolean
+  detail: string
+  required: boolean
+  testable: boolean
+}
+
+export interface Readiness {
+  ready: boolean
+  checks: ReadinessCheck[]
+}
+
+// ---- Sprint 6.3: gateway zones (GET /admin/stand/live) ----
+
+export type GatewayAlertType = 'dry' | 'leak' | 'no_flow' | 'litter' | 'offline' | 'tank_low' | 'heat'
+
+export interface ZoneCamera {
+  node_id: number
+  online: boolean
+  has_url: boolean
+  detection_id: number | null
+  at: string | null
+  count: number | null
+  litter: boolean | null
+  image_url: string | null
+}
+
+export interface GatewayZone {
+  zone: 'A' | 'B'
+  node_id: number
+  name: string
+  online: boolean
+  age_s: number | null
+  last_seen_at: string | null
+  soil_pct: number | null
+  temp_c: number | null
+  humidity_pct: number | null
+  flow_lpm: number | null
+  total_ml: number | null
+  water_today_l: number | null
+  pump_on: boolean | null
+  flags: string[]
+  trend: { at: string; pct: number | null }[]
+  camera: ZoneCamera | null
+  alerts: { id: number; type: string; severity?: string; raised_at: string; task_id: number | null }[]
+}
+
+export type TimelineKind = 'alert_raised' | 'alert_cleared' | 'pump_on' | 'pump_off' | 'litter_seen' | 'litter_cleared' | 'task_created' | 'task_verified' | 'auto_changed'
+
+export interface GatewayTimelineEntry {
+  id: string
+  at: string
+  kind: TimelineKind
+  zone: 'A' | 'B' | null
+  params?: Record<string, unknown>
+}
+
+export interface GatewayLive {
+  park_id: number
+  source: Source
+  mode: 'gateway' | 'bench'
+  gateway?: ({ reachable: boolean; last_event_at: string | null; age_s: number | null; auto: boolean | null; irrigating_zone: 'A' | 'B' | null; pulses: number; last_cycle_ml: number | null }) | null
+  water_today_l?: number | null
+  zones?: GatewayZone[]
+  timeline?: GatewayTimelineEntry[]
+  /** The Bench A payload (the old shape of this endpoint). */
+  bench: StandLive | null
+}
+
+export interface MapConfig {
+  basemap: 'maptiler' | 'esri'
+  /** [west, south, east, north] */
+  bounds: [number, number, number, number]
+}
+
+export interface DemoStatus {
+  demo_mode: boolean
+  map?: MapConfig
+}
+
+export interface DemoScenarioInfo {
+  name: ScenarioName
+  park_id: number | null
+  name_ar: string | null
+  name_en: string | null
+  node_id: number | null
+  kind: 'sensor' | 'camera'
+  available: boolean
 }

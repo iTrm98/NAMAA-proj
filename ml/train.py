@@ -68,6 +68,10 @@ def main() -> None:
     ap.add_argument("--batch", type=batch_arg, default=-1)
     ap.add_argument("--patience", type=int, default=20)
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--optimizer", default="auto", choices=["auto", "SGD", "Adam", "AdamW", "NAdam", "RAdam", "RMSProp"],
+                    help="Ultralytics optimizer; auto picks AdamW (small runs) or SGD 0.01 and then IGNORES --lr0")
+    ap.add_argument("--lr0", type=float, default=None,
+                    help="initial learning rate (needs an explicit --optimizer; Ultralytics default 0.01)")
     ap.add_argument("--cache", default="false", choices=["false", "ram", "disk"])
     ap.add_argument("--device", default="0")
     ap.add_argument("--name", default="litter-s640-all")
@@ -86,6 +90,8 @@ def main() -> None:
         return
 
     args.epochs = args.epochs or 100
+    if args.lr0 is not None and args.optimizer == "auto":
+        raise SystemExit("--lr0 is ignored with --optimizer auto: also pass e.g. --optimizer SGD")
 
     data = Path(args.data)
     if not data.is_absolute() and not data.exists():
@@ -106,6 +112,8 @@ def main() -> None:
         cache=False if args.cache == "false" else args.cache,
         device=args.device,
         amp=True,
+        optimizer=args.optimizer,
+        **({"lr0": args.lr0} if args.lr0 is not None else {}),
         project=str(Path(args.project).resolve()),
         name=args.name,
         exist_ok=False,

@@ -33,6 +33,11 @@ class CaptureFrames extends Command
         $this->repeat($tick, function () use ($every, $litter, $feed, $pipeline) {
             $litter->checkAge();
 
+            // Test mode on the Live device page: no polled frame, no scenario frame, so nothing is created.
+            if (\App\Services\CameraMode::isTest()) {
+                return;
+            }
+
             // Demo scenario: sample photos replace the camera while the feed runs.
             if ($feed->current()) {
                 if ($frame = $feed->next($every)) {

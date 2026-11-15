@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { parkName, useParks } from '@/hooks/useParks'
 import { formatAgo } from '@/lib/format'
 import { NDVI_GRADIENT, NDVI_NONE, ndviColor } from '@/lib/ndvi'
-import { MAKKAH, MAPTILER_KEY, mapShellProps, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { fitMinZoom, MAKKAH, mapShellProps, mapStyle, useMapConfig } from '@/lib/mapStyle'
 import { ParkMarkers } from '@/components/map/ParkMarkers'
 import { NdviPixels, PIXEL_ZOOM } from '@/components/map/NdviPixels'
 import { SatelliteBlock, SatelliteLegendLines, SensorBlock } from '@/components/map/SatelliteBlocks'
@@ -67,7 +67,7 @@ export default function ParkMap() {
 function ParkMapView({ parks: allParks }: { parks: Park[] }) {
   const parks = useMemo(() => mapParks(allParks), [allParks])
   const { t, i18n } = useTranslation()
-  const [basemap, setBasemap] = useBasemap()
+  const { basemap, bounds: mapBounds } = useMapConfig()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [layer, setLayer] = useState<MapLayer>('status')
   const mapRef = useRef<MapRef>(null)
@@ -130,12 +130,13 @@ function ParkMapView({ parks: allParks }: { parks: Park[] }) {
         onZoom={(e) => setZoom(e.viewState.zoom)}
         onMoveEnd={syncBounds}
         onLoad={(e) => {
+          fitMinZoom(e.target, mapBounds)
           setZoom(e.target.getZoom())
           syncBounds()
         }}
         initialViewState={initialView}
         mapStyle={mapStyle(basemap)}
-        {...mapShellProps(basemap)}
+        {...mapShellProps(basemap, mapBounds)}
         interactiveLayerIds={['park-fill']}
         onClick={onClick}
         cursor="auto"
@@ -175,14 +176,6 @@ function ParkMapView({ parks: allParks }: { parks: Park[] }) {
       <SatelliteNote basemap={basemap} />
 
       <div className="absolute top-3 start-3 flex flex-col items-start gap-2" dir={i18n.dir()}>
-        <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow" role="group" aria-label={t('overview.baseMap')}>
-          {(MAPTILER_KEY ? (['satellite', 'streets', 'esri'] as const) : (['streets', 'esri'] as const)).map((b) => (
-            <Button key={b} size="sm" variant={basemap === b ? 'default' : 'ghost'} onClick={() => setBasemap(b)} aria-pressed={basemap === b}>
-              {b === 'esri' ? t('map.esri') : t(`admin.${b}`)}
-            </Button>
-          ))}
-        </div>
-        {!MAPTILER_KEY && basemap === 'streets' && <div className="max-w-xs rounded-lg bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow">{t('admin.osmNote')}</div>}
         <div className="flex gap-1 rounded-lg bg-background/90 p-1 shadow" role="group" aria-label={t('ndvi.layer')}>
           {(['status', 'ndvi'] as const).map((l) => (
             <Button key={l} size="sm" variant={layer === l ? 'default' : 'ghost'} onClick={() => setLayer(l)} aria-pressed={layer === l}>

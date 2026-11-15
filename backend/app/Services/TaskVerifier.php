@@ -14,6 +14,7 @@ use App\Models\Reading;
 use App\Models\Task;
 use App\Services\Rules\RuleContext;
 use App\Support\Namaa;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -80,8 +81,14 @@ class TaskVerifier
             $maxGap = Namaa::timing('offline_seconds');
             $deadline = $task->done_at->copy()->addSeconds(Namaa::timing('verify_timeout_seconds'));
 
+            // Gateway alerts: the Gateway says when the condition cleared; no samples are read.
+            $gateway = ($alert?->data['origin'] ?? null) === 'gateway';
+            $clearedAt = $gateway && ! empty($alert->data['gateway_cleared_at']) ? Carbon::parse($alert->data['gateway_cleared_at']) : null;
+
             // [time, state] samples after Done: camera frames for litter, readings otherwise.
-            if ($alert?->type?->isLitter()) {
+            if ($gateway) {
+                $samples = collect();
+            } elseif ($alert?->type?->isLitter()) {
                 $maxGap = OfflineChecker::offlineSeconds(NodeType::Camera);
                 $samples = Detection::query()
                     ->where('node_id', $alert->node_id)
@@ -139,6 +146,11 @@ class TaskVerifier
                 }
 
                 $previousAt = $at;
+            }
+
+            if ($gateway) {
+                $verified = $clearedAt !== null && max($clearedAt, $task->done_at)->diffInSeconds(now(), true) >= $window;
+                $sawBad = false; // never cleared: times out as no_data
             }
 
             if (! $verified && now()->lt($deadline)) {

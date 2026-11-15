@@ -19,7 +19,7 @@ class ParkDemoRoleCommand extends Command
         $step = strtolower((string) $this->argument('step'));
 
         if ($step === '3' || $step === 'litter') {
-            $this->info('Step 3 (litter) has no demo role: it runs on the demo stand camera, with the Al Adel simulated camera as the fallback.');
+            $this->info('Step 3 (litter) has no demo role: it runs on the simulated park camera (Sim Cam, King Abdullah Park); move it with namaa:sim:setup-parks.');
 
             return self::SUCCESS;
         }

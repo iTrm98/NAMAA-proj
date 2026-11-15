@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'park_id', 'node_id', 'photo_path', 'count', 'boxes', 'items', 'people_count', 'model',
+    'park_id', 'node_id', 'photo_path', 'count', 'boxes', 'items', 'candidates', 'people_count', 'model',
     'inference_ms', 'image_w', 'image_h', 'origin', 'sample', 'captured_at',
 ])]
 class Detection extends Model
@@ -26,6 +26,7 @@ class Detection extends Model
             'count' => 'integer',
             'boxes' => 'array',
             'items' => 'array',
+            'candidates' => 'array',
             'people_count' => 'integer',
             'inference_ms' => 'integer',
             'image_w' => 'integer',

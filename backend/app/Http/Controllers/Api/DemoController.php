@@ -12,6 +12,7 @@ use App\Enums\DataSource;
 use App\Enums\NodeType;
 use App\Models\Node;
 use App\Services\CameraFeed;
+use App\Support\MapBounds;
 use App\Services\OfflineChecker;
 use App\Services\StandSetup;
 use App\Models\Park;
@@ -37,7 +38,7 @@ class DemoController extends Controller
     /** GET /api/demo/status (public). */
     public function status(): JsonResponse
     {
-        return response()->json(['demo_mode' => Namaa::demoMode()]);
+        return response()->json(['demo_mode' => Namaa::demoMode(), 'map' => MapBounds::forShownParks()]);
     }
 
     /**
@@ -81,7 +82,7 @@ class DemoController extends Controller
         $camera ??= CameraFeed::cameraOf($companyId);
         $story['litter'] = $row($camera?->loadMissing('park'));
 
-        return response()->json(['data' => $story]);
+        return response()->json(['data' => $story, 'scenarios' => $scenarios->panel($companyId)]);
     }
 
     /** POST /api/admin/demo/scenario { name }: the admin's company's simulated parks only. */

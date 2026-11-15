@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AlertType;
 use App\Models\Alert;
 use App\Models\Detection;
+use App\Models\Node;
 use App\Support\Namaa;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,10 @@ class LitterRules
     {
         return DB::transaction(function () use ($frame) {
             $frame->loadMissing(['park', 'node']);
+            // A zone camera: the Gateway raises and clears litter alerts (the frame is forwarded to it).
+            if ($frame->node?->isGatewayZone()) {
+                return null;
+            }
             $park = $frame->park;
             $open = $this->openAlert($frame);
 
@@ -83,7 +88,9 @@ class LitterRules
         $limit = now()->subSeconds(Namaa::timing('litter_open_long_seconds'));
         $upgraded = 0;
 
-        foreach (Alert::open()->where('type', AlertType::Litter)->where('created_at', '<=', $limit)->with('park')->get() as $alert) {
+        foreach (Alert::open()->where('type', AlertType::Litter)->where('created_at', '<=', $limit)
+            ->when(Node::hasZoneColumn(), fn ($q) => $q->whereDoesntHave('node', fn ($n) => $n->whereNotNull('zone')))
+            ->with('park')->get() as $alert) {
             $this->alerts->convert($alert, AlertType::LitterRepeated, 'open_long', ($alert->data ?? []) + ['repeated_reason' => 'open_long']);
             $upgraded++;
         }

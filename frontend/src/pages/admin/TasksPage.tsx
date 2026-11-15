@@ -43,7 +43,10 @@ export default function TasksPage() {
   const overdueOnly = params.get('status') === 'overdue'
   const [priority, setPriority] = useState<TaskPriority | 'all'>('all')
   const [view, setView] = useState<'board' | 'table'>('board')
-  const [openId, setOpenId] = useState<number | null>(null)
+  const [openId, setOpenId] = useState<number | null>(() => {
+    const n = Number(params.get('task'))
+    return Number.isFinite(n) && n > 0 ? n : null
+  })
   const board = useTaskBoard(parkId)
   const parks = useParks()
   const overview = useOverview()

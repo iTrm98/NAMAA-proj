@@ -106,7 +106,7 @@ services:
 
   queue:
     <<: *laravel
-    command: php artisan queue:work --tries=1
+    command: php artisan queue:work --tries=1 --queue=gateway,default
     restart: unless-stopped
 
   vision:

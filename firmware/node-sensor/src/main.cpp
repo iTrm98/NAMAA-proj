@@ -63,7 +63,7 @@ static void loadSettings() {
   cfg.port = prefs.getUShort("port", SERVER_PORT);
   cfg.nodeId = prefs.getInt("node", NODE_ID);
   cfg.token = prefs.getString("token", NODE_TOKEN);
-  cfg.usbMode = prefs.getBool("usb", false);
+  cfg.usbMode = USB_ONLY ? true : prefs.getBool("usb", false);
   cfg.dryRaw = prefs.getInt("dry", SOIL_DRY_RAW);
   cfg.wetRaw = prefs.getInt("wet", SOIL_WET_RAW);
   prefs.end();
@@ -121,7 +121,10 @@ static uint8_t wifiNet = 0;  // 0 = network 1, 1 = network 2
 static uint32_t wifiStartMs = 0, wifiNextMs = 0, wifiFailRounds = 0, wifiUpSinceMs = 0;
 static bool ntpStarted = false;
 
-static bool usbActive() { return cfg.usbMode || usbAuto; }
+#ifndef USB_ONLY
+#define USB_ONLY 0  // 1 = USB bridge only, the Wi-Fi radio is never initialised
+#endif
+static bool usbActive() { return USB_ONLY || cfg.usbMode || usbAuto; }
 
 // ---------------------------------------------------------------------------
 // Hardware
@@ -637,6 +640,10 @@ static void handleLine(const char* line, uint32_t now) {
       Serial.printf("soil cal saved: dry %ld wet %ld\n", (long)c.n1, (long)c.n2);
       break;
     case CmdType::ModeWifi:
+#if USB_ONLY
+      Serial.println("this build is USB-only: no Wi-Fi radio");
+      break;
+#endif
       cfg.usbMode = false; usbAuto = false; usbAwaiting = false;
       prefs.begin("namaa", false); prefs.putBool("usb", false); prefs.end();
       wifiState = WifiState::Idle; wifiFailRounds = 0; wifiNextMs = now;
@@ -645,7 +652,9 @@ static void handleLine(const char* line, uint32_t now) {
     case CmdType::ModeUsb:
       cfg.usbMode = true;
       prefs.begin("namaa", false); prefs.putBool("usb", true); prefs.end();
+#if !USB_ONLY
       WiFi.disconnect();
+#endif
       wifiState = WifiState::Idle;
       Serial.println("mode usb saved: readings print as NAMAA:{json}, replies read as NAMAA-REPLY:{json}");
       break;
@@ -740,9 +749,11 @@ void setup() {
 #endif
   lcdInit();
 
+#if !USB_ONLY
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(false);  // reconnects are ours (two networks, backoff)
   WiFi.persistent(false);
+#endif
   printShow();
   Serial.println("type `help` for commands");
   nextReportMs = millis() + 3000;  // first report after the sensors settle

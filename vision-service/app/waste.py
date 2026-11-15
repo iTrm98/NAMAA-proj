@@ -31,11 +31,14 @@ DEFAULT_LITTER_CLASSES = (
 )
 
 # Default litter confidence. The COCO fallback keeps 0.35 (high precision, low
-# recall). The fine-tuned model (ml/runs/litter-s640-balanced, evaluated on its
-# balanced val split) uses its best-F1 threshold. The other measured option is
-# 0.039 (recall >= 0.70 on val, precision 0.32): set WASTE_CONFIDENCE=0.039.
+# recall). The fine-tuned model (ml/runs/litter-v2-s960, trained and evaluated at
+# 960 px) uses its best-F1 threshold on the v2 val set. Override with
+# WASTE_CONFIDENCE / WASTE_CUSTOM_IMGSZ (the previous s640 model: 0.1775 at 640).
 DEFAULT_CONFIDENCE_COCO = 0.35
-DEFAULT_CONFIDENCE_CUSTOM = 0.1775
+DEFAULT_CONFIDENCE_CUSTOM = 0.185
+# Input size of the custom litter model; must match how it was trained. The COCO
+# model (people, fallback litter) keeps WASTE_IMGSZ.
+DEFAULT_IMGSZ_CUSTOM = 960
 
 # The fine-tuned model was trained with its one class named "item"; the API
 # reports it as "litter" so boxes and alerts read correctly.
@@ -60,6 +63,7 @@ class WasteConfig:
     classes: tuple[str, ...]
     max_bytes: int
     imgsz: int
+    custom_imgsz: int
 
     @classmethod
     def from_env(cls) -> "WasteConfig":
@@ -74,6 +78,7 @@ class WasteConfig:
             classes=tuple(c.strip() for c in classes.split(",") if c.strip()) or DEFAULT_LITTER_CLASSES,
             max_bytes=int(_env_float("WASTE_MAX_MB", 5) * 1024 * 1024),
             imgsz=int(_env_float("WASTE_IMGSZ", 640)),
+            custom_imgsz=int(_env_float("WASTE_CUSTOM_IMGSZ", DEFAULT_IMGSZ_CUSTOM)),
         )
 
 
@@ -129,14 +134,16 @@ class WasteDetector:
             out.append({"label": names[cls], "confidence": round(float(box.conf[0]), 3), "box": [x1, y1, x2, y2]})
         return sorted(out, key=lambda b: -b["confidence"])
 
-    def detect(self, data: bytes) -> dict:
+    def detect(self, data: bytes, conf: float | None = None) -> dict:
+        """`conf` (0.01..0.99) overrides the litter confidence for this call only (the camera test slider)."""
         image = self.decode(data)
         cfg = self.config
+        litter_conf = cfg.confidence if conf is None else conf
         started = time.perf_counter()
 
         # One COCO pass at the lower of the two thresholds, split afterwards.
         coco_classes = self.person_ids + ([] if self.custom else self.litter_ids)
-        coco = self.coco.predict(image, imgsz=cfg.imgsz, conf=min(cfg.confidence, cfg.person_confidence),
+        coco = self.coco.predict(image, imgsz=cfg.imgsz, conf=min(litter_conf, cfg.person_confidence),
                                  classes=coco_classes or None, verbose=False)[0]
         people = [
             {"confidence": b["confidence"], "box": b["box"]}
@@ -144,10 +151,10 @@ class WasteDetector:
         ]
 
         if self.custom:
-            result = self.custom.predict(image, imgsz=cfg.imgsz, conf=cfg.confidence, verbose=False)[0]
+            result = self.custom.predict(image, imgsz=cfg.custom_imgsz, conf=litter_conf, verbose=False)[0]
             items = self._boxes(result, None, CUSTOM_LABEL_ALIASES)
         else:
-            items = [b for b in self._boxes(coco, self.litter_ids) if b["confidence"] >= cfg.confidence]
+            items = [b for b in self._boxes(coco, self.litter_ids) if b["confidence"] >= litter_conf]
 
         return {
             "items": items,
@@ -165,4 +172,5 @@ class WasteDetector:
             "custom": self.custom is not None,
             "classes": [CUSTOM_LABEL_ALIASES.get(n, n) for n in self.custom.names.values()] if self.custom else list(self.config.classes),
             "confidence": self.config.confidence,
+            "imgsz": self.config.custom_imgsz if self.custom else self.config.imgsz,
         }

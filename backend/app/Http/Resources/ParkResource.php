@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\AlertType;
 use App\Enums\NodeType;
 use App\Enums\PumpReason;
 use App\Http\Resources\Concerns\FormatsTimes;
@@ -164,6 +165,7 @@ class ParkResource extends JsonResource
                 : [];
 
             $data['pump'] = $this->pump;
+            $data['actions'] = $this->actions($pumpNode);
 
             $data['claims'] = ($this->relationLoaded('claims') ? $this->claims : $this->claims()->orderBy('id')->get())
                 ->map(fn ($c) => [
@@ -188,5 +190,60 @@ class ParkResource extends JsonResource
         }
 
         return $data;
+    }
+
+    /**
+     * What an admin can do next (Sprint 6.3): one primary action and a menu with the rest.
+     * Primary: stop_pump (pump on) > water_now (dry / heat_stress alert and a pump) > send_worker
+     * (open alert without a task) > view_task (an active task) > none.
+     *
+     * @return array{primary: ?array<string, mixed>, menu: list<array<string, mixed>>}
+     */
+    private function actions(?Node $pumpNode): array
+    {
+        $tasks = $this->relationLoaded('activeTasks') ? $this->activeTasks : collect();
+        $alerts = $this->openAlerts;
+        $pumpOn = $pumpNode !== null && (bool) $pumpNode->pump_target;
+        $thirsty = $alerts->first(fn ($a) => in_array($a->type, [AlertType::Dry, AlertType::HeatStress], true));
+        $untasked = $alerts->first(fn ($a) => $a->isTaskReady() && ! $tasks->contains('alert_id', $a->id));
+        $task = $tasks->first();
+
+        $item = fn (string $key, $alert = null, $taskModel = null, ?Node $node = null) => [
+            'key' => $key, 'alert_id' => $alert?->id, 'task_id' => $taskModel?->id, 'node_id' => $node?->id,
+        ];
+
+        $all = [];
+        if ($pumpOn) {
+            $all[] = $item('stop_pump', null, null, $pumpNode);
+        } elseif ($pumpNode !== null) {
+            $all[] = $item('water_now', $thirsty, null, $pumpNode);
+        }
+        if ($untasked) {
+            $all[] = $item('send_worker', $untasked);
+        }
+        if ($task) {
+            $all[] = $item('view_task', $task->alert, $task);
+        }
+        if ($pumpNode !== null) {
+            $all[] = $item('toggle_auto', null, null, $pumpNode);
+        }
+        $all[] = $item('create_task');
+        $all[] = $item('open_hardware');
+
+        $primary = null;
+        if ($pumpOn) {
+            $primary = $item('stop_pump', null, null, $pumpNode);
+        } elseif ($thirsty && $pumpNode !== null) {
+            $primary = $item('water_now', $thirsty, null, $pumpNode);
+        } elseif ($untasked) {
+            $primary = $item('send_worker', $untasked);
+        } elseif ($task) {
+            $primary = $item('view_task', $task->alert, $task);
+        }
+
+        return [
+            'primary' => $primary,
+            'menu' => array_values(array_filter($all, fn ($a) => $a['key'] !== ($primary['key'] ?? null))),
+        ];
     }
 }

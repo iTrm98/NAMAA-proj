@@ -1,0 +1,11 @@
+# Litter AI v2: PlastOPol + TACO + BePLi (balanced, as litter_balanced.yaml) + extra ground-level sets
+# (ml/extra_sources.json) + COCO background images (empty labels, ~20% of train/val).
+# BePLi is CC BY-NC-SA 4.0 (non-commercial): use litter_v2_commercial_safe.yaml for any commercial model.
+# Lists are written by build_v2.py. `test` is the unchanged public-test split: never train or tune on it.
+# False alarms are measured on ml/data/extra/negatives_test (never listed here).
+path: C:/dev/NAMAA-proj/ml/data/yolo
+train: C:/dev/NAMAA-proj/ml/data/extra/lists/v2_train.txt
+val: C:/dev/NAMAA-proj/ml/data/extra/lists/v2_val.txt
+test: C:/dev/NAMAA-proj/ml/data/yolo/images/test
+names:
+  0: litter

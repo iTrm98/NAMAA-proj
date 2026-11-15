@@ -17,6 +17,8 @@ const ParkPage = lazy(() => import('@/pages/admin/ParkPage'))
 const TasksPage = lazy(() => import('@/pages/admin/TasksPage'))
 const DemoPage = lazy(() => import('@/pages/admin/DemoPage'))
 const HardwarePage = lazy(() => import('@/pages/admin/HardwarePage'))
+const LiveDemoPage = lazy(() => import('@/pages/admin/LiveDemoPage'))
+const ConnectTestPage = lazy(() => import('@/pages/admin/ConnectTestPage'))
 const StandPage = lazy(() => import('@/pages/admin/StandPage'))
 const ParkSetupPage = lazy(() => import('@/pages/admin/ParkSetupPage'))
 const ImpactPage = lazy(() => import('@/pages/admin/ImpactPage'))
@@ -67,6 +69,8 @@ function AppRoutes() {
         <Route path="tasks" element={<Suspense fallback={null}><TasksPage /></Suspense>} />
         <Route path="demo" element={<Suspense fallback={null}><DemoPage /></Suspense>} />
         <Route path="hardware" element={<Suspense fallback={null}><HardwarePage /></Suspense>} />
+        <Route path="live" element={<Suspense fallback={null}><LiveDemoPage /></Suspense>} />
+        <Route path="setup/connect" element={<Suspense fallback={null}><ConnectTestPage /></Suspense>} />
         <Route path="stand" element={<Suspense fallback={null}><StandPage /></Suspense>} />
         <Route path="park-setup" element={<Suspense fallback={null}><ParkSetupPage /></Suspense>} />
         <Route path="impact" element={<Suspense fallback={null}><ImpactPage /></Suspense>} />

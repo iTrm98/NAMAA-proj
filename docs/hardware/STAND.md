@@ -264,6 +264,32 @@ the stand.)
 
 ---
 
+## 7a. Camera (C920 through the camera bridge)
+
+Docker Desktop on Windows cannot use USB webcams, so a small program on the laptop (the
+camera bridge) reads the C920 and serves its latest picture; Laravel reads it from there.
+
+1. Plug in the C920. Start the bridge (or answer `y` to "Start camera bridge?" in `start-namaa.bat`):
+   `ml\.venv\Scripts\python.exe tools\camera_bridge.py --camera 1 --port 8090`.
+   It prints which of white balance, exposure and focus it could lock. If index 1 does not
+   open it lists the indexes that do: use `--camera <index>`.
+2. Open http://localhost:8090/health. `"ok": true` means frames are coming in.
+3. `CAMERA_URL=http://host.docker.internal:8090/frame.jpg` in the root `.env`, then
+   `docker compose up -d backend queue scheduler` (the camera setting is read at start).
+4. Open **Tools > Live device**. The camera card shows the latest frame; if the bridge is
+   stopped it says "Camera offline - start the camera bridge" and the rest of the page keeps working.
+5. Port 8090 needs a Private-profile firewall rule: run `tools\open-firewall.ps1` as administrator.
+
+**Tray area.** On the camera card press **Set tray area**. A picture from the camera appears
+(people are blurred): click the corners of the tray, 3 or more, then **Save tray area**.
+Litter whose centre is outside the area is ignored. **Use the whole frame** removes it. Draw it
+again after moving the camera.
+
+**False-alarm filters.** An item counts as litter only if it shows in 2 of the last 3 frames.
+The threshold is the model's 0.185 (`CAMERA_LITTER_THRESHOLD`, or `litter_threshold` on the camera node).
+
+---
+
 ## 8. Five-minute pre-demo checklist
 
 1. `start-namaa.bat` has run; `docker compose ps` shows the containers up.

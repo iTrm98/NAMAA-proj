@@ -1,4 +1,6 @@
-# Model card: NAMAA litter detector (`litter-s640-balanced`)
+# Model card: NAMAA litter detector (`litter-v2-s960`)
+
+> Deployed model since the v2 swap: **`litter-v2-s960`, run at 960 px, threshold 0.185**. The sections below describe the first model (`litter-s640-balanced`, kept as `vision-service/models/litter_old_s640.pt`) unless they say v2; the v2 comparison is in the next section.
 
 ## What it does
 
@@ -12,6 +14,24 @@ Finds litter in a single photo and draws one box per item. It has **one class**,
 | Parameters | 9,413,187 (fused model; 9,428,179 before fusing) |
 | Input size | 640 px |
 | Weights | `ml/runs/litter-s640-balanced/weights/best.pt` (never committed; copied to `vision-service/models/litter.pt`) |
+
+## v2 and the model swap (old vs v2 vs v2-s960)
+
+v2 = the same balanced PlastOPol + TACO + BePLi set plus extra ground-level litter sets (`ml/extra_sources.json`) and COCO background images with empty labels (about 20% of train/val), see `litter_v2.yaml`. Two trainings: `litter-v2` (640 px) and `litter-v2-s960` (960 px). All three models were scored on the same data: public-test (753 images, 7,695 boxes, IoU 0.5, never trained or tuned on), and the 500 `ml/data/extra/negatives_test` photos (no litter) for false positives. Each model's best-F1 threshold was picked on its own val set (OLD: balanced val, 449 images; v2 models: v2 val, 561 images), never on test. CPU time is the median of 50 images (preprocess + inference + postprocess).
+
+| | OLD (`litter-s640-balanced`, 640) | v2 (640) | **v2-s960 (960, deployed)** |
+|---|---|---|---|
+| mAP50 overall | 0.471 | 0.470 | **0.494** |
+| mAP50 PlastOPol / TACO / BePLi | **0.795** / 0.628 / 0.429 | 0.783 / 0.622 / 0.427 | 0.790 / **0.638** / **0.455** |
+| Best-F1 threshold | 0.1775 | 0.1806 | **0.1854 (set to 0.185)** |
+| P / R at best-F1 | 0.627 / 0.412 | **0.647** / 0.395 | 0.615 / **0.448** |
+| P / R at 0.1775 | 0.627 / 0.412 | 0.641 / 0.398 | 0.603 / 0.455 |
+| False positives per negative photo, at best-F1 | 3.244 | 0.436 | **0.364** |
+| False positives per negative photo, at 0.1775 | 3.244 | 0.450 | **0.388** |
+| Negative photos with at least one false positive (of 500), at 0.1775 | 420 | 141 | **121** |
+| CPU time per image | 74.7 ms | 75.6 ms | 175.4 ms |
+
+Reading: v2 cuts false alarms about 7x with no loss on the litter tests; the 960 px model adds +0.023 mAP50 and about 4 points of recall for 2.3x the CPU time (still under 0.2 s per frame; the camera is polled, not streamed). The negatives are COCO-style photos, not park photos, so the false-positive numbers are relative. **Chosen: v2-s960 at threshold 0.185** (its own best F1; 0.1775 would cost almost nothing). Fallback if CPU time matters: v2 at 640 and about 0.18. Raw numbers: `ml/runs/eval/cmp_{OLD,v2,v2-s960}.json`. Not yet measured on our own demo tray.
 
 ## Training data
 
@@ -53,13 +73,14 @@ This model, per dataset (P / R):
 
 ## Threshold
 
+- **Deployed (v2-s960): 0.185**, `DEFAULT_CONFIDENCE_CUSTOM` in `vision-service/app/waste.py`; override with `WASTE_CONFIDENCE`. The bullets below are for the first model.
 - **Default: 0.1775** (best F1 on the balanced val split; val P 0.647 / R 0.538). Set in `vision-service/app/waste.py` for a custom model.
 - **Option: 0.039** (best precision with recall >= 0.70 on val; val P 0.320 / R 0.700; set `WASTE_CONFIDENCE=0.039`). It finds more litter but about one in three boxes is right on val (0.29 on public-test). On public-test recall at this threshold is 0.624, not 0.70.
 - The COCO fallback (no `litter.pt`) keeps 0.35.
 
 ## Speed
 
-77 ms per image on CPU (median of 50 images, preprocess + inference + postprocess, imgsz 640). The old COCO yolo26n model took 30 ms.
+v2-s960 at 960 px: 175 ms per image on CPU (see the comparison above). The first model: 77 ms per image on CPU (median of 50 images, preprocess + inference + postprocess, imgsz 640). The old COCO yolo26n model took 30 ms.
 
 ## Our own demo tray
 
@@ -69,7 +90,7 @@ This model, per dataset (P / R):
 
 - **Tiny items:** BePLi beach fragments are mostly under 32 px; recall there is 0.37 at the default threshold.
 - **Partly hidden litter** (under leaves, in shadow, behind objects) is missed more often; the datasets contain few such cases.
-- **False alarms are not measured.** Public-test has only 1 clean image (3 in the whole dataset, all beach photos), so false alarms per clean image cannot be stated. In a quick live check, 1 of 3 clean beach photos produced a false detection.
+- **False alarms:** measured for v2-s960 on 500 non-litter COCO photos: 0.39 boxes per photo at 0.1775 and 0.36 at 0.185; 121 of 500 photos have at least one. Public-test has only 1 clean image, so the first model's false alarms were unknown until this test (3.24 per photo). Park photos are still to be measured.
 - **Domain gap:** training photos come mostly from Europe and the US plus beach photos (PlastOPol, TACO, BePLi), not from Makkah parks, its light, grass types or litter. Numbers above are on those datasets, not on our parks.
 - One class only: it does not say what kind of litter an object is.
 

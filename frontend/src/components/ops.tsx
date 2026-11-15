@@ -222,18 +222,5 @@ export function EscalatedBadge({ task }: { task: Pick<Task, 'escalation_count' |
   )
 }
 
-/** "mm:ss" until an ISO time; re-renders every second. */
-export function useCountdown(iso: string | null | undefined): string | null {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!iso) return
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [iso])
-  if (!iso) return null
-  const seconds = Math.max(0, Math.round((new Date(iso).getTime() - now) / 1000))
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-}
-
 /** Text colour per moisture state (matches the map colours). */
 export const STATUS_TEXT = { ok: 'text-status-ok', dry: 'text-status-dry', over: 'text-status-over' } as const

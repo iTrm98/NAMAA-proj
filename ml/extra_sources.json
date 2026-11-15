@@ -1,0 +1,50 @@
+{
+  "_note": "Ground-level litter/trash detection sets for litter AI v2. fetch_extra_data.py reads this file. 'workspace' and 'project' are the two parts of the Roboflow Universe URL (universe.roboflow.com/<workspace>/<project>). The licence is re-read from the Roboflow API at fetch time; a set is skipped unless it is on allowed_licences. Candidates come from a Universe search and were NOT opened by hand: run `python fetch_extra_data.py --list` first and check the printed image counts and class names.",
+  "allowed_licences": [
+    "CC BY 4.0",
+    "CC0 1.0",
+    "Public Domain"
+  ],
+  "noncommercial_licences": [
+    "CC BY-NC 4.0",
+    "CC BY-NC-SA 4.0"
+  ],
+  "roboflow": [],
+  "_version_note": "version null = the highest version number the API lists.",
+  "_skipped": {
+    "pLitterStreet (Zenodo 8288500, CC BY 4.0)": "images.zip is 13.7 GB and the photos are vehicle-mounted street views with tiny, distant items: far from a C920 close-up, too heavy for a 4 GB laptop run.",
+    "MJU-Waste": "RGB-D indoor set hosted on a personal drive link, licence not stated in the review: skipped (no clear licence).",
+    "RoLID-11K": "dashcam road views with tiny items; repository is Apache 2.0 but the image licence is not stated: skipped.",
+    "SWiM3": "research and educational use only: skipped.",
+    "Cigarette butt dataset": "non-commercial educational licence and synthetic images: skipped.",
+    "Domestic Trash Dataset": "paid licence, 250 free images only: skipped.",
+    "garbage_detection (Roboflow, ourouba)": "labels whole garbage piles, not single items: skipped.",
+    "BeachLitter, BePLi v2, UAVVaste, TrashCan, Trash-ICRA19, ZeroWaste": "beach, aerial, underwater or conveyor-belt scenes: not the park/street/floor/indoor look we need (BePLi v1 is already in).",
+    "rf_roads, rf_c64nk, rf_i8tin (Roboflow)": "HTTP 404: project not found with the API (removed or private).",
+    "rf_epykz (class-epykz/litterdetection-rrwce)": "CHECKED BY EYE: deep-sea / underwater frames (JAMSTEC), not ground level. Downloaded but excluded.",
+    "rf_ltp18 (training-l9rui/litter-detection-ltp18)": "CHECKED BY EYE: stock photos, clip-art, glasses of water, bottles and cups on desks/tables and in hands, plus a person class: the opposite of what we need. Downloaded but excluded."
+  },
+  "roboflow_backup": [
+    {
+      "id": "rf_gtdua",
+      "workspace": "daniel920817",
+      "project": "littering-detection-gtdua",
+      "version": null,
+      "scene": "ground-level litter"
+    },
+    {
+      "id": "rf_yloav",
+      "workspace": "ms-2inlk",
+      "project": "litter-yloav",
+      "version": null,
+      "scene": "ground-level litter"
+    },
+    {
+      "id": "rf_whlsk",
+      "workspace": "nadprojects",
+      "project": "littering-whlsk-cseq5",
+      "version": null,
+      "scene": "ground-level litter"
+    }
+  ]
+}

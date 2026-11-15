@@ -260,7 +260,7 @@ class SystemHealth
         }
 
         try {
-            $response = Http::timeout((int) config('namaa.camera.timeout_seconds'))->get(CameraPipeline::urlFor(CameraPipeline::cameraNode()).'/capture');
+            $response = Http::timeout((int) config('namaa.camera.timeout_seconds'))->get(CameraPipeline::frameUrl(CameraPipeline::cameraNode()));
         } catch (ConnectionException) {
             return ['fail', 'The camera does not answer at CAMERA_URL/capture'];
         }

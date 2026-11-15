@@ -139,13 +139,26 @@ def test_default_confidence_follows_the_model(tmp_path, monkeypatch):
     weights.write_bytes(b"x")  # only its existence matters here
     monkeypatch.delenv("WASTE_CONFIDENCE", raising=False)
     monkeypatch.setenv("WASTE_MODEL", str(weights))
-    assert WasteConfig.from_env().confidence == DEFAULT_CONFIDENCE_CUSTOM == 0.1775
+    assert WasteConfig.from_env().confidence == DEFAULT_CONFIDENCE_CUSTOM == 0.185
     monkeypatch.setenv("WASTE_MODEL", str(tmp_path / "missing.pt"))
     assert WasteConfig.from_env().confidence == DEFAULT_CONFIDENCE_COCO == 0.35
     monkeypatch.setenv("WASTE_MODEL", str(weights))
     monkeypatch.setenv("WASTE_CONFIDENCE", "0.039")
     assert WasteConfig.from_env().confidence == 0.039
 
+
+def test_custom_model_runs_at_its_own_image_size(tmp_path, monkeypatch):
+    from app.waste import WasteConfig
+
+    weights = tmp_path / "litter.pt"
+    weights.write_bytes(b"x")
+    monkeypatch.setenv("WASTE_MODEL", str(weights))
+    monkeypatch.delenv("WASTE_CUSTOM_IMGSZ", raising=False)
+    monkeypatch.delenv("WASTE_IMGSZ", raising=False)
+    cfg = WasteConfig.from_env()
+    assert (cfg.custom_imgsz, cfg.imgsz) == (960, 640)  # litter model 960, COCO (people) 640
+    monkeypatch.setenv("WASTE_CUSTOM_IMGSZ", "640")
+    assert WasteConfig.from_env().custom_imgsz == 640
 
 BUS = Path(__import__("ultralytics").__file__).parent / "assets" / "bus.jpg"
 CUSTOM = Path(__file__).resolve().parent.parent / "models" / "litter.pt"
@@ -178,3 +191,17 @@ def test_people_and_coco_litter_fallback_without_the_custom_model(monkeypatch, t
     assert len(body["people"]) >= 2, body
     assert body["model"] != "litter.pt"
     assert all(i["label"] != "person" and i["label"] != "litter" for i in body["items"])
+
+
+def test_health_reports_the_input_size(client):
+    waste = client.get("/health").json()["waste"]
+    assert isinstance(waste["imgsz"], int) and waste["imgsz"] > 0
+
+
+def test_waste_conf_override_is_validated_and_applied(client):
+    # A very high override can only remove boxes; an out-of-range value is rejected.
+    base = client.post("/waste", files={"image": ("lawn.jpg", jpeg(), "image/jpeg")}).json()
+    high = client.post("/waste", files={"image": ("lawn.jpg", jpeg(), "image/jpeg")}, data={"conf": "0.99"})
+    assert high.status_code == 200, high.text
+    assert high.json()["count"] <= base["count"]
+    assert client.post("/waste", files={"image": ("lawn.jpg", jpeg(), "image/jpeg")}, data={"conf": "5"}).status_code == 422

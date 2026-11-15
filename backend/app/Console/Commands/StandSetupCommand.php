@@ -36,6 +36,8 @@ class StandSetupCommand extends Command
         $this->table(['Node', 'Name', 'From park'], array_map(fn ($m) => [$m['node_id'], $m['name'], $m['from_park']], $plan['moves']));
         $this->line('Set to satellite_only: '.($plan['satellite_only'] === [] ? 'none' : implode(', ', $plan['satellite_only'])));
 
+        $this->line('Zone nodes to create: '.($plan['zones'] === [] ? 'none' : implode(', ', $plan['zones'])));
+
         if ($plan['bench_board_token']) {
             $this->warn(StandSetup::BENCH_BOARD.' created. Its device token is shown ONCE and is not stored anywhere readable; copy it into the firmware secrets now:');
             $this->line($plan['bench_board_token']);

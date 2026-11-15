@@ -1,14 +1,18 @@
 import { Camera, Droplets, Power, Radio, Ruler, ShieldCheck, WifiOff } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FrameImage, LitterCount } from '@/components/camera'
-import { Chip, EmptyState, GlassCard, Skeleton, toast } from '@/components/ds'
+import { CameraTestPanel } from '@/components/CameraTestPanel'
+import { Chip, EmptyState, GlassCard, Segmented, Skeleton, toast } from '@/components/ds'
+import { ReadinessPanel } from '@/components/ReadinessPanel'
 import { SourceBadge } from '@/components/StatusPill'
+import { TrayEditor } from '@/components/TrayEditor'
 import { useParkFrames } from '@/hooks/useCamera'
 import { useNow } from '@/hooks/useNow'
-import { useStandCalibrate, useStandLive, useStandPump } from '@/hooks/useStand'
+import { useCameraMode, useStandCalibrate, useStandLive, useStandPump } from '@/hooks/useStand'
 import { ApiError } from '@/lib/api'
 import { formatAgo, formatDateTime, formatNumber } from '@/lib/format'
-import type { StandLive } from '@/types'
+import type { CameraMode, StandLive } from '@/types'
 
 const BTN = 'rounded-xl border border-[var(--glass-border-strong)] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40'
 
@@ -53,11 +57,48 @@ function CameraBlock({ live }: { live: StandLive }) {
   const { t } = useTranslation()
   const frames = useParkFrames(live.park_id, 'admin', 1)
   const shown = frames.data?.[0]
+  const [editing, setEditing] = useState(false)
+  const node = live.camera_node
+  const offline = node !== null && node.has_url && !node.online
+  const mode: CameraMode = node?.mode ?? 'demo'
+  const setMode = useCameraMode()
+  const testing = mode === 'test' && node !== null
   const litter = live.camera ? live.camera.litter : (shown?.count ?? 0) > 0
   return (
     <GlassCard>
       <Title icon={<Camera />}>{t('stand.camera')}</Title>
-      {frames.isPending ? (
+      {node && (
+        <div className="mb-3 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Segmented<CameraMode>
+              ariaLabel={t('stand.mode.label')}
+              value={mode}
+              options={[
+                { value: 'test', label: t('stand.mode.test') },
+                { value: 'demo', label: t('stand.mode.demo') },
+              ]}
+              onChange={(next) => {
+                if (next !== mode && !setMode.isPending) setMode.mutate(next, { onError: (e) => toast.error(errorText(e, t('common.error'))) })
+              }}
+            />
+            <Chip tone={testing ? 'high' : 'ok'} className="!px-3 !py-1 !text-sm">
+              {testing ? t('stand.mode.testOn') : t('stand.mode.demoOn')}
+            </Chip>
+          </div>
+          <p className="m-0 text-xs text-text-2">{testing ? t('stand.mode.testHint') : t('stand.mode.demoHint')}</p>
+        </div>
+      )}
+      {offline && !testing && (
+        <p role="status" className="mb-3 flex items-center gap-2 rounded-lg bg-[var(--glass-border)] px-3 py-2 text-sm">
+          <WifiOff className="size-4 shrink-0" />
+          {t('stand.cameraOffline')}
+        </p>
+      )}
+      {editing && node ? (
+        <TrayEditor nodeId={node.node_id} current={node.camera_roi} onClose={() => setEditing(false)} />
+      ) : testing ? (
+        <CameraTestPanel node={node} />
+      ) : frames.isPending ? (
         <Skeleton className="aspect-[4/3] w-full rounded-lg" />
       ) : frames.isError ? (
         <p className="m-0 text-sm text-destructive">{t('common.error')}</p>
@@ -74,8 +115,18 @@ function CameraBlock({ live }: { live: StandLive }) {
               <ShieldCheck className="size-3.5" />
               {t('stand.blurOn')}
             </span>
+            {node && (
+              <span>
+                {node.camera_roi ? t('stand.trayActive') : t('stand.trayWhole')} · {formatNumber(node.effective_threshold, 3)}
+              </span>
+            )}
           </div>
         </div>
+      )}
+      {node && !editing && (
+        <button type="button" className={`${BTN} mt-3 px-3 py-1.5 text-sm`} onClick={() => setEditing(true)} disabled={offline}>
+          {t('stand.trayEdit')}
+        </button>
       )}
     </GlassCard>
   )
@@ -242,6 +293,7 @@ export default function StandPage() {
         </GlassCard>
       ) : (
         <>
+          <ReadinessPanel />
           {!live.board.online && (
             <div role="alert" className="flex items-center gap-2 rounded-xl bg-[var(--chip-urgent-bg)] px-4 py-3 text-sm font-medium text-[var(--chip-urgent-fg)]">
               <WifiOff className="size-4" />

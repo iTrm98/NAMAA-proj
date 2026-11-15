@@ -64,6 +64,7 @@ class OfflineChecker
         $stale = Node::query()
             ->where('type', NodeType::Sensor)
             ->whereNull('detached_at')
+            ->withoutZone() // zone nodes: the Gateway raises offline
             ->whereHas('park', fn ($p) => $p->where('is_test', false)->whereNull('archived_at')) // the bench: unplugged is normal
             ->whereNot(fn ($q) => $q->awaitingInstall()) // never reported + real: awaiting installation
             ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '<', self::threshold(NodeType::Sensor)))
@@ -74,6 +75,7 @@ class OfflineChecker
                 ->where('type', NodeType::Camera)
                 ->where('source', DataSource::Real->value) // Sim Cam only gets demo frames
                 ->whereNull('detached_at')
+                ->withoutZone()
                 ->where('capture_mode', 'url') // a browser tab is not an outage when closed
                 ->whereHas('park', fn ($p) => $p->where('is_test', false)->whereNull('archived_at'))
                 ->whereNot(fn ($q) => $q->awaitingInstall())

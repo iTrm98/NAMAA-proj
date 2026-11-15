@@ -16,6 +16,8 @@ enum AlertType: string
     case Litter = 'litter';
     case LitterRepeated = 'litter_repeated';
     case NdviDrop = 'ndvi_drop';
+    case TankLow = 'tank_low';
+    case Heat = 'heat';
 
     public function category(): AlertCategory
     {
@@ -32,9 +34,9 @@ enum AlertType: string
     public function priority(): TaskPriority
     {
         return match ($this) {
-            self::Leak, self::NoFlow, self::HeatStress => TaskPriority::Urgent,
+            self::Leak, self::NoFlow, self::HeatStress, self::TankLow => TaskPriority::Urgent,
             self::Dry, self::Blockage, self::LitterRepeated => TaskPriority::High,
-            self::Over, self::Litter, self::Offline, self::SensorFault => TaskPriority::Normal,
+            self::Over, self::Litter, self::Offline, self::SensorFault, self::Heat => TaskPriority::Normal,
             self::NdviDrop, self::LowBattery => TaskPriority::Low,
         };
     }
@@ -50,7 +52,7 @@ enum AlertType: string
     {
         return match ($this) {
             self::Dry, self::HeatStress, self::NoFlow, self::Leak => AlertSeverity::Critical,
-            self::Over, self::Blockage, self::Offline, self::SensorFault, self::Litter, self::LitterRepeated => AlertSeverity::Warning,
+            self::Over, self::Blockage, self::Offline, self::SensorFault, self::Litter, self::LitterRepeated, self::TankLow, self::Heat => AlertSeverity::Warning,
             self::NdviDrop, self::LowBattery => AlertSeverity::Info,
         };
     }

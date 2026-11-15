@@ -17,8 +17,8 @@ use Laravel\Sanctum\HasApiTokens;
 #[Fillable([
     'park_id', 'type', 'name', 'has_pump', 'pump_target', 'dry_value', 'wet_value',
     'last_seen_at', 'detached_at', 'last_moisture_pct', 'last_flow', 'last_temperature',
-    'last_humidity', 'last_pump_on', 'last_battery_pct', 'last_litter_count', 'expected_flow_l_min', 'source', 'rssi', 'uptime_s', 'fw_version', 'via', 'capture_mode', 'camera_url',
-    'last_rejected_at', 'last_rejected_reason', 'rejected_count', 'placeholder', 'calibrated_dry_at', 'calibrated_wet_at',
+    'last_humidity', 'last_pump_on', 'last_battery_pct', 'last_litter_count', 'expected_flow_l_min', 'source', 'rssi', 'uptime_s', 'fw_version', 'via', 'capture_mode', 'camera_url', 'camera_roi', 'litter_threshold',
+    'last_rejected_at', 'last_rejected_reason', 'rejected_count', 'placeholder', 'calibrated_dry_at', 'calibrated_wet_at', 'zone',
 ])]
 class Node extends Model
 {
@@ -52,6 +52,8 @@ class Node extends Model
             'calibrated_dry_at' => 'datetime',
             'calibrated_wet_at' => 'datetime',
             'rejected_count' => 'integer',
+            'camera_roi' => 'array',
+            'litter_threshold' => 'float',
             'last_moisture_pct' => 'float',
             'last_flow' => 'float',
             'last_temperature' => 'float',
@@ -79,6 +81,41 @@ class Node extends Model
     public function isStand(): bool
     {
         return $this->park?->site_type === \App\Enums\SiteType::DemoStand;
+    }
+
+    /** The zone column exists (the add_zone_to_nodes migration has run). Cached per process. */
+    public static function hasZoneColumn(): bool
+    {
+        static $has = null;
+
+        return $has ??= \Illuminate\Support\Facades\Schema::hasColumn('nodes', 'zone');
+    }
+
+    /** Owned by the Gateway (zone A or B): no server rules, pump safety, offline or litter alerts. */
+    public function isGatewayZone(): bool
+    {
+        return self::hasZoneColumn() && $this->zone !== null;
+    }
+
+    /** Names of the leftover boards the Hardware list hides (also by the placeholder flag and archived parks). */
+    public const PLACEHOLDER_NAMES = ['Model A', 'Model B', 'Camera 1', 'Bench B', 'Sim 3'];
+
+    /** @param Builder<Node> $query */
+    public function scopeVisibleOnHardware(Builder $query): void
+    {
+        $query->whereNotIn('nodes.name', self::PLACEHOLDER_NAMES)
+            ->whereHas('park', fn ($p) => $p->whereNull('archived_at'));
+        if (\Illuminate\Support\Facades\Schema::hasColumn('nodes', 'placeholder')) {
+            $query->where('nodes.placeholder', false);
+        }
+    }
+
+    /** Keep only normal nodes (no zone). @param Builder<Node> $query */
+    public function scopeWithoutZone(Builder $query): void
+    {
+        if (self::hasZoneColumn()) {
+            $query->whereNull('nodes.zone');
+        }
     }
 
     /** @param Builder<Node> $query */

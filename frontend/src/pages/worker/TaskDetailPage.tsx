@@ -126,8 +126,6 @@ function TaskDetail({ task }: { task: WorkerTaskDetail }) {
         <div className="flex flex-wrap gap-1.5">
           <Chip tone={PRIORITY_TONE[task.priority]}>{t(`priority.${task.priority}`)}</Chip>
           <Chip tone="muted">{t(`taskStatus.${task.status}`)}</Chip>
-          {task.category && <Chip tone="muted">{t(`category.${task.category}`)}</Chip>}
-          {park.site_type === 'demo_stand' && <Chip tone="muted">{t('taskCard.stand')}</Chip>}
           <Chip tone="muted">{t(`source.${park.source}`)}</Chip>
         </div>
         <h1 className="m-0 text-[26px] leading-tight font-normal">{taskTitle(t, i18n.language, task)}</h1>
@@ -150,7 +148,7 @@ function TaskDetail({ task }: { task: WorkerTaskDetail }) {
           {detail && <div className="text-sm text-text-2">{detail}</div>}
           {kind === 'cleanliness' && task.alert.detection && (
             // Workers read the frame through their task (the admin image route is not theirs); the small version shows first.
-            <FrameImage detection={workerFrame(task.alert.frame_url ?? `/worker/tasks/${task.id}/frame`, task.alert.detection)} className="mt-2" />
+            <FrameImage detection={workerFrame(task.alert.frame_url ?? `/worker/tasks/${task.id}/frame`, task.alert.detection)} labels={false} className="mt-2" />
           )}
         </GlassCard>
       )}

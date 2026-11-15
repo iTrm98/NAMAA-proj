@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\NodeType;
 use App\Models\Detection;
 use App\Models\Node;
 use App\Models\Park;
@@ -30,7 +31,7 @@ class StandLive
     /** The stand's soil and pump board: Bench A when present, else the first real sensor with a pump. */
     public function node(Park $stand): ?Node
     {
-        return Node::where('park_id', $stand->id)->where('type', 'sensor')->where('has_pump', true)
+        return Node::where('park_id', $stand->id)->withoutZone()->where('type', 'sensor')->where('has_pump', true)
             ->where(fn ($q) => $q->where('placeholder', false)->orWhere('name', 'Bench A'))
             ->orderByRaw("name = 'Bench A' desc")->orderBy('id')->first();
     }
@@ -92,6 +93,17 @@ class StandLive
                 'wet_at' => $iso($node->calibrated_wet_at),
                 'calibrated' => $m['calibrated'],
             ],
+            'camera_node' => ($cam = Node::where('park_id', $stand->id)->where('type', 'camera')->orderBy('id')->first()) ? [
+                'node_id' => $cam->id,
+                'camera_roi' => $cam->camera_roi,
+                'litter_threshold' => $cam->litter_threshold,
+                'effective_threshold' => $cam->litter_threshold ?? (float) config('namaa.camera.litter_threshold'),
+                'default_threshold' => (float) config('namaa.camera.litter_threshold'),
+                'mode' => CameraMode::current(),
+                'has_url' => CameraPipeline::urlFor($cam) !== '',
+                // The camera (or the USB camera bridge) answered recently: every polled frame sets last_seen_at.
+                'online' => $cam->last_seen_at !== null && $cam->last_seen_at->gt(now()->subSeconds(OfflineChecker::offlineSeconds(NodeType::Camera))),
+            ] : null,
             'camera' => $detection ? [
                 'detection_id' => $detection->id,
                 'at' => $iso($detection->captured_at),

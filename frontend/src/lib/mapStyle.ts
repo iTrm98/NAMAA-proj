@@ -1,13 +1,12 @@
-import { useCallback, useState } from 'react'
 import '@/lib/maplibreWorker'
-import type { StyleSpecification } from 'maplibre-gl'
+import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
+import { useDemoInfo } from '@/hooks/useOps'
 
 /** Basemaps: MapTiler (VITE_MAPTILER_KEY) satellite or streets; OpenStreetMap without a key. */
 export const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY?.trim() || ''
 export const MAKKAH = { latitude: 21.42, longitude: 39.83, zoom: 11 }
 /** The map never leaves greater Makkah: [[west, south], [east, north]]. */
 export const MAX_BOUNDS: [number, number, number, number] = [39.5, 21.1, 40.2, 21.8]
-export const MIN_ZOOM = 10
 
 export const ATTRIBUTION = '© OpenStreetMap contributors · Contains modified Copernicus Sentinel data 2026'
 export const ESRI_ATTRIBUTION = 'Imagery © Esri, Maxar, Earthstar Geographics'
@@ -18,38 +17,27 @@ export function attributionFor(basemap: Basemap): string {
 }
 
 /** Shared MapLibre props: bounds, zoom limits and attribution. */
-export function mapShellProps(basemap: Basemap) {
+export function mapShellProps(basemap: Basemap, bounds: [number, number, number, number] = MAX_BOUNDS) {
   return {
-    maxBounds: MAX_BOUNDS,
-    minZoom: MIN_ZOOM,
+    maxBounds: bounds,
+    minZoom: 5,
     attributionControl: { compact: false, customAttribution: attributionFor(basemap) },
   } as const
 }
 
 export type Basemap = 'satellite' | 'streets' | 'esri'
 
-const BASEMAP_KEY = 'namaa.map.basemap'
+/** The one demo basemap and the map bounds, from GET /demo/status `map` (MapTiler satellite and greater Makkah until it answers). */
+export function useMapConfig(): { basemap: Basemap; bounds: [number, number, number, number] } {
+  const info = useDemoInfo()
+  const map = info.data?.map
+  return { basemap: map?.basemap === 'esri' ? 'esri' : 'satellite', bounds: map?.bounds ?? MAX_BOUNDS }
+}
 
-/** The user's last basemap choice; Satellite by default (it needs the MapTiler key). */
-export function useBasemap(): [Basemap, (next: Basemap) => void] {
-  const [basemap, setBasemap] = useState<Basemap>(() => {
-    try {
-      const saved = localStorage.getItem(BASEMAP_KEY)
-      if (saved === 'satellite' || saved === 'streets' || saved === 'esri') return saved
-    } catch {
-      // storage blocked (private window): fall back to the default
-    }
-    return 'satellite'
-  })
-  const choose = useCallback((next: Basemap) => {
-    setBasemap(next)
-    try {
-      localStorage.setItem(BASEMAP_KEY, next)
-    } catch {
-      // not remembered, still switched
-    }
-  }, [])
-  return [basemap, choose]
+/** The lowest zoom is the one where the whole bounds fit the view: the map never shows the world. */
+export function fitMinZoom(map: MapLibreMap, bounds: [number, number, number, number]) {
+  const camera = map.cameraForBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]])
+  if (camera?.zoom != null) map.setMinZoom(Math.max(0, camera.zoom - 0.1))
 }
 
 /** Without a MapTiler key: OpenStreetMap raster tiles (with attribution). */

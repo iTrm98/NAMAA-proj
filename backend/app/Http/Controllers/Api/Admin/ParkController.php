@@ -34,7 +34,7 @@ class ParkController extends Controller
             // The demo stand and archived parks are not parks; include_test brings the stand back, include_archived the archive.
             ->when($request->boolean('include_test'),
                 fn ($q) => $q->unless($request->boolean('include_archived'), fn ($q) => $q->whereNull('archived_at')),
-                fn ($q) => $q->parks()->withoutTest())
+                fn ($q) => $q->shown()->withoutTest())
             ->with(['nodes.latestPumpLog', ...Park::satelliteRelations()])
             ->withCount(['openAlerts as open_alerts_count'])
             ->orderBy('id')

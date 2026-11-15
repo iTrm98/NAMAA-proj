@@ -14,7 +14,7 @@ class ImpactController extends Controller
     public function __invoke(ImpactRequest $request, ImpactService $impact): JsonResponse
     {
         $parks = Park::forCompany($request->user()->company_id)
-            ->parks()
+            ->shown()
             ->unless($request->boolean('include_test'), fn ($q) => $q->withoutTest())
             ->with(Park::satelliteRelations())->orderBy('id')->get();
 

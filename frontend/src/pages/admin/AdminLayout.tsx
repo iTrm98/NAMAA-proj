@@ -13,16 +13,24 @@ import { parkName, useParks } from '@/hooks/useParks'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const WIDE = ['/admin/stand', '/admin/tasks', '/admin/demo', '/admin/impact', '/admin/hardware', '/admin/park-setup']
+const WIDE = ['/admin/stand', '/admin/live', '/admin/setup', '/admin/tasks', '/admin/demo', '/admin/impact', '/admin/hardware', '/admin/park-setup']
 
 /** /admin: top bar (logo, PillNav, Live, language, bell, account), quick-action rail, park list (map and park pages), main area. */
 export default function AdminLayout() {
   const { pathname } = useLocation()
+  const { t } = useTranslation()
+  const demo = useDemoStatus()
+  const setupItems = [
+    { to: '/admin/hardware', label: t('nav.hardware') },
+    { to: '/admin/park-setup', label: t('nav.parkSetup') },
+    { to: '/admin/setup/connect', label: t('nav.connect') },
+    ...(demo.data ? [{ to: '/admin/demo', label: t('nav.demoControl') }] : []),
+  ]
   const wide = WIDE.some((p) => pathname.startsWith(p)) || ['/admin', '/admin/'].includes(pathname) || pathname.startsWith('/admin/parks')
 
   return (
     <div className="flex h-svh flex-col">
-      <TopBar home="/admin" nav={<AdminNav />} extras={<AlertsBell />} />
+      <TopBar home="/admin" nav={<AdminNav />} extras={<AlertsBell />} menuItems={setupItems} menuTitle={t('nav.setup')} />
       <SchedulerBanner />
       <div className="flex min-h-0 flex-1 gap-5 px-6 pb-5 max-md:px-3">
         <QuickActions className="self-start max-md:hidden" />
@@ -39,7 +47,6 @@ export default function AdminLayout() {
 
 function AdminNav() {
   const { t } = useTranslation()
-  const demo = useDemoStatus()
   const { pathname } = useLocation()
 
   const activeTo =
@@ -49,19 +56,11 @@ function AdminNav() {
         ? '/admin/parks'
         : pathname.startsWith('/admin/tasks')
           ? '/admin/tasks'
-          : pathname.startsWith('/admin/impact')
-            ? '/admin/impact'
-            : pathname.startsWith('/admin/hardware')
-              ? '/admin/hardware'
-              : pathname.startsWith('/admin/stand')
-                ? '/admin/stand'
-              : pathname.startsWith('/admin/park-setup')
-                ? '/admin/park-setup'
-              : pathname.startsWith('/admin/demo')
-                ? '/admin/demo'
-                : undefined
-
-  const tools = [{ to: '/admin/hardware', label: t('nav.hardware') }, { to: '/admin/stand', label: t('nav.stand') }, { to: '/admin/park-setup', label: t('nav.parkSetup') }, ...(demo.data ? [{ to: '/admin/demo', label: t('nav.demo') }] : [])]
+          : pathname.startsWith('/admin/live')
+            ? '/admin/live'
+            : pathname.startsWith('/admin/impact')
+              ? '/admin/impact'
+              : undefined
 
   return (
     <PillNav
@@ -71,8 +70,8 @@ function AdminNav() {
         { to: '/admin', label: t('nav.overview') },
         { to: '/admin/parks', label: t('nav.parks') },
         { to: '/admin/tasks', label: t('nav.tasks') },
+        { to: '/admin/live', label: t('nav.liveDemo') },
         { to: '/admin/impact', label: t('nav.impact') },
-        { to: 'tools', label: t('nav.tools'), menu: tools },
       ]}
     />
   )

@@ -34,6 +34,7 @@ class NodeController extends Controller
     {
         $nodes = Node::whereHas('park', fn ($q) => $q->where('company_id', $request->user()->company_id)
             ->unless($request->boolean('include_test'), fn ($p) => $p->withoutTest()))
+            ->unless($request->boolean('placeholders'), fn ($q) => $q->visibleOnHardware())
             ->with(['park', 'latestReading'])->orderBy('id')->get();
 
         return NodeHardwareResource::collection($nodes);
@@ -83,9 +84,9 @@ class NodeController extends Controller
 
     public function camera(UpdateCameraRequest $request, Node $node, ActivityLogger $logger): JsonResponse
     {
-        $before = $node->only(['capture_mode', 'camera_url']);
+        $before = $node->only(['capture_mode', 'camera_url', 'camera_roi', 'litter_threshold']);
         $node->update($request->validated());
-        $logger->log('node.camera_updated', $node, ['before' => $before, 'after' => $node->only(['capture_mode', 'camera_url'])]);
+        $logger->log('node.camera_updated', $node, ['before' => $before, 'after' => $node->only(['capture_mode', 'camera_url', 'camera_roi', 'litter_threshold'])]);
         $this->broadcast($node, 'camera');
 
         return $this->one($node);
@@ -102,12 +103,12 @@ class NodeController extends Controller
         return (new DetectionResource($detection))->response()->setStatusCode(201);
     }
 
-    public function cameraTest(CameraTestRequest $request, Node $node): JsonResponse
+    public function cameraTest(CameraTestRequest $request, Node $node, CameraPipeline $pipeline): JsonResponse
     {
         $started = microtime(true);
         try {
             $response = Http::timeout((int) config('namaa.camera.timeout_seconds'))
-                ->get(CameraPipeline::urlFor($node).'/capture')->throw();
+                ->get(CameraPipeline::frameUrl($node))->throw();
         } catch (ConnectionException|RequestException) {
             abort(503, 'The camera did not answer.');
         }
@@ -115,12 +116,47 @@ class NodeController extends Controller
         $type = (string) ($response->header('Content-Type') ?: 'image/jpeg');
         abort_unless(str_contains($type, 'image'), 503, 'The camera did not answer with an image.');
 
+        // People are blurred in every frame shown, the test picture too.
+        try {
+            $jpeg = $pipeline->blurredPreview($response->body())['jpeg'];
+        } catch (VisionUnavailable) {
+            abort(503, 'The vision service did not answer, so the picture is not shown (people cannot be blurred).');
+        }
+
         return response()->json(['data' => [
             'ok' => true,
             'ms' => $ms,
             'bytes' => strlen($response->body()),
-            'content_type' => $type,
-            'image' => 'data:'.$type.';base64,'.base64_encode($response->body()),
+            'content_type' => 'image/jpeg',
+            'image' => 'data:image/jpeg;base64,'.base64_encode($jpeg),
+        ]]);
+    }
+
+    /**
+     * GET /api/admin/nodes/{node}/snapshot: one current frame, people blurred, nothing stored
+     * (the picture the tray area is drawn on). 503 with camera_offline when the camera or the
+     * USB camera bridge does not answer.
+     */
+    public function snapshot(CameraTestRequest $request, Node $node, CameraPipeline $pipeline): JsonResponse
+    {
+        try {
+            $response = Http::timeout((int) config('namaa.camera.timeout_seconds'))->get(CameraPipeline::frameUrl($node))->throw();
+        } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException) {
+            return response()->json(['message' => 'The camera did not answer.', 'camera_offline' => true], 503);
+        }
+        abort_unless(str_contains((string) $response->header('Content-Type'), 'image'), 503, 'The camera did not answer with an image.');
+
+        try {
+            $preview = $pipeline->blurredPreview($response->body());
+        } catch (VisionUnavailable) {
+            // Never show a frame that could not be checked for people.
+            return response()->json(['message' => 'The vision service did not answer.', 'vision_offline' => true], 503);
+        }
+
+        return response()->json(['data' => [
+            'image' => 'data:image/jpeg;base64,'.base64_encode($preview['jpeg']),
+            'image_w' => $preview['image_w'],
+            'image_h' => $preview['image_h'],
         ]]);
     }
 

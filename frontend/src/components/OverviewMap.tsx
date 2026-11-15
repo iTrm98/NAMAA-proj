@@ -12,7 +12,7 @@ import { STATUS_COLORS } from '@/components/StatusPill'
 import { parkName } from '@/hooks/useParks'
 import { isAutoWatering } from '@/lib/irrigation'
 import { formatNumber } from '@/lib/format'
-import { MAKKAH, MAPTILER_KEY, mapShellProps, mapStyle, useBasemap } from '@/lib/mapStyle'
+import { fitMinZoom, MAKKAH, mapShellProps, mapStyle, useMapConfig } from '@/lib/mapStyle'
 import { ParkMarkers } from '@/components/map/ParkMarkers'
 import { SatelliteNote } from '@/components/map/SatelliteNote'
 import { isAreaGeometry, outerPoints } from '@/lib/geo'
@@ -64,7 +64,7 @@ export function OverviewMap({ parks: allParks, selectedId: controlledId, onSelec
   const base = useBasePath()
   const parks = useMemo(() => mapParks(allParks), [allParks])
   const mapRef = useRef<MapRef>(null)
-  const [basemap, setBasemap] = useBasemap()
+  const { basemap, bounds: mapBounds } = useMapConfig()
   const [layer, setLayer] = useState<MapLayer>('status')
   const [ownId, setOwnId] = useState<number | null>(null)
   const selectedId = controlledId !== undefined ? controlledId : ownId
@@ -151,12 +151,13 @@ export function OverviewMap({ parks: allParks, selectedId: controlledId, onSelec
         ref={mapRef}
         initialViewState={initialView}
         mapStyle={mapStyle(basemap)}
-        {...mapShellProps(basemap)}
+        {...mapShellProps(basemap, mapBounds)}
         interactiveLayerIds={['park-fill']}
         onClick={onClick}
         onZoom={(e) => setZoom(e.viewState.zoom)}
         onMoveEnd={syncBounds}
         onLoad={(e) => {
+          fitMinZoom(e.target, mapBounds)
           setZoom(e.target.getZoom())
           syncBounds()
         }}
@@ -194,21 +195,6 @@ export function OverviewMap({ parks: allParks, selectedId: controlledId, onSelec
               options={[
                 { value: 'status', label: t('ndvi.layer_status') },
                 { value: 'ndvi', label: t('overview.vegetation') },
-              ]}
-              className="!bg-[var(--solid-over-map)]"
-            />
-            <Segmented
-              ariaLabel={t('overview.baseMap')}
-              value={basemap}
-              onChange={setBasemap}
-              options={[
-                ...(MAPTILER_KEY
-                  ? [
-                      { value: 'satellite' as const, label: t('admin.satellite') },
-                      { value: 'streets' as const, label: t('admin.streets') },
-                    ]
-                  : [{ value: 'streets' as const, label: t('admin.streets') }]),
-                { value: 'esri' as const, label: t('map.esri') },
               ]}
               className="!bg-[var(--solid-over-map)]"
             />

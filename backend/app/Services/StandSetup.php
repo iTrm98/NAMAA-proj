@@ -81,6 +81,7 @@ class StandSetup
             'satellite_only' => [],
             'bench_board' => Node::where('park_id', $stand->id)->where('name', self::BENCH_BOARD)->exists() ? 'exists' : 'create',
             'bench_board_token' => null,
+            'zones' => Node::hasZoneColumn() ? self::zonePlan($stand) : [],
             'dry_run' => $dryRun,
         ];
 
@@ -124,6 +125,60 @@ class StandSetup
             }
         });
 
+        if (Node::hasZoneColumn()) {
+            $this->createZones($stand);
+        }
+
         return $plan;
+    }
+
+    /** @return list<string> the zone nodes that are still to be created */
+    public static function zonePlan(Park $stand): array
+    {
+        $have = fn (string $zone, string $type) => Node::where('park_id', $stand->id)->where('zone', $zone)->where('type', $type)->exists();
+        $todo = [];
+        foreach ([['A', 'sensor'], ['B', 'sensor'], ['A', 'camera'], ['B', 'camera']] as [$zone, $type]) {
+            if (! $have($zone, $type)) {
+                $todo[] = "Zone {$zone} {$type}";
+            }
+        }
+
+        return $todo;
+    }
+
+    /**
+     * Zone A: sensor with pump, flow, DHT and tank; camera = CAMERA_URL. Zone B: sensor and a camera
+     * that uses ZONE_B_CAMERA_URL. Gateway-owned: they have no device token. Safe to run again.
+     */
+    private function createZones(Park $stand): void
+    {
+        $make = function (string $zone, string $type, array $extra = []) use ($stand) {
+            if (Node::where('park_id', $stand->id)->where('zone', $zone)->where('type', $type)->exists()) {
+                return;
+            }
+            // A camera that already sits on the stand without a zone is adopted for Zone A (no second poll of CAMERA_URL).
+            $adopt = $type === 'camera' && $zone === 'A'
+                ? Node::where('park_id', $stand->id)->where('type', 'camera')->whereNull('zone')->orderBy('id')->first() : null;
+            $node = $adopt ?? Node::create([
+                'park_id' => $stand->id, 'type' => $type, 'name' => $type === 'camera' ? "Camera {$zone}" : "Zone {$zone}",
+                'source' => DataSource::Real, 'capture_mode' => 'url', 'has_pump' => false, 'pump_target' => false,
+            ] + $extra);
+            if ($adopt) {
+                $adopt->update(['zone' => $zone, 'name' => "Camera {$zone}", 'placeholder' => false, 'detached_at' => null]);
+            } else {
+                $node->update(['zone' => $zone]);
+            }
+            $this->logger->log($adopt ? 'node.updated' : 'node.created', $node, ['after' => ['name' => $node->name, 'type' => $type, 'zone' => $zone, 'reason' => 'stand_setup']], companyId: $stand->company_id);
+        };
+
+        $make('A', 'sensor', ['has_pump' => true]);
+        $make('B', 'sensor');
+        $make('A', 'camera');
+        $make('B', 'camera', ['camera_url' => config('gateway.zone_b_camera_url') ?: null]);
+
+        // Zone B's camera URL follows the env value when it is still empty.
+        if ($url = config('gateway.zone_b_camera_url')) {
+            Node::where('park_id', $stand->id)->where('zone', 'B')->where('type', 'camera')->whereNull('camera_url')->update(['camera_url' => $url]);
+        }
     }
 }

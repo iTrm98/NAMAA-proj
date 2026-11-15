@@ -24,13 +24,13 @@ class VisionClient
      * @return array{items: list<array{label: string, confidence: float, box: list<float>}>, count: int,
      *     people: list<array{confidence: float, box: list<float>}>, model: string, inference_ms: int, image_w: int, image_h: int}
      */
-    public function waste(string $jpeg): array
+    public function waste(string $jpeg, ?float $conf = null): array
     {
         try {
             return Http::timeout((int) config('namaa.vision.waste_timeout_seconds'))
                 ->acceptJson()
                 ->attach('image', $jpeg, 'frame.jpg', ['Content-Type' => 'image/jpeg'])
-                ->post($this->url('/waste'))
+                ->post($this->url('/waste'), $conf !== null ? ['conf' => $conf] : [])
                 ->throw()
                 ->json();
         } catch (ConnectionException|RequestException $e) {

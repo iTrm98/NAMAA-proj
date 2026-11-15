@@ -68,6 +68,11 @@ export function FrameImage({ detection, className, labels = true, thumbOnly = fa
     // Boxes are in photo pixels, left to right, in both languages.
     <div className={cn('relative overflow-hidden rounded-lg bg-black', className)} dir="ltr">
       <img src={url} alt={t('camera.frameAlt', { count: detection.count })} className="block h-auto w-full" />
+      {detection.origin === 'sample' && (
+        <span dir="auto" className="absolute start-2 top-2 rounded-full bg-[rgba(16,18,14,.8)] px-2.5 py-1 text-[11px] text-white/85">
+          {t('camera.origin.sample')}
+        </span>
+      )}
       <svg viewBox={`0 0 ${w} ${h}`} className="pointer-events-none absolute inset-0 size-full" preserveAspectRatio="none" aria-hidden>
         {detection.items.map((item, i) => {
           const [x1, y1, x2, y2] = item.box
@@ -149,7 +154,7 @@ export function CameraCard({ parkId, scope }: { parkId: number; scope?: ApiScope
                   {shown.inference_ms != null && ` · ${formatNumber(shown.inference_ms, 0)} ms`}
                 </span>
               )}
-              {shown.origin !== 'camera' && <span className="rounded border border-dashed px-1.5">{t(`camera.origin.${shown.origin}`)}</span>}
+              {shown.origin !== 'camera' && shown.origin !== 'sample' && <span className="rounded border border-dashed px-1.5">{t(`camera.origin.${shown.origin}`)}</span>}
               {shown.people_count > 0 && (
                 <span className="flex items-center gap-1">
                   <ShieldCheck className="size-3.5" />

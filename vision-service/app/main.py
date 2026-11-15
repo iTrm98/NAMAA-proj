@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app import ndvi as ndvi_mod
@@ -141,11 +141,11 @@ def ndvi_suggest_zone(request: SuggestZoneRequest):
 
 
 @app.post("/waste")
-def waste(image: UploadFile = File(...)):
+def waste(image: UploadFile = File(...), conf: float | None = Form(default=None, ge=0.01, le=0.99)):
     """Litter boxes (and person boxes, kept apart for blurring) in one JPEG/PNG photo."""
     if detector is None:
         raise HTTPException(status_code=503, detail="waste model not loaded")
     try:
-        return detector.detect(image.file.read())
+        return detector.detect(image.file.read(), conf)
     except WasteError as e:
         raise HTTPException(status_code=e.status, detail=e.message) from e

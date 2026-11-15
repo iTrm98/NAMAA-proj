@@ -181,12 +181,49 @@ return [
     'parks_data_path' => base_path('../data/parks'),
     'max_simulated_parks' => 4,
 
+    // Sprint 6.3: which parks the maps and lists show, the sample set and the map basemap.
+    'parks' => [
+        // A park shows on maps and lists only when its green zone is traced and ticked "checked"
+        // (green_zone set and verification_status = verified). The demo stand never shows as a park.
+        'require_checked_zone' => (bool) env('NAMAA_REQUIRE_CHECKED_ZONE', true),
+        // namaa:parks:archive-set archives these (matched by English / Arabic name, tolerant of case and punctuation).
+        'archive_set' => [
+            'Zainab Al-Hilaliyah Walkway', 'Bathaa Quraish Walkway', 'Arak Park', "Al-Tan'eem Walkway",
+            "Al-Tan'eem garden", 'Al-Awali garden', 'Al Masfalah Park',
+        ],
+        // namaa:sim:setup-parks: simulated parks that get a sensor node with pump and flow; the demo roles they hold.
+        'sim_set' => [
+            ['name' => "Al-Ju'ranah", 'role' => 'dry'],
+            ['name' => 'King Abdullah', 'role' => 'leak'],
+        ],
+        // "Sim Cam" lives on this park (litter, step 3).
+        'sim_camera_park' => 'King Abdullah',
+    ],
+
+    // Map basemap for the frontend: maptiler | esri. bounds = bbox of the shown parks plus this margin.
+    'map' => [
+        'basemap' => env('NAMAA_MAP_BASEMAP', 'maptiler'),
+        'bounds_margin_km' => 8,
+    ],
+
     // The demo stand pump is manual only and stops by itself after this many seconds.
     'stand' => ['pump_max_seconds' => (int) env('STAND_PUMP_MAX_SECONDS', 30)],
 
     'camera' => [
         'url' => env('CAMERA_URL', ''),
         'timeout_seconds' => 5,
+        // A CAMERA_URL ending in an image file (the USB camera bridge, .../frame.jpg) is fetched as is;
+        // any other URL is a camera board and gets /capture appended.
+        // Litter filters per camera (a node's own litter_threshold / camera_roi override these):
+        // the model's own threshold, and "an item counts only if seen in 2 of the last 3 frames".
+        'litter_threshold' => (float) env('CAMERA_LITTER_THRESHOLD', 0.185),
+        'persistence' => ['window' => 3, 'needed' => 2, 'min_iou' => 0.2],
+        // Test mode on the Live device page (litter AI without detections, alerts or tasks).
+        'test' => ['previous_ttl_seconds' => 20],
+        // The pre-demo check expects exactly this model setup (litter.pt v2-s960).
+        'expected' => ['model' => 'litter.pt', 'imgsz' => 960, 'threshold' => 0.185],
+        // Pre-demo check limits: board reading age and camera bridge frame age.
+        'ready' => ['board_seconds' => 15, 'frame_seconds' => 5],
         // Photos older than this are pruned daily, except frames attached to an alert.
         'retention_days' => 7,
         'disk' => 'local',

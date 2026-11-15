@@ -29,9 +29,9 @@ class DemoTest extends TestCase
 
     public function test_status_tells_the_dashboard_whether_demo_mode_is_on(): void
     {
-        $this->getJson('/api/demo/status')->assertOk()->assertExactJson(['demo_mode' => false]);
+        $this->getJson('/api/demo/status')->assertOk()->assertJsonPath('demo_mode', false);
         config(['namaa.demo_mode' => true]);
-        $this->getJson('/api/demo/status')->assertOk()->assertExactJson(['demo_mode' => true]);
+        $this->getJson('/api/demo/status')->assertOk()->assertJsonPath('demo_mode', true)->assertJsonStructure(['map' => ['basemap', 'bounds']]);
     }
 
     public function test_demo_login_is_404_when_demo_mode_is_off(): void

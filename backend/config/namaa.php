@@ -204,6 +204,10 @@ return [
     'map' => [
         'basemap' => env('NAMAA_MAP_BASEMAP', 'maptiler'),
         'bounds_margin_km' => 8,
+        // lock=true: maps are confined to the shown parks' bbox + margin. lock=false: free pan, zoom min..max.
+        'lock' => (bool) env('NAMAA_MAP_LOCK', false),
+        'min_zoom' => (float) env('NAMAA_MAP_MIN_ZOOM', 2),
+        'max_zoom' => (float) env('NAMAA_MAP_MAX_ZOOM', 22),
     ],
 
     // The demo stand pump is manual only and stops by itself after this many seconds.

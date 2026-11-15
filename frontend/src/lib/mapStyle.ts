@@ -16,28 +16,46 @@ export function attributionFor(basemap: Basemap): string {
   return basemap === 'esri' ? `${ATTRIBUTION} · ${ESRI_ATTRIBUTION}` : ATTRIBUTION
 }
 
-/** Shared MapLibre props: bounds, zoom limits and attribution. */
-export function mapShellProps(basemap: Basemap, bounds: [number, number, number, number] = MAX_BOUNDS) {
+export type Bounds = [number, number, number, number]
+export interface MapCfg {
+  basemap: Basemap
+  bounds: Bounds
+  lock: boolean
+  minZoom: number
+  maxZoom: number
+}
+
+/** Shared MapLibre props: zoom limits, bounds (only when locked) and attribution. */
+export function mapShellProps(cfg: MapCfg) {
   return {
-    maxBounds: bounds,
-    minZoom: 5,
-    attributionControl: { compact: false, customAttribution: attributionFor(basemap) },
-  } as const
+    ...(cfg.lock ? { maxBounds: cfg.bounds } : {}),
+    minZoom: cfg.minZoom,
+    maxZoom: cfg.maxZoom,
+    attributionControl: { compact: false, customAttribution: attributionFor(cfg.basemap) },
+  }
 }
 
 export type Basemap = 'satellite' | 'streets' | 'esri'
 
-/** The one demo basemap and the map bounds, from GET /demo/status `map` (MapTiler satellite and greater Makkah until it answers). */
-export function useMapConfig(): { basemap: Basemap; bounds: [number, number, number, number] } {
+/** The demo basemap, bounds and zoom limits, from GET /demo/status `map` (MapTiler satellite and greater Makkah, unlocked, until it answers). */
+export function useMapConfig(): MapCfg {
   const info = useDemoInfo()
   const map = info.data?.map
-  return { basemap: map?.basemap === 'esri' ? 'esri' : 'satellite', bounds: map?.bounds ?? MAX_BOUNDS }
+  return {
+    basemap: map?.basemap === 'esri' ? 'esri' : 'satellite',
+    bounds: map?.bounds ?? MAX_BOUNDS,
+    lock: map?.lock === true,
+    minZoom: map?.min_zoom ?? 2,
+    maxZoom: map?.max_zoom ?? 22,
+  }
 }
 
-/** The lowest zoom is the one where the whole bounds fit the view: the map never shows the world. */
-export function fitMinZoom(map: MapLibreMap, bounds: [number, number, number, number]) {
-  const camera = map.cameraForBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]])
-  if (camera?.zoom != null) map.setMinZoom(Math.max(0, camera.zoom - 0.1))
+/** Locked maps only: the lowest zoom is the one where the whole bounds fit the view. */
+export function fitMinZoom(map: MapLibreMap, cfg: MapCfg) {
+  if (!cfg.lock) return
+  const b = cfg.bounds
+  const camera = map.cameraForBounds([[b[0], b[1]], [b[2], b[3]]])
+  if (camera?.zoom != null) map.setMinZoom(Math.max(cfg.minZoom, camera.zoom - 0.1))
 }
 
 /** Without a MapTiler key: OpenStreetMap raster tiles (with attribution). */

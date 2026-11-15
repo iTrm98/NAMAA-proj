@@ -41,6 +41,17 @@ x-laravel-env: &laravel-env
   DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
   # true = boards report every 5 s instead of 30 s (sent as interval_s).
   DEMO_MODE: ${DEMO_MODE:-false}
+  # Gateway / ingest (config/gateway.php). Empty = feature off.
+  GATEWAY_URL: ${GATEWAY_URL:-}
+  ZONE_B_CAMERA_URL: ${ZONE_B_CAMERA_URL:-}
+  NAMAA_INGEST_TOKEN: ${NAMAA_INGEST_TOKEN:-}
+  # Sprint 6.3 park and map settings (config/namaa.php). Defaults match the config defaults.
+  NAMAA_REQUIRE_CHECKED_ZONE: ${NAMAA_REQUIRE_CHECKED_ZONE:-true}
+  NAMAA_MAP_BASEMAP: ${NAMAA_MAP_BASEMAP:-maptiler}
+  NAMAA_MAP_LOCK: ${NAMAA_MAP_LOCK:-false}
+  NAMAA_MAP_MIN_ZOOM: ${NAMAA_MAP_MIN_ZOOM:-2}
+  NAMAA_MAP_MAX_ZOOM: ${NAMAA_MAP_MAX_ZOOM:-22}
+  NAMAA_NDVI_MAX_CLOUD: ${NAMAA_NDVI_MAX_CLOUD:-80}
 
 x-laravel: &laravel
   build: ./backend

@@ -10,12 +10,18 @@ class MapBounds
     /** Makkah, used when no park is shown yet. */
     private const FALLBACK = [39.6, 21.2, 40.1, 21.7];
 
-    /** @return array{basemap: string, bounds: list<float>} */
+    /** @return array{basemap: string, bounds: list<float>, lock: bool, min_zoom: float, max_zoom: float} */
     public static function forShownParks(): array
     {
         $basemap = config('namaa.map.basemap') === 'esri' ? 'esri' : 'maptiler';
 
-        return ['basemap' => $basemap, 'bounds' => self::bounds(Park::shown()->withoutTest()->get(['id', 'lat', 'lng', 'polygon']))];
+        return [
+            'basemap' => $basemap,
+            'bounds' => self::bounds(Park::shown()->withoutTest()->get(['id', 'lat', 'lng', 'polygon'])),
+            'lock' => (bool) config('namaa.map.lock', false),
+            'min_zoom' => (float) config('namaa.map.min_zoom', 2),
+            'max_zoom' => (float) config('namaa.map.max_zoom', 22),
+        ];
     }
 
     /**

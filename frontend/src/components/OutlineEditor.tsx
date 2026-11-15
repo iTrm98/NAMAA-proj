@@ -20,7 +20,7 @@ import { api, ApiError } from '@/lib/api'
 import { formatNumber } from '@/lib/format'
 import { outerPoints } from '@/lib/geo'
 import { SatelliteNote } from '@/components/map/SatelliteNote'
-import { type Basemap, attributionFor, mapStyle, MAPTILER_KEY } from '@/lib/mapStyle'
+import { type Basemap, attributionFor, mapStyle, MAPTILER_KEY, useMapConfig } from '@/lib/mapStyle'
 import type { ParkDetail } from '@/types'
 
 const MODE_SELECT = 'select'
@@ -90,6 +90,7 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
   const [green, setGreenState] = useState<MultiPolygon | null>(initialGreen)
   const [drawing, setDrawing] = useState<Target | null>(null)
   const [basemap, setBasemap] = useState<Basemap>('esri')
+  const mapCfg = useMapConfig()
   const [checked, setChecked] = useState(false)
   const [draftNote, setDraftNote] = useState<string | null>(null)
   const [draftWarning, setDraftWarning] = useState(false)
@@ -281,7 +282,8 @@ export function OutlineEditor({ park, open, onOpenChange }: { park: ParkDetail; 
               attributionControl={{ compact: false, customAttribution: attributionFor(basemap) }}
               style={{ width: '100%', height: '100%' }}
               onLoad={(e) => onLoad(e.target)}
-              maxZoom={20}
+              minZoom={mapCfg.minZoom}
+              maxZoom={mapCfg.maxZoom}
             >
               <NavigationControl position="top-left" showCompass={false} />
               {multiShown && multiBoundary && (

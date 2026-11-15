@@ -67,7 +67,8 @@ export default function ParkMap() {
 function ParkMapView({ parks: allParks }: { parks: Park[] }) {
   const parks = useMemo(() => mapParks(allParks), [allParks])
   const { t, i18n } = useTranslation()
-  const { basemap, bounds: mapBounds } = useMapConfig()
+  const mapCfg = useMapConfig()
+  const { basemap } = mapCfg
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [layer, setLayer] = useState<MapLayer>('status')
   const mapRef = useRef<MapRef>(null)
@@ -130,13 +131,13 @@ function ParkMapView({ parks: allParks }: { parks: Park[] }) {
         onZoom={(e) => setZoom(e.viewState.zoom)}
         onMoveEnd={syncBounds}
         onLoad={(e) => {
-          fitMinZoom(e.target, mapBounds)
+          fitMinZoom(e.target, mapCfg)
           setZoom(e.target.getZoom())
           syncBounds()
         }}
         initialViewState={initialView}
         mapStyle={mapStyle(basemap)}
-        {...mapShellProps(basemap, mapBounds)}
+        {...mapShellProps(mapCfg)}
         interactiveLayerIds={['park-fill']}
         onClick={onClick}
         cursor="auto"

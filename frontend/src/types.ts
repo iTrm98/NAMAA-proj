@@ -816,6 +816,9 @@ export interface MapConfig {
   basemap: 'maptiler' | 'esri'
   /** [west, south, east, north] */
   bounds: [number, number, number, number]
+  lock?: boolean
+  min_zoom?: number
+  max_zoom?: number
 }
 
 export interface DemoStatus {

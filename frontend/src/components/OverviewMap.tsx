@@ -64,7 +64,8 @@ export function OverviewMap({ parks: allParks, selectedId: controlledId, onSelec
   const base = useBasePath()
   const parks = useMemo(() => mapParks(allParks), [allParks])
   const mapRef = useRef<MapRef>(null)
-  const { basemap, bounds: mapBounds } = useMapConfig()
+  const mapCfg = useMapConfig()
+  const { basemap } = mapCfg
   const [layer, setLayer] = useState<MapLayer>('status')
   const [ownId, setOwnId] = useState<number | null>(null)
   const selectedId = controlledId !== undefined ? controlledId : ownId
@@ -151,13 +152,13 @@ export function OverviewMap({ parks: allParks, selectedId: controlledId, onSelec
         ref={mapRef}
         initialViewState={initialView}
         mapStyle={mapStyle(basemap)}
-        {...mapShellProps(basemap, mapBounds)}
+        {...mapShellProps(mapCfg)}
         interactiveLayerIds={['park-fill']}
         onClick={onClick}
         onZoom={(e) => setZoom(e.viewState.zoom)}
         onMoveEnd={syncBounds}
         onLoad={(e) => {
-          fitMinZoom(e.target, mapBounds)
+          fitMinZoom(e.target, mapCfg)
           setZoom(e.target.getZoom())
           syncBounds()
         }}

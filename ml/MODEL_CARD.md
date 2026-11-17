@@ -1,5 +1,22 @@
 # Model card: NAMAA litter detector (`litter-v2-s960`)
 
+> **LATEST AI MODEL: `litter-v2-s960`** (YOLO11s, one class `litter`, 960 px, threshold 0.185; trained 2026-11-14, weights `ml/runs/litter-v2-s960/weights/best.pt`, identical to the deployed `vision-service/models/litter.pt`). It is the main model of the vision service.
+>
+> **Benchmarks (public-test: 753 held-out photos, 7,695 boxes, IoU 0.5):** mAP50 **0.494** (PlastOPol 0.790, TACO 0.638, BePLi 0.455); precision 0.615 / recall 0.448 at threshold 0.185; 0.36 false boxes per litter-free photo (500 photos); 175 ms per image on CPU.
+>
+> **Real-case run through the live service** (`python ml/real_cases.py`, seed 42, results in `ml/runs/real-cases/`): 120 real held-out photos plus 60 litter-free photos plus the 23 demo samples, sent to `POST /waste`.
+>
+> | Group | Photos | Precision | Recall | Notes |
+> |---|---|---|---|---|
+> | PlastOPol | 40 | 0.631 | 0.869 | 38 of 40 photos hit |
+> | TACO | 40 | 0.690 | 0.583 | 34 of 40 photos hit |
+> | BePLi (tiny beach fragments) | 40 | 0.635 | 0.368 | 37 of 40 photos hit |
+> | Litter-free photos | 60 | - | - | 0.217 false boxes per photo; 10 of 60 photos with one |
+> | `data/samples/litter` | 15 | - | - | boxes on 15 of 15 |
+> | `data/samples/clean` | 8 | - | - | boxes on 3 of 8 (3 boxes in total) |
+>
+> Median 270-310 ms per request over HTTP in Docker (includes upload and the person model). Park photos from Makkah are still unmeasured (domain gap).
+
 > Deployed model since the v2 swap: **`litter-v2-s960`, run at 960 px, threshold 0.185**. The sections below describe the first model (`litter-s640-balanced`, kept as `vision-service/models/litter_old_s640.pt`) unless they say v2; the v2 comparison is in the next section.
 
 ## What it does

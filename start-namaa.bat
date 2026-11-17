@@ -78,7 +78,7 @@ if not exist "frontend\package.json" (
 if not exist "frontend\node_modules" (
     start "NAMAA - Front" /d "%~dp0frontend" cmd /k "npm install && npm run dev"
 ) else (
-    start "NAMAA - Front" /d "%~dp0frontend" cmd /k "npm run dev"
+    start "NAMAA - Front" /d "%~dp0frontend" cmd /k "npm run dev --force"
 )
 
 echo.

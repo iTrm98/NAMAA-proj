@@ -35,6 +35,8 @@ Multipart field `image`: JPEG or PNG, at most 5 MB.
 | Default | COCO model `yolo26n.pt` (the smallest Ultralytics YOLO26), downloaded **at image build time** to `/opt/namaa/weights/`. Only the litter-like COCO classes count: `bottle`, `cup`, `wine glass`, `fork`, `knife`, `spoon`, `bowl`, `banana`, `apple`, `orange`, `sandwich`, `hot dog`, `pizza`, `donut`, `cake`. Bags, balls and other things people carry are left out on purpose |
 | `vision-service/models/litter.pt` exists | That custom model is used for litter, with **all** its classes. The COCO model still runs for `person` (privacy blur) |
 
+**Latest AI model in use: `litter-v2-s960`** (mAP50 0.494 on 753 held-out photos; real-case run through this service in `ml/runs/real-cases/`, numbers in `ml/MODEL_CARD.md`).
+
 Current `litter.pt`: YOLO11s, one class `litter`, litter v2 (balanced PlastOPol + TACO + BePLi + extra ground-level sets + COCO background images) trained and run at 960 px (`ml/runs/litter-v2-s960/weights/best.pt`, see `ml/MODEL_CARD.md`). The previous 640 model is kept locally as `models/litter_old_s640.pt`; to roll back set `WASTE_MODEL=models/litter_old_s640.pt`, `WASTE_CUSTOM_IMGSZ=640`, `WASTE_CONFIDENCE=0.1775`. Copy it to `vision-service/models/litter.pt` and restart `vision`.
 
 | Litter confidence | Value | Val precision / recall | Use |

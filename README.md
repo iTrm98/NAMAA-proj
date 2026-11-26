@@ -47,6 +47,68 @@ Camera (ESP32-CAM) ◄─────GET /capture────┤
 
 The Back is the centre: sensor nodes post to it, it fetches camera photos, calls the AI service, stores everything and pushes updates to the dashboard.
 
+## Architecture
+
+System architecture (Docker Compose, 6 services plus the React app)
+
+```mermaid
+flowchart LR
+  subgraph Devices
+    ESP["ESP32-S3 sensor node"]
+    GW["Gateway ESP32 (demo stand)"]
+    CAM["Park camera"]
+  end
+
+  subgraph Docker["Docker Compose"]
+    API["backend: Laravel 13 REST API"]
+    Q["queue worker"]
+    S["scheduler"]
+    RV["reverb: WebSocket server"]
+    DB[("MySQL 8.4")]
+    subgraph AI["vision: FastAPI (Python 3.12)"]
+      WASTE["/waste: YOLO11s litter model + person detector"]
+      NDVI["/ndvi: Sentinel-2 greenness"]
+    end
+  end
+
+  SAT["Sentinel-2 imagery"]
+  UI["React 19 + TypeScript dashboard (admin, worker, municipality)"]
+
+  ESP -->|"POST /api/device/readings (device token)"| API
+  API -.->|"reply: pump command"| ESP
+  GW -->|"POST /api/namaa/ingest"| API
+  API -->|"GET /capture"| CAM
+  API --> DB
+  API -->|"dispatch jobs"| Q
+  S -->|"scheduled jobs"| Q
+  Q --> DB
+  API -->|"frames"| WASTE
+  API -->|"park polygons"| NDVI
+  SAT --> NDVI
+  API -->|"broadcast events"| RV
+  RV -->|"private channels"| UI
+  UI -->|"REST + Bearer token (Sanctum)"| API
+```
+
+Core flow: from a reading to a verified fix
+
+```mermaid
+flowchart LR
+  R["Sensor reading"] --> I["ReadingIngestor (DB transaction)"]
+  I --> E["RulesEngine (confirmation + hysteresis)"]
+  E -->|"bad reading"| A["Alert raised"]
+  E -->|"auto-irrigation on"| P["PumpService"]
+  A --> T["Admin creates task, assigns worker"]
+  T --> W["Worker starts and presses Done"]
+  W --> V["TaskVerifier watches new readings"]
+  V -->|"good for the full window"| OK["Verified, alert resolved"]
+  V -->|"bad reading or no data"| NO["Unverified, alert stays open"]
+  T -->|"nobody starts in time"| ES["Escalation"]
+  I --> B["Reverb broadcast, live dashboard"]
+```
+
+A task is not finished when the worker presses Done. It is finished when fresh data proves the problem is gone.
+
 ## Ports
 
 | Port | Used by |

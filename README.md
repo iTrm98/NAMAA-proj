@@ -1,7 +1,7 @@
 # NAMAA
 
 **Smart monitoring for parks and green spaces in Makkah.**
-Built for Tanmiathon 2026, the Makkah Region sustainable-development hackathon.
+Built for Tanmiyathon 2026, the Makkah Region sustainable-development hackathon.
 
 ---
 
